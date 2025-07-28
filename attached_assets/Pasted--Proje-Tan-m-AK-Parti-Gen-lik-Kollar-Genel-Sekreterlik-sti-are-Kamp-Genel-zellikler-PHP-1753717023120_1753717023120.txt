@@ -1,0 +1,129 @@
+🏛️ Proje Tanımı: AK Parti Gençlik Kolları Genel Sekreterlik İstişare Kampı
+📌 Genel Özellikler:
+PHP tabanlı bir web projesi olacak
+
+MySQL veritabanı kullanılacak.
+
+Web sitesi mobil ve masaüstü uyumlu (responsive) olacak.
+
+Giriş sayfası açıldığında belirtilen bir GIF animasyonu tam ekran olarak gösterilecek, ardından giriş ekranına geçilecek.
+
+👤 Kullanıcı Rolleri ve Yetkileri:
+🔸 1. admin:
+Tüm masaların tüm cevaplarını görüntüleyebilir.
+
+Soru ve cevaplara masa-soru-yanıt şeklinde erişebilir.
+
+Raporlama panelini kullanabilir.
+
+Tüm işlem hareketlerini (loglama) görebilir.
+
+Raporları filtreleyerek görebilir ve Excel/CSV olarak indirebilir.
+
+🔸 2. adminpro:
+admin yetkilerinin tamamına ek olarak:
+
+Yeni admin, adminpro ve moderatör hesapları oluşturabilir.
+
+Yeni soru ekleyebilir, silebilir.
+
+Soruları genel veya belirli masalara özel olarak atayabilir.
+
+Moderatörlerin gönderdiği geri bildirimleri görüntüleyebilir.
+
+🔸 3. moderatör:
+Sadece kendi masa numarasına atanmış sorulara erişebilir:
+
+Hem tüm moderatörlere açık genel sorular
+
+Hem de masa bazlı özel sorular
+
+Her bir soruya birden fazla cevap ekleyebilir.
+
+Cevaplarını düzenleyebilir veya silebilir.
+
+Geri bildirim (soru net değil, eksik bilgi vb.) gönderebilir.
+
+🔐 Giriş Sistemi:
+Tüm kullanıcılar yalnızca T.C. Kimlik Numarası ve şifre ile giriş yapar.
+
+Güvenli çıkış (logout) butonu yer almalıdır.
+
+📋 Soru Yönetimi:
+Sorular adminpro tarafından eklenir.
+
+Her soru:
+
+Genel (tüm masalara açık) ya da
+
+Özel (belirli masa numaralarına özel) olarak atanabilir.
+
+Moderatörler sadece atanmış oldukları soruları görebilir.
+
+📈 Raporlama Paneli (admin & adminpro):
+Hangi masa, hangi soruya, ne cevap verdiği görülebilir.
+
+Aşağıdaki bilgiler özet tablolarla gösterilmeli:
+
+Kaç masa cevap verdi
+
+Hangi soru en çok cevaplandı
+
+Hangi masalardan hiç cevap gelmedi
+
+Tüm veriler filtrelenebilir ve Excel / CSV olarak indirilebilir.
+
+🕒 Loglama ve Zaman Damgası:
+Kullanıcı işlemleri (ekleme, silme, düzenleme) loglanır.
+
+Her cevap tarih-saat damgasıyla kaydedilir.
+
+🧩 Rol Bazlı Arayüz:
+Her kullanıcı sadece kendi yetkisine göre bir panel görür.
+
+admin, adminpro, moderatör için ayrı dashboard tasarlanmalıdır.
+
+Yetkisi olmayan kullanıcılar diğer bileşenlere erişemez.
+
+Bu yapı güvenlik, sadelik ve kullanım kolaylığı sağlar.
+
+💬 Geri Bildirim Modülü (Opsiyonel):
+Moderatörler sorular hakkında yorum/geribildirim gönderebilir.
+
+Bu geribildirimler adminpro panelinden görüntülenebilir.
+
+🔄 Dinamik Masa Sistemi:
+Masa sayısı sabit değil, adminpro dilediği kadar masa/moderatör tanımlayabilir.
+
+Moderatör atanırken şu bilgiler girilir:
+
+İsim, Soyisim
+
+T.C. Kimlik Numarası
+
+Şifre
+
+Masa Numarası
+
+🎨 Tasarım ve Renk Paleti (AK Parti Kurumsal Kimliğine Uygun):
+Amaç	Renk Tanımı	HEX	Kullanım Yeri
+🎯 Birincil Renk	AK Parti Sarısı	#ED8B00	Butonlar, aktif menü, CTA
+🔵 İkincil Renk	Mavi	#0072CE	Linkler, bilgi kutuları
+⚫ Ana Metin	Siyah/Koyu Gri	#231F20 veya #000000	Başlıklar, metin
+⚪ Arka Plan	Beyaz	#FFFFFF	Ana sayfa zemin
+⚪ Alt Arka Plan	Açık Gri	#F5F5F5	Kart zeminleri
+⚫ Nötr Metin	Açık Gri Metin	#666666, #888888	Yardımcı metinler
+❗ Uyarı	Kırmızı	#D32F2F	Hatalar, uyarılar
+✅ Başarı	Yeşil	#388E3C	Onay mesajları
+🟠 Hover (Sarı)	Sarı Koyu	#C57A00	Buton hover
+🔵 Hover (Mavi)	Mavi Koyu	#005BB5	Link ve sekme hover
+
+🖋️ Font Önerileri:
+Open Sans, Roboto, Poppins
+
+Yüksek kontrastlı metin: Sarı arka plan + siyah yazı gibi
+
+🎬 Giriş Sayfası Özelliği:
+Web sitesi açıldığında ekranın ortasında bir GIF animasyonu yüklenecek. ben bu gifi sana sonra vereceğim.
+
+GIF bittiğinde kullanıcı T.C. kimlik no + şifre ile giriş yapacak.
