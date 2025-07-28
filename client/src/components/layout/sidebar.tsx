@@ -12,6 +12,7 @@ import {
   MessageCircle,
   LogOut,
 } from "lucide-react";
+import akPartiLogo from "@assets/akpartilogo_1753719301210.png";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -63,8 +64,14 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           "lg:translate-x-0"
         )}
       >
-        <div className="flex items-center justify-center h-16 px-4 bg-ak-yellow">
-          <h1 className="text-white font-bold text-lg">İstişare Kampı</h1>
+        <div className="flex flex-col items-center justify-center h-auto p-4 bg-white border-b">
+          <img 
+            src={akPartiLogo} 
+            alt="AK Parti" 
+            className="w-16 h-16 mb-2 object-contain"
+          />
+          <h1 className="text-center ak-text font-bold text-sm">İrade, İstikamet ve İstişare Kampı</h1>
+          <p className="text-xs ak-gray mt-1">AK Parti Gençlik Kolları</p>
         </div>
         
         <nav className="mt-8">

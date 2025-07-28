@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Users, LogIn } from "lucide-react";
+import { LogIn } from "lucide-react";
+import akPartiLogo from "@assets/akpartilogo_1753719301210.png";
 
 export default function LoginPage() {
   const [tcNumber, setTcNumber] = useState("");
@@ -21,11 +22,13 @@ export default function LoginPage() {
       <div className="max-w-md w-full mx-4">
         <Card className="shadow-2xl">
           <CardHeader className="text-center pb-6">
-            <div className="w-16 h-16 mx-auto mb-4 bg-ak-yellow rounded-full flex items-center justify-center">
-              <Users className="text-white text-2xl" size={32} />
-            </div>
-            <h2 className="text-2xl font-bold ak-text">Sisteme Giriş</h2>
-            <p className="ak-gray mt-2">AK Parti Gençlik Kolları İstişare Kampı</p>
+            <img 
+              src={akPartiLogo} 
+              alt="AK Parti" 
+              className="w-24 h-24 mx-auto mb-4 object-contain"
+            />
+            <h2 className="text-2xl font-bold ak-text">İrade, İstikamet ve İstişare Kampı</h2>
+            <p className="ak-gray mt-2">AK Parti Gençlik Kolları Genel Sekreterlik</p>
           </CardHeader>
           
           <CardContent>

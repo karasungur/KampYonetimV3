@@ -6,7 +6,8 @@ This is a web-based management system for the AK Party Youth Branches Consultati
 
 ## User Preferences
 
-Preferred communication style: Simple, everyday language.
+Preferred communication style: Turkish language, simple everyday communication.
+The user requested all communications to be in Turkish.
 
 ## System Architecture
 
