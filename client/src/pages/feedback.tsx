@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Check, Reply, MessageCircle } from "lucide-react";
+import { Check, Reply, MessageCircle, Trash2 } from "lucide-react";
 import { setAuthHeader } from "@/lib/auth-utils";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -110,6 +110,30 @@ export default function FeedbackPage() {
       toast({
         title: "Hata",
         description: "Yanıt gönderilemedi",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteFeedbackMutation = useMutation({
+    mutationFn: async (feedbackId: string) => {
+      const response = await fetch(`/api/feedback/${feedbackId}`, {
+        method: 'DELETE',
+        headers: setAuthHeader(),
+      });
+      if (!response.ok) throw new Error('Failed to delete feedback');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/feedback"] });
+      toast({
+        title: "Başarılı",
+        description: "Geri bildirim silindi",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Hata",
+        description: "Geri bildirim silinemedi",
         variant: "destructive",
       });
     },
@@ -265,6 +289,18 @@ export default function FeedbackPage() {
                         >
                           <Check className="mr-1" size={16} />
                           Çözüldü İşaretle
+                        </Button>
+                        <Button 
+                          onClick={() => {
+                            if (window.confirm('Bu geri bildirimi silmek istediğinizden emin misiniz?')) {
+                              deleteFeedbackMutation.mutate(feedback.id);
+                            }
+                          }}
+                          className="bg-red-600 hover:bg-red-700 text-white"
+                          disabled={deleteFeedbackMutation.isPending}
+                        >
+                          <Trash2 className="mr-1" size={16} />
+                          Sil
                         </Button>
                       </div>
                     )}

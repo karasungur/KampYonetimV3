@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import Sidebar from "@/components/layout/sidebar";
@@ -9,10 +9,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, UserX, Download, Upload } from "lucide-react";
+import { Plus, Edit, UserX, Download, Upload, AlertTriangle } from "lucide-react";
 import { setAuthHeader } from "@/lib/auth-utils";
 import UserModal from "@/components/modals/user-modal";
 import EditUserModal from "@/components/modals/edit-user-modal";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { UserWithStats } from "@shared/schema";
 
 export default function UsersPage() {
@@ -22,6 +33,12 @@ export default function UsersPage() {
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithStats | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    user?: UserWithStats;
+    deleteFeedback?: boolean;
+    deleteAnswers?: boolean;
+  }>({ open: false, deleteFeedback: false, deleteAnswers: false });
   
   const { user } = useAuth();
   const { toast } = useToast();
@@ -45,6 +62,48 @@ export default function UsersPage() {
                          userItem.tcNumber.includes(searchTerm);
     const matchesFilter = filterRole === "all" || userItem.role === filterRole;
     return matchesSearch && matchesFilter;
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async ({ userId, deleteFeedback, deleteAnswers }: { 
+      userId: string; 
+      deleteFeedback: boolean; 
+      deleteAnswers: boolean;
+    }) => {
+      const params = new URLSearchParams();
+      if (deleteFeedback) params.append('deleteFeedback', 'true');
+      if (deleteAnswers) params.append('deleteAnswers', 'true');
+      
+      const response = await fetch(`/api/users/${userId}?${params.toString()}`, {
+        method: 'DELETE',
+        headers: setAuthHeader(),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Kullanıcı silinemedi');
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/users'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/tables'] });
+      
+      toast({
+        title: "Başarılı",
+        description: "Kullanıcı başarıyla silindi",
+      });
+      
+      setDeleteDialog({ open: false, deleteFeedback: false, deleteAnswers: false });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Hata",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const getRoleBadgeProps = (role: string) => {
@@ -378,6 +437,12 @@ export default function UsersPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="text-red-600 hover:text-red-800"
+                                onClick={() => setDeleteDialog({ 
+                                  open: true, 
+                                  user: userItem,
+                                  deleteFeedback: false,
+                                  deleteAnswers: false
+                                })}
                               >
                                 <UserX size={16} />
                               </Button>
@@ -407,6 +472,80 @@ export default function UsersPage() {
         }}
         user={selectedUser}
       />
+
+      <AlertDialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog({ ...deleteDialog, open })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="text-red-500" size={20} />
+              Kullanıcı Silme Onayı
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4">
+                <p>
+                  <strong>{deleteDialog.user?.firstName} {deleteDialog.user?.lastName}</strong> kullanıcısını silmek üzeresiniz.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Bu işlem geri alınamaz. Aşağıdaki seçenekleri de işaretleyebilirsiniz:
+                </p>
+                
+                <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="deleteFeedback"
+                      checked={deleteDialog.deleteFeedback}
+                      onCheckedChange={(checked) => 
+                        setDeleteDialog({ ...deleteDialog, deleteFeedback: checked as boolean })
+                      }
+                    />
+                    <label 
+                      htmlFor="deleteFeedback" 
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      Bu kullanıcıya ait geri bildirimleri sil
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="deleteAnswers"
+                      checked={deleteDialog.deleteAnswers}
+                      onCheckedChange={(checked) => 
+                        setDeleteDialog({ ...deleteDialog, deleteAnswers: checked as boolean })
+                      }
+                    />
+                    <label 
+                      htmlFor="deleteAnswers" 
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      Bu kullanıcıya ait cevapları sil
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteDialog({ open: false, deleteFeedback: false, deleteAnswers: false })}>
+              İptal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => {
+                if (deleteDialog.user) {
+                  deleteUserMutation.mutate({
+                    userId: deleteDialog.user.id,
+                    deleteFeedback: deleteDialog.deleteFeedback || false,
+                    deleteAnswers: deleteDialog.deleteAnswers || false,
+                  });
+                }
+              }}
+            >
+              Kullanıcıyı Sil
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

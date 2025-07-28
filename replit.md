@@ -6,8 +6,10 @@ This is a web-based management system for the AK Party Youth Branches Consultati
 
 ## User Preferences
 
-Preferred communication style: Turkish language, simple everyday communication.
-The user requested all communications to be in Turkish.
+- **Communication Language**: Turkish - All communications should be in Turkish language
+- **Communication Style**: Simple, everyday language without technical jargon
+- **User Request Date**: January 28, 2025
+- **Specific Request**: User explicitly asked to communicate in Turkish with simple, non-technical language
 
 ## Recent Changes
 

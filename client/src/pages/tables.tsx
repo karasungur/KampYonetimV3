@@ -8,23 +8,37 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Table as TableIcon, Plus, Trash2 } from "lucide-react";
+import { Table as TableIcon, Plus, Trash2, Edit, Users } from "lucide-react";
 import { setAuthHeader } from "@/lib/auth-utils";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { Badge } from "@/components/ui/badge";
 import type { Table } from "@shared/schema";
+
+type TableWithDetails = Table & {
+  userCount: number;
+  users: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    role: string;
+  }>;
+};
 
 export default function TablesPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedTable, setSelectedTable] = useState<TableWithDetails | null>(null);
   const [newTableNumber, setNewTableNumber] = useState("");
   const [newTableName, setNewTableName] = useState("");
+  const [editTableName, setEditTableName] = useState("");
   
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: tables = [], isLoading } = useQuery<Table[]>({
+  const { data: tables = [], isLoading } = useQuery<TableWithDetails[]>({
     queryKey: ["/api/tables"],
     queryFn: async () => {
       const response = await fetch('/api/tables', {
@@ -99,6 +113,41 @@ export default function TablesPage() {
     },
   });
 
+  const updateTableMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const response = await fetch(`/api/tables/${id}`, {
+        method: "PUT",
+        headers: {
+          ...setAuthHeader(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Masa güncellenemedi');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tables"] });
+      toast({
+        title: "Başarılı",
+        description: "Masa başarıyla güncellendi",
+      });
+      setShowEditModal(false);
+      setSelectedTable(null);
+      setEditTableName("");
+    },
+    onError: (error) => {
+      toast({
+        title: "Hata",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleAddTable = () => {
     const tableNumber = parseInt(newTableNumber);
     if (isNaN(tableNumber) || tableNumber <= 0) {
@@ -160,29 +209,67 @@ export default function TablesPage() {
                 <Card key={table.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader className="pb-4">
                     <div className="flex justify-between items-start">
-                      <div>
+                      <div className="flex-1">
                         <h3 className="text-lg font-semibold ak-text">Masa {table.number}</h3>
                         {table.name && (
                           <p className="text-sm ak-gray mt-1">{table.name}</p>
                         )}
                       </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => deleteTableMutation.mutate(table.id)}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 size={16} />
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setSelectedTable(table);
+                            setEditTableName(table.name || "");
+                            setShowEditModal(true);
+                          }}
+                          className="text-ak-blue hover:text-ak-blue-dark"
+                        >
+                          <Edit size={16} />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => deleteTableMutation.mutate(table.id)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 size={16} />
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm ak-gray">Kullanıcı Sayısı:</span>
-                        <span className="text-sm font-medium ak-text">{(table as any).userCount || 0}</span>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Users className="text-ak-gray" size={16} />
+                        <span className="text-sm font-medium ak-text">{table.userCount} Kullanıcı</span>
                       </div>
-                      <p className="text-xs ak-gray">
+                      
+                      {table.users && table.users.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium ak-gray uppercase">Atanan Kullanıcılar:</p>
+                          <div className="space-y-1 max-h-32 overflow-y-auto">
+                            {table.users.map((user) => (
+                              <div key={user.id} className="flex items-center justify-between text-xs">
+                                <span className="ak-text">{user.firstName} {user.lastName}</span>
+                                <Badge 
+                                  className={
+                                    user.role === 'genelsekreterlik' ? 'bg-red-100 text-red-800 text-xs' :
+                                    user.role === 'genelbaskan' ? 'bg-ak-yellow/20 text-ak-yellow text-xs' :
+                                    'bg-ak-blue/20 text-ak-blue text-xs'
+                                  }
+                                >
+                                  {user.role === 'genelsekreterlik' ? 'GS' :
+                                   user.role === 'genelbaskan' ? 'GB' : 'M'}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      <p className="text-xs ak-gray border-t pt-2">
                         Oluşturulma: {new Date(table.createdAt).toLocaleDateString('tr-TR')}
                       </p>
                     </div>
@@ -240,6 +327,60 @@ export default function TablesPage() {
                   className="bg-ak-yellow hover:bg-ak-yellow-dark text-white"
                 >
                   {createTableMutation.isPending ? "Ekleniyor..." : "Ekle"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Edit Table Modal */}
+          <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Masa Düzenle</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div>
+                  <Label htmlFor="editTableName">Masa Adı</Label>
+                  <Input
+                    id="editTableName"
+                    type="text"
+                    value={editTableName}
+                    onChange={(e) => setEditTableName(e.target.value)}
+                    placeholder="Örn: Salon A"
+                    className="mt-1"
+                  />
+                </div>
+                {selectedTable && (
+                  <div className="text-sm ak-gray">
+                    <p>Masa Numarası: <span className="font-medium ak-text">{selectedTable.number}</span></p>
+                    <p>Kullanıcı Sayısı: <span className="font-medium ak-text">{selectedTable.userCount}</span></p>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setSelectedTable(null);
+                    setEditTableName("");
+                  }}
+                >
+                  İptal
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (selectedTable && editTableName.trim()) {
+                      updateTableMutation.mutate({
+                        id: selectedTable.id,
+                        name: editTableName.trim(),
+                      });
+                    }
+                  }}
+                  disabled={updateTableMutation.isPending || !editTableName.trim()}
+                  className="bg-ak-yellow hover:bg-ak-yellow-dark text-white"
+                >
+                  {updateTableMutation.isPending ? "Güncelleniyor..." : "Güncelle"}
                 </Button>
               </DialogFooter>
             </DialogContent>

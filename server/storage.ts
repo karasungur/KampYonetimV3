@@ -34,12 +34,18 @@ export interface IStorage {
   updateUser(id: string, updates: Partial<InsertUser>): Promise<User>;
   updateUserLastLogin(id: string): Promise<void>;
   getAllUsers(): Promise<UserWithStats[]>;
+  deleteUser(id: string): Promise<void>;
+  deleteAnswersByUser(userId: string): Promise<void>;
+  deleteFeedbackByUser(userId: string): Promise<void>;
   
   // Table operations
   createTable(table: InsertTable): Promise<Table>;
   getAllTables(): Promise<Table[]>;
   getTable(id: string): Promise<Table | undefined>;
   deleteTable(id: string): Promise<void>;
+  updateTable(id: string, updates: Partial<InsertTable>): Promise<Table>;
+  getTableByNumber(number: number): Promise<Table | undefined>;
+  getAllTablesWithStats(): Promise<any[]>;
   
   // Question operations
   createQuestion(question: InsertQuestion): Promise<Question>;
@@ -62,10 +68,15 @@ export interface IStorage {
   getAllFeedback(): Promise<FeedbackWithDetails[]>;
   markFeedbackAsRead(id: string): Promise<void>;
   markFeedbackAsResolved(id: string): Promise<void>;
+  getFeedback(id: string): Promise<Feedback | undefined>;
+  deleteFeedback(id: string): Promise<void>;
+  respondToFeedback(id: string, response: string, respondedBy: string): Promise<void>;
+  getFeedbackForUser(userId: string): Promise<FeedbackWithDetails[]>;
   
   // Activity log operations
   logActivity(log: InsertActivityLog): Promise<ActivityLog>;
   getActivityLogs(limit?: number): Promise<ActivityLog[]>;
+  getActivityLogsForUser(userId: string, limit?: number): Promise<ActivityLog[]>;
   
   // Dashboard stats
   getDashboardStats(): Promise<{
@@ -136,6 +147,18 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async deleteUser(id: string): Promise<void> {
+    await db.delete(users).where(eq(users.id, id));
+  }
+
+  async deleteAnswersByUser(userId: string): Promise<void> {
+    await db.delete(answers).where(eq(answers.userId, userId));
+  }
+
+  async deleteFeedbackByUser(userId: string): Promise<void> {
+    await db.delete(feedback).where(eq(feedback.userId, userId));
+  }
+
   // Table operations
   async createTable(insertTable: InsertTable): Promise<Table> {
     const [table] = await db
@@ -168,6 +191,39 @@ export class DatabaseStorage implements IStorage {
     return tablesWithUsers;
   }
 
+  async getAllTablesWithDetails(): Promise<(Table & { userCount: number, users: Array<{ id: string; firstName: string; lastName: string; role: string }> })[]> {
+    // First get all tables
+    const allTables = await db
+      .select()
+      .from(tables)
+      .where(eq(tables.isActive, true))
+      .orderBy(tables.number);
+
+    // Then get users grouped by table
+    const tableUsers = await db
+      .select({
+        tableNumber: users.tableNumber,
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        role: users.role,
+      })
+      .from(users)
+      .where(eq(users.isActive, true));
+
+    // Combine the data
+    const tablesWithDetails = allTables.map(table => {
+      const tableUserList = tableUsers.filter(u => u.tableNumber === table.number);
+      return {
+        ...table,
+        userCount: tableUserList.length,
+        users: tableUserList,
+      };
+    });
+
+    return tablesWithDetails;
+  }
+
   async getTable(id: string): Promise<Table | undefined> {
     const [table] = await db.select().from(tables).where(eq(tables.id, id));
     return table || undefined;
@@ -183,6 +239,15 @@ export class DatabaseStorage implements IStorage {
       .update(tables)
       .set({ isActive: false })
       .where(eq(tables.id, id));
+  }
+
+  async updateTable(id: string, updates: Partial<InsertTable>): Promise<Table> {
+    const [table] = await db
+      .update(tables)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(tables.id, id))
+      .returning();
+    return table;
   }
 
   // Question operations
@@ -449,6 +514,15 @@ export class DatabaseStorage implements IStorage {
         isRead: true 
       })
       .where(eq(feedback.id, id));
+  }
+
+  async getFeedback(id: string): Promise<Feedback | undefined> {
+    const [feedbackItem] = await db.select().from(feedback).where(eq(feedback.id, id));
+    return feedbackItem || undefined;
+  }
+
+  async deleteFeedback(id: string): Promise<void> {
+    await db.delete(feedback).where(eq(feedback.id, id));
   }
 
   // Activity log operations

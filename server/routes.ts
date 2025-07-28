@@ -5,6 +5,7 @@ import { requireAuth, requireRole, generateToken, comparePassword, hashPassword,
 import { insertUserSchema, insertQuestionSchema, insertAnswerSchema, insertFeedbackSchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
+import * as XLSX from "xlsx";
 
 // Login schema
 const loginSchema = z.object({
@@ -188,6 +189,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Update user error:', error);
       res.status(400).json({ message: 'Kullanıcı güncellenemedi' });
+    }
+  });
+
+  app.delete('/api/users/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { deleteFeedback, deleteAnswers } = req.query;
+      
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
+      }
+      
+      // Delete associated data if requested
+      if (deleteFeedback === 'true') {
+        await storage.deleteFeedbackByUser(id);
+      }
+      
+      if (deleteAnswers === 'true') {
+        await storage.deleteAnswersByUser(id);
+      }
+      
+      await storage.deleteUser(id);
+      
+      // Log activity
+      await storage.logActivity({
+        userId: req.user!.id,
+        action: 'delete_user',
+        details: `Kullanıcı silindi: ${user.firstName} ${user.lastName}`,
+        metadata: { 
+          deletedUserId: user.id,
+          deletedFeedback: deleteFeedback === 'true',
+          deletedAnswers: deleteAnswers === 'true'
+        },
+        ipAddress: req.ip,
+      });
+      
+      res.json({ message: 'Kullanıcı başarıyla silindi' });
+    } catch (error) {
+      console.error('Delete user error:', error);
+      res.status(500).json({ message: 'Kullanıcı silinemedi' });
     }
   });
 
@@ -551,6 +593,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete('/api/feedback/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      
+      const feedback = await storage.getFeedback(id);
+      if (!feedback) {
+        return res.status(404).json({ message: 'Geri bildirim bulunamadı' });
+      }
+      
+      await storage.deleteFeedback(id);
+      
+      // Log activity
+      await storage.logActivity({
+        userId: req.user!.id,
+        action: 'delete_answer', // Using delete_answer since there's no delete_feedback action
+        details: `Geri bildirim silindi`,
+        metadata: { feedbackId: id },
+        ipAddress: req.ip,
+      });
+      
+      res.json({ message: 'Geri bildirim başarıyla silindi' });
+    } catch (error) {
+      console.error('Delete feedback error:', error);
+      res.status(500).json({ message: 'Geri bildirim silinemedi' });
+    }
+  });
+
   // Activity logs
   app.get('/api/logs', requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
@@ -573,7 +642,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Tables
   app.get('/api/tables', requireAuth, async (req, res) => {
     try {
-      const tablesList = await storage.getAllTablesWithStats();
+      const tablesList = await storage.getAllTablesWithDetails();
       res.json(tablesList);
     } catch (error) {
       res.status(500).json({ message: 'Masalar alınamadı' });
@@ -609,6 +678,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(500).json({ message: 'Masa oluşturulurken hata oluştu' });
       }
+    }
+  });
+
+  app.put('/api/tables/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { name } = req.body;
+      
+      if (!name || name.trim() === '') {
+        return res.status(400).json({ message: 'Masa adı gereklidir' });
+      }
+      
+      const table = await storage.updateTable(id, { name });
+      
+      // Log activity
+      await storage.logActivity({
+        userId: req.user!.id,
+        action: 'edit_user', // Using edit_user since there's no edit_table action
+        details: `Masa güncellendi: ${table.name}`,
+        metadata: { tableId: table.id },
+        ipAddress: req.ip,
+      });
+      
+      res.json(table);
+    } catch (error) {
+      console.error('Update table error:', error);
+      res.status(500).json({ message: 'Masa güncellenemedi' });
     }
   });
 
@@ -660,6 +756,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
         res.setHeader('Content-Disposition', 'attachment; filename="cevaplar.csv"');
         res.send('\ufeff' + csv); // UTF-8 BOM for Excel
+      } else if (format === 'xlsx') {
+        // Create workbook
+        const wb = XLSX.utils.book_new();
+        
+        // Create worksheet data
+        const wsData = [
+          ['Soru', 'Masa No', 'Cevap', 'Cevaplayan', 'Tarih'],
+          ...answers.map(answer => [
+            answer.questionText || 'Bilinmeyen',
+            answer.tableNumber || '',
+            answer.text,
+            answer.userName || 'Bilinmeyen',
+            new Date(answer.createdAt).toLocaleString('tr-TR')
+          ])
+        ];
+        
+        // Create worksheet
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        
+        // Set column widths
+        ws['!cols'] = [
+          { width: 50 }, // Soru
+          { width: 10 }, // Masa No
+          { width: 80 }, // Cevap
+          { width: 20 }, // Cevaplayan
+          { width: 20 }  // Tarih
+        ];
+        
+        // Add worksheet to workbook
+        XLSX.utils.book_append_sheet(wb, ws, 'Cevaplar');
+        
+        // Generate buffer
+        const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+        
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename="cevaplar.xlsx"');
+        res.send(buffer);
+      } else if (format === 'txt') {
+        const txt = answers.map(answer => 
+          `SORU: ${answer.questionText || 'Bilinmeyen'}\n` +
+          `MASA NO: ${answer.tableNumber || '-'}\n` +
+          `CEVAP: ${answer.text}\n` +
+          `CEVAPLAYAN: ${answer.userName || 'Bilinmeyen'}\n` +
+          `TARİH: ${new Date(answer.createdAt).toLocaleString('tr-TR')}\n` +
+          `${'='.repeat(80)}\n`
+        ).join('\n');
+        
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="cevaplar.txt"');
+        res.send('\ufeff' + txt); // UTF-8 BOM
       } else {
         res.status(400).json({ message: 'Desteklenmeyen format' });
       }
