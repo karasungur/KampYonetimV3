@@ -136,6 +136,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put('/api/users/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const updates = insertUserSchema.partial().parse(req.body);
+      
+      // Hash password if provided
+      if (updates.password) {
+        updates.password = await hashPassword(updates.password);
+      }
+      
+      const user = await storage.updateUser(id, updates);
+      
+      // Log activity
+      await storage.logActivity({
+        userId: req.user!.id,
+        action: 'edit_user',
+        details: `Kullanıcı güncellendi: ${user.firstName} ${user.lastName}`,
+        metadata: { editedUserId: user.id },
+        ipAddress: req.ip,
+      });
+      
+      res.json(user);
+    } catch (error) {
+      console.error('Update user error:', error);
+      res.status(400).json({ message: 'Kullanıcı güncellenemedi' });
+    }
+  });
+
   // Question management routes
   app.get('/api/questions', requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
@@ -381,11 +409,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Activity logs
-  app.get('/api/logs', requireAuth, requireRole(['genelbaskan', 'genelsekreterlik']), async (req, res) => {
+  app.get('/api/logs', requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
-      const logs = await storage.getActivityLogs(limit);
-      res.json(logs);
+      
+      // Moderators can only see their own logs
+      if (req.user!.role === 'moderator') {
+        const logs = await storage.getActivityLogsForUser(req.user!.id, limit);
+        res.json(logs);
+      } else {
+        // General Secretary and General President can see all logs
+        const logs = await storage.getActivityLogs(limit);
+        res.json(logs);
+      }
     } catch (error) {
       res.status(500).json({ message: 'Loglar alınamadı' });
     }
@@ -457,6 +493,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error deleting table:', error);
       res.status(500).json({ message: 'Masa silinirken hata oluştu' });
+    }
+  });
+
+  // Export routes
+  app.get('/api/export/answers', requireAuth, requireRole(['genelbaskan', 'genelsekreterlik']), async (req, res) => {
+    try {
+      const format = req.query.format as string || 'csv';
+      const answers = await storage.getAllAnswers();
+      
+      if (format === 'csv') {
+        const csv = [
+          ['Soru', 'Masa No', 'Cevap', 'Cevaplayan', 'Tarih'].join(','),
+          ...answers.map(answer => [
+            `"${answer.questionText || 'Bilinmeyen'}"`,
+            answer.tableNumber,
+            `"${answer.text.replace(/"/g, '""')}"`,
+            `"${answer.userName || 'Bilinmeyen'}"`,
+            new Date(answer.createdAt).toLocaleString('tr-TR')
+          ].join(','))
+        ].join('\n');
+        
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="cevaplar.csv"');
+        res.send('\ufeff' + csv); // UTF-8 BOM for Excel
+      } else {
+        res.status(400).json({ message: 'Desteklenmeyen format' });
+      }
+    } catch (error) {
+      res.status(500).json({ message: 'Export başarısız' });
+    }
+  });
+
+  app.get('/api/export/users', requireAuth, requireRole(['genelsekreterlik']), async (req, res) => {
+    try {
+      const format = req.query.format as string || 'csv';
+      const users = await storage.getAllUsers();
+      
+      if (format === 'csv') {
+        const csv = [
+          ['Ad', 'Soyad', 'TC No', 'Rol', 'Masa No', 'Son Giriş', 'Cevap Sayısı'].join(','),
+          ...users.map(user => [
+            `"${user.firstName}"`,
+            `"${user.lastName}"`,
+            user.tcNumber,
+            user.role,
+            user.tableNumber || '',
+            user.lastLogin ? new Date(user.lastLogin).toLocaleString('tr-TR') : 'Yok',
+            user.answersCount || 0
+          ].join(','))
+        ].join('\n');
+        
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="kullanicilar.csv"');
+        res.send('\ufeff' + csv); // UTF-8 BOM for Excel
+      } else {
+        res.status(400).json({ message: 'Desteklenmeyen format' });
+      }
+    } catch (error) {
+      res.status(500).json({ message: 'Export başarısız' });
     }
   });
 

@@ -196,12 +196,18 @@ export type QuestionWithStats = Question & {
 };
 
 export type AnswerWithDetails = Answer & {
-  questionText?: string;
-  userName?: string;
+  questionText?: string | null;
+  userName?: string | null;
 };
 
 export type FeedbackWithDetails = Feedback & {
-  questionText?: string;
-  userName?: string;
-  userTableNumber?: number;
+  questionText?: string | null;
+  userName?: string | null;
+  userTableNumber?: number | null;
+};
+
+export type ActivityLogWithUser = ActivityLog & {
+  userFirstName?: string | null;
+  userLastName?: string | null;
+  userTcNumber?: string | null;
 };

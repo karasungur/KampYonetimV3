@@ -22,15 +22,15 @@ export default function ResponsesPage() {
   const queryClient = useQueryClient();
 
   const { data: answers = [], isLoading } = useQuery<AnswerWithDetails[]>({
-    queryKey: ["/api/answers/my"],
+    queryKey: user?.role === 'moderator' ? ["/api/answers/my"] : ["/api/answers"],
     queryFn: async () => {
-      const response = await fetch('/api/answers/my', {
+      const endpoint = user?.role === 'moderator' ? '/api/answers/my' : '/api/answers';
+      const response = await fetch(endpoint, {
         headers: setAuthHeader(),
       });
       if (!response.ok) throw new Error('Failed to fetch answers');
       return response.json();
     },
-    enabled: user?.role === 'moderator',
   });
 
   const deleteAnswerMutation = useMutation({

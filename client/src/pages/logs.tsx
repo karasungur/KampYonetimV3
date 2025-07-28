@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { setAuthHeader } from "@/lib/auth-utils";
-import type { ActivityLog } from "@shared/schema";
+import type { ActivityLogWithUser } from "@shared/schema";
 
 export default function LogsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -17,7 +17,7 @@ export default function LogsPage() {
   
   const { user } = useAuth();
 
-  const { data: logs = [], isLoading } = useQuery<ActivityLog[]>({
+  const { data: logs = [], isLoading } = useQuery<ActivityLogWithUser[]>({
     queryKey: ["/api/logs"],
     queryFn: async () => {
       const response = await fetch('/api/logs?limit=100', {
@@ -26,7 +26,7 @@ export default function LogsPage() {
       if (!response.ok) throw new Error('Failed to fetch logs');
       return response.json();
     },
-    enabled: user?.role === 'genelbaskan' || user?.role === 'genelsekreterlik',
+    enabled: !!user,
   });
 
   const filteredLogs = logs.filter(log => {
@@ -60,8 +60,10 @@ export default function LogsPage() {
     }
   };
 
-  const getUserDisplay = (log: ActivityLog) => {
-    // In a real app, you'd join with user data or include it in the log
+  const getUserDisplay = (log: ActivityLogWithUser) => {
+    if (log.userFirstName && log.userLastName && log.userTcNumber) {
+      return `${log.userFirstName} ${log.userLastName} (${log.userTcNumber})`;
+    }
     return log.userId.substring(0, 8) + "...";
   };
 

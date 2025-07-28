@@ -21,6 +21,7 @@ import {
   type QuestionWithStats,
   type AnswerWithDetails,
   type FeedbackWithDetails,
+  type ActivityLogWithUser,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, desc, asc, sql, count, inArray } from "drizzle-orm";
@@ -390,10 +391,43 @@ export class DatabaseStorage implements IStorage {
     return log;
   }
 
-  async getActivityLogs(limit: number = 100): Promise<ActivityLog[]> {
+  async getActivityLogs(limit: number = 100): Promise<ActivityLogWithUser[]> {
     return db
-      .select()
+      .select({
+        id: activityLogs.id,
+        userId: activityLogs.userId,
+        action: activityLogs.action,
+        details: activityLogs.details,
+        metadata: activityLogs.metadata,
+        ipAddress: activityLogs.ipAddress,
+        createdAt: activityLogs.createdAt,
+        userFirstName: users.firstName,
+        userLastName: users.lastName,
+        userTcNumber: users.tcNumber,
+      })
       .from(activityLogs)
+      .leftJoin(users, eq(activityLogs.userId, users.id))
+      .orderBy(desc(activityLogs.createdAt))
+      .limit(limit);
+  }
+  
+  async getActivityLogsForUser(userId: string, limit: number = 100): Promise<ActivityLogWithUser[]> {
+    return db
+      .select({
+        id: activityLogs.id,
+        userId: activityLogs.userId,
+        action: activityLogs.action,
+        details: activityLogs.details,
+        metadata: activityLogs.metadata,
+        ipAddress: activityLogs.ipAddress,
+        createdAt: activityLogs.createdAt,
+        userFirstName: users.firstName,
+        userLastName: users.lastName,
+        userTcNumber: users.tcNumber,
+      })
+      .from(activityLogs)
+      .leftJoin(users, eq(activityLogs.userId, users.id))
+      .where(eq(activityLogs.userId, userId))
       .orderBy(desc(activityLogs.createdAt))
       .limit(limit);
   }
@@ -441,7 +475,7 @@ export class DatabaseStorage implements IStorage {
         pendingCount += totalTables - answeredTables;
       } else if (q.assignedTables && Array.isArray(q.assignedTables)) {
         const assignedCount = q.assignedTables.length;
-        const answeredCount = q.answeredTables.filter(t => q.assignedTables!.includes(t)).length;
+        const answeredCount = q.answeredTables.filter(t => (q.assignedTables as number[]).includes(t)).length;
         pendingCount += assignedCount - answeredCount;
       }
     }

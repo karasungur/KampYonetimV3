@@ -41,10 +41,10 @@ export default function ReportsPage() {
 
   const handleExportExcel = async () => {
     try {
-      // In a real app, this would trigger a server-side export
       toast({
         title: "Excel İndiriliyor",
-        description: "Rapor Excel formatında hazırlanıyor...",
+        description: "Excel formatı henüz desteklenmiyor. CSV formatını kullanabilirsiniz.",
+        variant: "destructive",
       });
     } catch (error) {
       toast({
@@ -57,10 +57,25 @@ export default function ReportsPage() {
 
   const handleExportCSV = async () => {
     try {
-      // In a real app, this would trigger a server-side export
+      const response = await fetch('/api/export/answers?format=csv', {
+        headers: setAuthHeader(),
+      });
+      
+      if (!response.ok) throw new Error('Export failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cevaplar_${new Date().toLocaleDateString('tr-TR').replace(/\./g, '-')}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
       toast({
-        title: "CSV İndiriliyor",
-        description: "Rapor CSV formatında hazırlanıyor...",
+        title: "Başarılı",
+        description: "CSV dosyası indirildi",
       });
     } catch (error) {
       toast({

@@ -8,9 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, UserX } from "lucide-react";
+import { Plus, Edit, UserX, Download } from "lucide-react";
 import { setAuthHeader } from "@/lib/auth-utils";
 import UserModal from "@/components/modals/user-modal";
+import EditUserModal from "@/components/modals/edit-user-modal";
 import type { UserWithStats } from "@shared/schema";
 
 export default function UsersPage() {
@@ -18,6 +19,8 @@ export default function UsersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterRole, setFilterRole] = useState("all");
   const [showModal, setShowModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserWithStats | null>(null);
   
   const { user } = useAuth();
 
@@ -98,13 +101,52 @@ export default function UsersPage() {
         <main className="p-4 sm:p-6 lg:p-8">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold ak-text">Kullanıcı Yönetimi</h2>
-            <Button 
-              onClick={() => setShowModal(true)} 
-              className="bg-ak-yellow hover:bg-ak-yellow-dark text-white"
-            >
-              <Plus className="mr-2" size={16} />
-              Yeni Kullanıcı Ekle
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                onClick={async () => {
+                  try {
+                    const response = await fetch('/api/export/users?format=csv', {
+                      headers: setAuthHeader(),
+                    });
+                    
+                    if (!response.ok) throw new Error('Export failed');
+                    
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `kullanicilar_${new Date().toLocaleDateString('tr-TR').replace(/\./g, '-')}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    toast({
+                      title: "Başarılı",
+                      description: "Kullanıcı listesi CSV olarak indirildi",
+                    });
+                  } catch (error) {
+                    toast({
+                      title: "Hata",
+                      description: "CSV dosyası indirilemedi",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                variant="outline"
+                className="text-ak-blue hover:text-ak-blue-dark"
+              >
+                <Download className="mr-2" size={16} />
+                CSV İndir
+              </Button>
+              <Button 
+                onClick={() => setShowModal(true)} 
+                className="bg-ak-yellow hover:bg-ak-yellow-dark text-white"
+              >
+                <Plus className="mr-2" size={16} />
+                Yeni Kullanıcı Ekle
+              </Button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
@@ -270,6 +312,10 @@ export default function UsersPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="text-ak-blue hover:text-ak-blue-dark"
+                                onClick={() => {
+                                  setSelectedUser(userItem);
+                                  setShowEditModal(true);
+                                }}
                               >
                                 <Edit size={16} />
                               </Button>
@@ -296,6 +342,15 @@ export default function UsersPage() {
       <UserModal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
+      />
+      
+      <EditUserModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setSelectedUser(null);
+        }}
+        user={selectedUser}
       />
     </div>
   );
