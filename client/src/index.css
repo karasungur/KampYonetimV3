@@ -1,0 +1,142 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: hsl(0, 0%, 100%);
+  --foreground: hsl(12, 8%, 14%);
+  --muted: hsl(0, 0%, 96%);
+  --muted-foreground: hsl(0, 0%, 40%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(12, 8%, 14%);
+  --card: hsl(0, 0%, 100%);
+  --card-foreground: hsl(12, 8%, 14%);
+  --border: hsl(0, 0%, 90%);
+  --input: hsl(0, 0%, 90%);
+  --primary: hsl(37, 100%, 47%);
+  --primary-foreground: hsl(0, 0%, 100%);
+  --secondary: hsl(209, 100%, 40%);
+  --secondary-foreground: hsl(0, 0%, 100%);
+  --accent: hsl(0, 0%, 96%);
+  --accent-foreground: hsl(12, 8%, 14%);
+  --destructive: hsl(0, 84%, 60%);
+  --destructive-foreground: hsl(60, 9%, 98%);
+  --ring: hsl(37, 100%, 47%);
+  --radius: 0.5rem;
+  
+  /* AK Party specific colors */
+  --ak-yellow: hsl(37, 100%, 47%);
+  --ak-yellow-dark: hsl(37, 100%, 38%);
+  --ak-blue: hsl(209, 100%, 40%);
+  --ak-blue-dark: hsl(209, 100%, 35%);
+  --ak-text: hsl(12, 8%, 14%);
+  --ak-gray: hsl(0, 0%, 40%);
+  --ak-light-gray: hsl(0, 0%, 96%);
+}
+
+.dark {
+  --background: hsl(240, 10%, 4%);
+  --foreground: hsl(0, 0%, 98%);
+  --muted: hsl(240, 4%, 16%);
+  --muted-foreground: hsl(240, 5%, 65%);
+  --popover: hsl(240, 10%, 4%);
+  --popover-foreground: hsl(0, 0%, 98%);
+  --card: hsl(240, 10%, 4%);
+  --card-foreground: hsl(0, 0%, 98%);
+  --border: hsl(240, 4%, 16%);
+  --input: hsl(240, 4%, 16%);
+  --primary: hsl(37, 100%, 47%);
+  --primary-foreground: hsl(0, 0%, 100%);
+  --secondary: hsl(240, 4%, 16%);
+  --secondary-foreground: hsl(0, 0%, 98%);
+  --accent: hsl(240, 4%, 16%);
+  --accent-foreground: hsl(0, 0%, 98%);
+  --destructive: hsl(0, 63%, 31%);
+  --destructive-foreground: hsl(0, 0%, 98%);
+  --ring: hsl(240, 5%, 84%);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+}
+
+/* AK Party specific utility classes */
+.ak-yellow {
+  color: var(--ak-yellow);
+}
+
+.bg-ak-yellow {
+  background-color: var(--ak-yellow);
+}
+
+.border-ak-yellow {
+  border-color: var(--ak-yellow);
+}
+
+.ak-yellow-dark {
+  color: var(--ak-yellow-dark);
+}
+
+.bg-ak-yellow-dark {
+  background-color: var(--ak-yellow-dark);
+}
+
+.ak-blue {
+  color: var(--ak-blue);
+}
+
+.bg-ak-blue {
+  background-color: var(--ak-blue);
+}
+
+.border-ak-blue {
+  border-color: var(--ak-blue);
+}
+
+.ak-blue-dark {
+  color: var(--ak-blue-dark);
+}
+
+.bg-ak-blue-dark {
+  background-color: var(--ak-blue-dark);
+}
+
+.ak-text {
+  color: var(--ak-text);
+}
+
+.ak-gray {
+  color: var(--ak-gray);
+}
+
+.bg-ak-gray {
+  background-color: var(--ak-gray);
+}
+
+.ak-light-gray {
+  color: var(--ak-light-gray);
+}
+
+.bg-ak-light-gray {
+  background-color: var(--ak-light-gray);
+}
+
+/* Loading animation for splash screen */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}

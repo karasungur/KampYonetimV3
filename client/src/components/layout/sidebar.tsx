@@ -1,0 +1,114 @@
+import { Link, useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import {
+  LayoutDashboard,
+  HelpCircle,
+  Users,
+  BarChart3,
+  MessageSquare,
+  History,
+  MessageCircle,
+  LogOut,
+} from "lucide-react";
+
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+  const [location] = useLocation();
+  const { user, logout } = useAuth();
+
+  const navigationItems = {
+    adminpro: [
+      { path: "/", label: "Ana Panel", icon: LayoutDashboard },
+      { path: "/questions", label: "Soru Yönetimi", icon: HelpCircle },
+      { path: "/users", label: "Kullanıcı Yönetimi", icon: Users },
+      { path: "/reports", label: "Raporlar", icon: BarChart3 },
+      { path: "/feedback", label: "Geri Bildirimler", icon: MessageSquare },
+      { path: "/logs", label: "Sistem Logları", icon: History },
+    ],
+    admin: [
+      { path: "/", label: "Ana Panel", icon: LayoutDashboard },
+      { path: "/reports", label: "Raporlar", icon: BarChart3 },
+      { path: "/logs", label: "Sistem Logları", icon: History },
+    ],
+    moderator: [
+      { path: "/", label: "Ana Panel", icon: LayoutDashboard },
+      { path: "/questions", label: "Sorularım", icon: HelpCircle },
+      { path: "/responses", label: "Cevaplarım", icon: MessageCircle },
+    ],
+  };
+
+  const items = user ? navigationItems[user.role] || [] : [];
+
+  return (
+    <>
+      {/* Overlay for mobile */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          onClick={onClose}
+        />
+      )}
+      
+      {/* Sidebar */}
+      <div 
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-200 ease-in-out",
+          isOpen ? "translate-x-0" : "-translate-x-full",
+          "lg:translate-x-0"
+        )}
+      >
+        <div className="flex items-center justify-center h-16 px-4 bg-ak-yellow">
+          <h1 className="text-white font-bold text-lg">İstişare Kampı</h1>
+        </div>
+        
+        <nav className="mt-8">
+          <div className="px-4 mb-4">
+            <p className="text-xs font-semibold ak-gray uppercase tracking-wider">Menü</p>
+          </div>
+          
+          <div className="space-y-2 px-4">
+            {items.map((item) => {
+              const Icon = item.icon;
+              const isActive = location === item.path;
+              
+              return (
+                <Link key={item.path} href={item.path}>
+                  <Button
+                    variant="ghost"
+                    className={cn(
+                      "w-full justify-start",
+                      isActive 
+                        ? "bg-ak-yellow text-white hover:bg-ak-yellow-dark" 
+                        : "ak-text hover:bg-ak-light-gray"
+                    )}
+                    onClick={() => onClose()}
+                  >
+                    <Icon className="mr-3" size={16} />
+                    {item.label}
+                  </Button>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+        
+        <div className="absolute bottom-0 w-full p-4 border-t">
+          <Button
+            variant="ghost"
+            onClick={() => logout()}
+            className="w-full justify-start text-red-600 hover:bg-red-50"
+          >
+            <LogOut className="mr-2" size={16} />
+            Güvenli Çıkış
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}
