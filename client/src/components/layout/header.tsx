@@ -16,8 +16,8 @@ export default function Header({ title, onMenuClick }: HeaderProps) {
 
   const getRoleLabel = (role: string, tableNumber?: number) => {
     const roleLabels = {
-      adminpro: 'AdminPro',
-      admin: 'Admin',
+      genelsekreterlik: 'Genel Sekreterlik',
+      genelbaskan: 'Genel Başkan',
       moderator: tableNumber ? `Moderatör - Masa ${tableNumber}` : 'Moderatör'
     };
     return roleLabels[role as keyof typeof roleLabels] || role;
