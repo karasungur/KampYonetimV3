@@ -101,8 +101,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // User management routes (adminpro only)
-  app.get('/api/users', requireAuth, requireRole(['adminpro']), async (req, res) => {
+  // User management routes (genelsekreterlik only)
+  app.get('/api/users', requireAuth, requireRole(['genelsekreterlik']), async (req, res) => {
     try {
       const users = await storage.getAllUsers();
       res.json(users);
@@ -111,7 +111,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/users', requireAuth, requireRole(['adminpro']), async (req: AuthenticatedRequest, res) => {
+  app.post('/api/users', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
     try {
       const userData = insertUserSchema.parse(req.body);
       
@@ -155,7 +155,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/questions', requireAuth, requireRole(['adminpro']), async (req: AuthenticatedRequest, res) => {
+  app.post('/api/questions', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
     try {
       const questionData = insertQuestionSchema.parse({
         ...req.body,
@@ -180,7 +180,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/questions/:id', requireAuth, requireRole(['adminpro']), async (req: AuthenticatedRequest, res) => {
+  app.put('/api/questions/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       const updates = insertQuestionSchema.partial().parse(req.body);
@@ -202,7 +202,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/questions/:id', requireAuth, requireRole(['adminpro']), async (req: AuthenticatedRequest, res) => {
+  app.delete('/api/questions/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       
@@ -327,7 +327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Feedback routes
-  app.get('/api/feedback', requireAuth, requireRole(['adminpro']), async (req, res) => {
+  app.get('/api/feedback', requireAuth, requireRole(['genelsekreterlik']), async (req, res) => {
     try {
       const feedbackItems = await storage.getAllFeedback();
       res.json(feedbackItems);
@@ -360,7 +360,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/feedback/:id/read', requireAuth, requireRole(['adminpro']), async (req, res) => {
+  app.put('/api/feedback/:id/read', requireAuth, requireRole(['genelsekreterlik']), async (req, res) => {
     try {
       const { id } = req.params;
       await storage.markFeedbackAsRead(id);
@@ -370,7 +370,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/feedback/:id/resolve', requireAuth, requireRole(['adminpro']), async (req, res) => {
+  app.put('/api/feedback/:id/resolve', requireAuth, requireRole(['genelsekreterlik']), async (req, res) => {
     try {
       const { id } = req.params;
       await storage.markFeedbackAsResolved(id);
@@ -381,7 +381,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Activity logs
-  app.get('/api/logs', requireAuth, requireRole(['admin', 'adminpro']), async (req, res) => {
+  app.get('/api/logs', requireAuth, requireRole(['genelbaskan', 'genelsekreterlik']), async (req, res) => {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
       const logs = await storage.getActivityLogs(limit);
@@ -401,8 +401,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Table management routes (adminpro only)
-  app.post('/api/tables', requireAuth, requireRole(['adminpro']), async (req: AuthenticatedRequest, res) => {
+  // Table management routes (genelsekreterlik only)
+  app.post('/api/tables', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
     try {
       const { number, name } = req.body;
       

@@ -30,7 +30,7 @@ export default function ReportsPage() {
       if (!response.ok) throw new Error('Failed to fetch answers');
       return response.json();
     },
-    enabled: user?.role === 'admin' || user?.role === 'adminpro',
+    enabled: user?.role === 'genelbaskan' || user?.role === 'genelsekreterlik',
   });
 
   // Calculate stats

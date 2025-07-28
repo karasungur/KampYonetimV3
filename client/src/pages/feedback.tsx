@@ -29,7 +29,7 @@ export default function FeedbackPage() {
       if (!response.ok) throw new Error('Failed to fetch feedback');
       return response.json();
     },
-    enabled: user?.role === 'adminpro',
+    enabled: user?.role === 'genelsekreterlik',
   });
 
   const markAsReadMutation = useMutation({
@@ -102,7 +102,7 @@ export default function FeedbackPage() {
     return tableNumber ? `M${tableNumber}` : "U";
   };
 
-  if (user?.role !== 'adminpro') {
+  if (user?.role !== 'genelsekreterlik') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Card>

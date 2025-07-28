@@ -24,7 +24,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user, logout } = useAuth();
 
   const navigationItems = {
-    adminpro: [
+    genelsekreterlik: [
       { path: "/", label: "Ana Panel", icon: LayoutDashboard },
       { path: "/questions", label: "Soru Yönetimi", icon: HelpCircle },
       { path: "/tables", label: "Masa Yönetimi", icon: Users },
@@ -33,7 +33,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       { path: "/feedback", label: "Geri Bildirimler", icon: MessageSquare },
       { path: "/logs", label: "Sistem Logları", icon: History },
     ],
-    admin: [
+    genelbaskan: [
       { path: "/", label: "Ana Panel", icon: LayoutDashboard },
       { path: "/reports", label: "Raporlar", icon: BarChart3 },
       { path: "/logs", label: "Sistem Logları", icon: History },

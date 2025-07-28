@@ -9,6 +9,16 @@ This is a web-based management system for the AK Party Youth Branches Consultati
 Preferred communication style: Turkish language, simple everyday communication.
 The user requested all communications to be in Turkish.
 
+## Recent Changes
+
+### January 28, 2025
+- **Role Renaming Completed**: Successfully renamed all user roles throughout the entire codebase:
+  - "adminpro" → "genelsekreterlik" (General Secretariat)
+  - "admin" → "genelbaskan" (General President)
+  - "moderator" remains as "moderator"
+- Updated all database references, API endpoints, UI components, and role checks
+- Updated documentation to reflect new Turkish organizational structure
+
 ## System Architecture
 
 ### Frontend Architecture
@@ -37,9 +47,9 @@ The user requested all communications to be in Turkish.
 ## Key Components
 
 ### User Roles and Permissions
-1. **AdminPro**: Full system access including user management, question management, feedback viewing, and system logs
-2. **Admin**: Can view reports and system logs, access all table responses
-3. **Moderator**: Table-specific access to assigned questions, can create/edit answers and send feedback
+1. **Genel Sekreterlik (genelsekreterlik)**: Full system access including user management, question management, feedback viewing, and system logs
+2. **Genel Başkan (genelbaskan)**: Can view reports and system logs, access all table responses
+3. **Moderatör (moderator)**: Table-specific access to assigned questions, can create/edit answers and send feedback
 
 ### Core Entities
 - **Users**: Authentication and role management
@@ -64,7 +74,7 @@ The user requested all communications to be in Turkish.
 4. Middleware validates token on protected routes
 
 ### Question Management Flow
-1. AdminPro creates questions (general or table-specific)
+1. Genel Sekreterlik creates questions (general or table-specific)
 2. Questions distributed to appropriate moderators
 3. Moderators provide multiple answers per question
 4. Administrators can view all responses and generate reports

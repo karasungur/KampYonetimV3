@@ -30,7 +30,7 @@ export default function UsersPage() {
       if (!response.ok) throw new Error('Failed to fetch users');
       return response.json();
     },
-    enabled: user?.role === 'adminpro',
+    enabled: user?.role === 'genelsekreterlik',
   });
 
   const filteredUsers = users.filter(userItem => {
@@ -43,10 +43,10 @@ export default function UsersPage() {
 
   const getRoleBadgeProps = (role: string) => {
     switch (role) {
-      case 'adminpro':
-        return { className: 'bg-red-100 text-red-800', label: 'AdminPro' };
-      case 'admin':
-        return { className: 'bg-ak-yellow/20 text-ak-yellow', label: 'Admin' };
+      case 'genelsekreterlik':
+        return { className: 'bg-red-100 text-red-800', label: 'Genel Sekreterlik' };
+      case 'genelbaskan':
+        return { className: 'bg-ak-yellow/20 text-ak-yellow', label: 'Genel Başkan' };
       case 'moderator':
         return { className: 'bg-ak-blue/20 text-ak-blue', label: 'Moderatör' };
       default:
@@ -115,15 +115,15 @@ export default function UsersPage() {
               <CardContent>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm ak-text">AdminPro</span>
+                    <span className="text-sm ak-text">Genel Sekreterlik</span>
                     <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">
-                      {users.filter(u => u.role === 'adminpro').length}
+                      {users.filter(u => u.role === 'genelsekreterlik').length}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm ak-text">Admin</span>
+                    <span className="text-sm ak-text">Genel Başkan</span>
                     <span className="px-2 py-1 bg-ak-yellow/20 text-ak-yellow text-xs rounded-full">
-                      {users.filter(u => u.role === 'admin').length}
+                      {users.filter(u => u.role === 'genelbaskan').length}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
@@ -175,8 +175,8 @@ export default function UsersPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Tüm Roller</SelectItem>
-                      <SelectItem value="adminpro">AdminPro</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="genelsekreterlik">Genel Sekreterlik</SelectItem>
+                      <SelectItem value="genelbaskan">Genel Başkan</SelectItem>
                       <SelectItem value="moderator">Moderatör</SelectItem>
                     </SelectContent>
                   </Select>

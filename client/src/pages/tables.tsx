@@ -33,7 +33,7 @@ export default function TablesPage() {
       if (!response.ok) throw new Error('Failed to fetch tables');
       return response.json();
     },
-    enabled: user?.role === 'adminpro',
+    enabled: user?.role === 'genelsekreterlik',
   });
 
   const createTableMutation = useMutation({
@@ -116,7 +116,7 @@ export default function TablesPage() {
     });
   };
 
-  if (user?.role !== 'adminpro') {
+  if (user?.role !== 'genelsekreterlik') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <p className="text-red-600">Bu sayfaya erişim yetkiniz yok.</p>

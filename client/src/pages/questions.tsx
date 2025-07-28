@@ -88,7 +88,7 @@ export default function QuestionsPage() {
     setEditingQuestion(null);
   };
 
-  if (user?.role !== 'adminpro') {
+  if (user?.role !== 'genelsekreterlik') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Card>

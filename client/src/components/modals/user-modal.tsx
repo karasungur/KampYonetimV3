@@ -168,14 +168,14 @@ export default function UserModal({ isOpen, onClose }: UserModalProps) {
           
           <div>
             <Label className="ak-text font-medium">Rol</Label>
-            <Select value={role} onValueChange={(value: "moderator" | "admin" | "adminpro") => setRole(value)}>
+            <Select value={role} onValueChange={(value: "moderator" | "genelbaskan" | "genelsekreterlik") => setRole(value)}>
               <SelectTrigger className="mt-2 focus:ring-ak-yellow focus:border-ak-yellow">
                 <SelectValue placeholder="Rol seçin" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="moderator">Moderatör</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="adminpro">AdminPro</SelectItem>
+                <SelectItem value="genelbaskan">Genel Başkan</SelectItem>
+                <SelectItem value="genelsekreterlik">Genel Sekreterlik</SelectItem>
               </SelectContent>
             </Select>
           </div>

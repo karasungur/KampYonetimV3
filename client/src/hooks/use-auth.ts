@@ -7,7 +7,7 @@ interface User {
   id: string;
   firstName: string;
   lastName: string;
-  role: 'admin' | 'adminpro' | 'moderator';
+  role: 'genelbaskan' | 'genelsekreterlik' | 'moderator';
   tableNumber?: number;
 }
 
