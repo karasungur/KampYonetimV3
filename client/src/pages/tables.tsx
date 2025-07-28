@@ -177,9 +177,15 @@ export default function TablesPage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-xs ak-gray">
-                      Oluşturulma: {new Date(table.createdAt).toLocaleDateString('tr-TR')}
-                    </p>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm ak-gray">Kullanıcı Sayısı:</span>
+                        <span className="text-sm font-medium ak-text">{(table as any).userCount || 0}</span>
+                      </div>
+                      <p className="text-xs ak-gray">
+                        Oluşturulma: {new Date(table.createdAt).toLocaleDateString('tr-TR')}
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
               ))}

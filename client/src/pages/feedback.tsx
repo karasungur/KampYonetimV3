@@ -7,14 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Check, Reply } from "lucide-react";
+import { Check, Reply, MessageCircle } from "lucide-react";
 import { setAuthHeader } from "@/lib/auth-utils";
 import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import type { FeedbackWithDetails } from "@shared/schema";
 
 export default function FeedbackPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [responseModal, setResponseModal] = useState<{ open: boolean; feedbackId?: string }>({ open: false });
+  const [responseText, setResponseText] = useState("");
   
   const { user } = useAuth();
   const { toast } = useToast();
@@ -29,7 +34,7 @@ export default function FeedbackPage() {
       if (!response.ok) throw new Error('Failed to fetch feedback');
       return response.json();
     },
-    enabled: user?.role === 'genelsekreterlik',
+    enabled: user?.role === 'genelsekreterlik' || user?.role === 'moderator',
   });
 
   const markAsReadMutation = useMutation({
@@ -80,6 +85,36 @@ export default function FeedbackPage() {
     },
   });
 
+  const respondToFeedbackMutation = useMutation({
+    mutationFn: async ({ feedbackId, response }: { feedbackId: string; response: string }) => {
+      const res = await fetch(`/api/feedback/${feedbackId}/respond`, {
+        method: 'PUT',
+        headers: {
+          ...setAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ response }),
+      });
+      if (!res.ok) throw new Error('Failed to respond to feedback');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/feedback"] });
+      toast({
+        title: "Başarılı",
+        description: "Geri bildirime yanıt verildi",
+      });
+      setResponseModal({ open: false });
+      setResponseText("");
+    },
+    onError: () => {
+      toast({
+        title: "Hata",
+        description: "Yanıt gönderilemedi",
+        variant: "destructive",
+      });
+    },
+  });
+
   const filteredFeedback = feedbackItems.filter(item => {
     if (statusFilter === "all") return true;
     if (statusFilter === "unread") return !item.isRead;
@@ -102,7 +137,7 @@ export default function FeedbackPage() {
     return tableNumber ? `M${tableNumber}` : "U";
   };
 
-  if (user?.role !== 'genelsekreterlik') {
+  if (user?.role !== 'genelsekreterlik' && user?.role !== 'moderator') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Card>
@@ -162,7 +197,7 @@ export default function FeedbackPage() {
                       <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-ak-blue rounded-full flex items-center justify-center">
                           <span className="text-white font-semibold text-sm">
-                            {getUserInitials(feedback.userTableNumber)}
+                            {getUserInitials(feedback.userTableNumber ?? undefined)}
                           </span>
                         </div>
                         <div>
@@ -183,8 +218,27 @@ export default function FeedbackPage() {
                     </h5>
                     <p className="ak-gray mb-4">"{feedback.message}"</p>
                     
-                    {!feedback.isResolved && (
-                      <div className="flex space-x-3">
+                    {feedback.response && (
+                      <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                        <div className="flex items-start space-x-2">
+                          <MessageCircle className="text-ak-blue mt-1" size={16} />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium ak-text mb-1">
+                              Yanıt {feedback.respondedByName ? `(${feedback.respondedByName})` : ''}
+                            </p>
+                            <p className="text-sm ak-gray">{feedback.response}</p>
+                            {feedback.respondedAt && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                {new Date(feedback.respondedAt).toLocaleString('tr-TR')}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {!feedback.isResolved && user?.role === 'genelsekreterlik' && (
+                      <div className="flex space-x-3 mt-4">
                         {!feedback.isRead && (
                           <Button 
                             onClick={() => markAsReadMutation.mutate(feedback.id)}
@@ -195,12 +249,21 @@ export default function FeedbackPage() {
                             Okundu İşaretle
                           </Button>
                         )}
+                        {!feedback.response && (
+                          <Button 
+                            onClick={() => setResponseModal({ open: true, feedbackId: feedback.id })}
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                          >
+                            <Reply className="mr-1" size={16} />
+                            Yanıtla
+                          </Button>
+                        )}
                         <Button 
                           onClick={() => markAsResolvedMutation.mutate(feedback.id)}
                           className="bg-green-600 hover:bg-green-700 text-white"
                           disabled={markAsResolvedMutation.isPending}
                         >
-                          <Reply className="mr-1" size={16} />
+                          <Check className="mr-1" size={16} />
                           Çözüldü İşaretle
                         </Button>
                       </div>
@@ -220,6 +283,53 @@ export default function FeedbackPage() {
           )}
         </main>
       </div>
+
+      {/* Response Modal */}
+      <Dialog open={responseModal.open} onOpenChange={(open) => setResponseModal({ open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Geri Bildirime Yanıt Ver</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="response">Yanıt Mesajı</Label>
+              <Textarea
+                id="response"
+                value={responseText}
+                onChange={(e) => setResponseText(e.target.value)}
+                placeholder="Geri bildirime yanıtınızı yazın..."
+                className="mt-1"
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setResponseModal({ open: false });
+                setResponseText("");
+              }}
+            >
+              İptal
+            </Button>
+            <Button
+              onClick={() => {
+                if (responseModal.feedbackId && responseText.trim()) {
+                  respondToFeedbackMutation.mutate({
+                    feedbackId: responseModal.feedbackId,
+                    response: responseText,
+                  });
+                }
+              }}
+              disabled={!responseText.trim() || respondToFeedbackMutation.isPending}
+              className="bg-ak-blue hover:bg-ak-blue-dark text-white"
+            >
+              Yanıtla
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

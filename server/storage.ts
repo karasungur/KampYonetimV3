@@ -149,8 +149,32 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(tables).where(eq(tables.isActive, true)).orderBy(tables.number);
   }
 
+  async getAllTablesWithStats(): Promise<(Table & { userCount: number })[]> {
+    const tablesWithUsers = await db
+      .select({
+        id: tables.id,
+        number: tables.number,
+        name: tables.name,
+        isActive: tables.isActive,
+        createdAt: tables.createdAt,
+        userCount: count(users.id),
+      })
+      .from(tables)
+      .leftJoin(users, and(eq(users.tableNumber, tables.number), eq(users.isActive, true)))
+      .where(eq(tables.isActive, true))
+      .groupBy(tables.id, tables.number, tables.name, tables.isActive, tables.createdAt)
+      .orderBy(tables.number);
+
+    return tablesWithUsers;
+  }
+
   async getTable(id: string): Promise<Table | undefined> {
     const [table] = await db.select().from(tables).where(eq(tables.id, id));
+    return table || undefined;
+  }
+
+  async getTableByNumber(number: number): Promise<Table | undefined> {
+    const [table] = await db.select().from(tables).where(eq(tables.number, number));
     return table || undefined;
   }
 
@@ -353,16 +377,21 @@ export class DatabaseStorage implements IStorage {
         questionId: feedback.questionId,
         userId: feedback.userId,
         message: feedback.message,
+        response: feedback.response,
+        respondedBy: feedback.respondedBy,
+        respondedAt: feedback.respondedAt,
         isRead: feedback.isRead,
         isResolved: feedback.isResolved,
         createdAt: feedback.createdAt,
         questionText: questions.text,
         userName: sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
         userTableNumber: users.tableNumber,
+        respondedByName: sql<string>`resp.first_name || ' ' || resp.last_name`,
       })
       .from(feedback)
       .leftJoin(questions, eq(feedback.questionId, questions.id))
       .leftJoin(users, eq(feedback.userId, users.id))
+      .leftJoin(sql`users AS resp`, eq(feedback.respondedBy, sql`resp.id`))
       .orderBy(desc(feedback.createdAt));
     
     return result;
@@ -379,6 +408,46 @@ export class DatabaseStorage implements IStorage {
     await db
       .update(feedback)
       .set({ isResolved: true })
+      .where(eq(feedback.id, id));
+  }
+
+  async getFeedbackForUser(userId: string): Promise<FeedbackWithDetails[]> {
+    const result = await db
+      .select({
+        id: feedback.id,
+        questionId: feedback.questionId,
+        userId: feedback.userId,
+        message: feedback.message,
+        response: feedback.response,
+        respondedBy: feedback.respondedBy,
+        respondedAt: feedback.respondedAt,
+        isRead: feedback.isRead,
+        isResolved: feedback.isResolved,
+        createdAt: feedback.createdAt,
+        questionText: questions.text,
+        userName: sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
+        userTableNumber: users.tableNumber,
+        respondedByName: sql<string>`resp.first_name || ' ' || resp.last_name`,
+      })
+      .from(feedback)
+      .leftJoin(questions, eq(feedback.questionId, questions.id))
+      .leftJoin(users, eq(feedback.userId, users.id))
+      .leftJoin(sql`users AS resp`, eq(feedback.respondedBy, sql`resp.id`))
+      .where(eq(feedback.userId, userId))
+      .orderBy(desc(feedback.createdAt));
+    
+    return result;
+  }
+
+  async respondToFeedback(id: string, response: string, respondedBy: string): Promise<void> {
+    await db
+      .update(feedback)
+      .set({ 
+        response, 
+        respondedBy,
+        respondedAt: new Date(),
+        isRead: true 
+      })
       .where(eq(feedback.id, id));
   }
 

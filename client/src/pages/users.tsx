@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, UserX, Download } from "lucide-react";
+import { Plus, Edit, UserX, Download, Upload } from "lucide-react";
 import { setAuthHeader } from "@/lib/auth-utils";
 import UserModal from "@/components/modals/user-modal";
 import EditUserModal from "@/components/modals/edit-user-modal";
@@ -23,6 +24,8 @@ export default function UsersPage() {
   const [selectedUser, setSelectedUser] = useState<UserWithStats | null>(null);
   
   const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: users = [], isLoading } = useQuery<UserWithStats[]>({
     queryKey: ["/api/users"],
@@ -57,13 +60,13 @@ export default function UsersPage() {
     }
   };
 
-  const getStatusBadge = (isActive: boolean, lastLogin?: string | null) => {
+  const getStatusBadge = (isActive: boolean, lastLogin?: string | Date | null) => {
     if (!isActive) {
       return <Badge className="bg-red-100 text-red-800">Pasif</Badge>;
     }
     
     if (lastLogin) {
-      const lastLoginDate = new Date(lastLogin);
+      const lastLoginDate = typeof lastLogin === 'string' ? new Date(lastLogin) : lastLogin;
       const now = new Date();
       const diffMinutes = (now.getTime() - lastLoginDate.getTime()) / (1000 * 60);
       
@@ -102,6 +105,58 @@ export default function UsersPage() {
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold ak-text">Kullanıcı Yönetimi</h2>
             <div className="flex gap-2">
+              <Button 
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.json';
+                  input.onchange = async (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0];
+                    if (file) {
+                      try {
+                        const text = await file.text();
+                        const data = JSON.parse(text);
+                        
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        
+                        const response = await fetch('/api/users/import', {
+                          method: 'POST',
+                          headers: setAuthHeader(),
+                          body: formData,
+                        });
+                        
+                        if (!response.ok) {
+                          const error = await response.json();
+                          throw new Error(error.message || 'Import failed');
+                        }
+                        
+                        const result = await response.json();
+                        
+                        queryClient.invalidateQueries({ queryKey: ['/api/users'] });
+                        queryClient.invalidateQueries({ queryKey: ['/api/tables'] });
+                        
+                        toast({
+                          title: "Başarılı",
+                          description: `${result.imported} kullanıcı başarıyla içe aktarıldı${result.tablesCreated > 0 ? `, ${result.tablesCreated} masa oluşturuldu` : ''}`,
+                        });
+                      } catch (error) {
+                        toast({
+                          title: "Hata",
+                          description: error instanceof Error ? error.message : "JSON dosyası içe aktarılamadı",
+                          variant: "destructive",
+                        });
+                      }
+                    }
+                  };
+                  input.click();
+                }}
+                variant="outline"
+                className="text-green-600 hover:text-green-700"
+              >
+                <Upload className="mr-2" size={16} />
+                JSON İçe Aktar
+              </Button>
               <Button 
                 onClick={async () => {
                   try {

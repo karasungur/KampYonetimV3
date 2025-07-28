@@ -1,0 +1,86 @@
+[
+  {
+    "isim": "Ahmet",
+    "soyisim": "Yılmaz",
+    "tc": "12345678901",
+    "sifre": "ahmet123",
+    "rol": "moderator",
+    "masaNo": 1,
+    "masaAdi": "İstanbul Masa"
+  },
+  {
+    "isim": "Ayşe",
+    "soyisim": "Demir",
+    "tc": "23456789012",
+    "sifre": "ayse456",
+    "rol": "moderator",
+    "masaNo": 2,
+    "masaAdi": "Ankara Masa"
+  },
+  {
+    "isim": "Mehmet",
+    "soyisim": "Kaya",
+    "tc": "34567890123",
+    "sifre": "mehmet789",
+    "rol": "moderator",
+    "masaNo": 3
+  },
+  {
+    "isim": "Fatma",
+    "soyisim": "Öztürk",
+    "tc": "45678901234",
+    "sifre": "fatma321",
+    "rol": "moderator",
+    "masaNo": 1
+  },
+  {
+    "isim": "Ali",
+    "soyisim": "Çelik",
+    "tc": "56789012345",
+    "sifre": "ali654",
+    "rol": "genelbaskan"
+  },
+  {
+    "isim": "Zeynep",
+    "soyisim": "Arslan",
+    "tc": "67890123456",
+    "sifre": "zeynep987",
+    "rol": "genelsekreterlik"
+  },
+  {
+    "isim": "Mustafa",
+    "soyisim": "Şahin",
+    "tc": "78901234567",
+    "sifre": "mustafa147",
+    "rol": "moderator",
+    "masaNo": 4,
+    "masaAdi": "İzmir Masa"
+  },
+  {
+    "isim": "Elif",
+    "soyisim": "Koç",
+    "tc": "89012345678",
+    "sifre": "elif258",
+    "rol": "moderator",
+    "masaNo": 5,
+    "masaAdi": "Bursa Masa"
+  },
+  {
+    "isim": "Hasan",
+    "soyisim": "Aydın",
+    "tc": "90123456789",
+    "sifre": "hasan369",
+    "rol": "moderator",
+    "masaNo": 6,
+    "masaAdi": "Antalya Masa"
+  },
+  {
+    "isim": "Selin",
+    "soyisim": "Yıldız",
+    "tc": "01234567890",
+    "sifre": "selin753",
+    "rol": "moderator",
+    "masaNo": 7,
+    "masaAdi": "Adana Masa"
+  }
+]

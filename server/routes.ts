@@ -4,11 +4,38 @@ import { storage } from "./storage";
 import { requireAuth, requireRole, generateToken, comparePassword, hashPassword, type AuthenticatedRequest } from "./auth";
 import { insertUserSchema, insertQuestionSchema, insertAnswerSchema, insertFeedbackSchema } from "@shared/schema";
 import { z } from "zod";
+import multer from "multer";
 
 // Login schema
 const loginSchema = z.object({
   tcNumber: z.string().length(11, "T.C. Kimlik Numarası 11 haneli olmalıdır"),
   password: z.string().min(1, "Şifre gereklidir"),
+});
+
+// Configure multer for file uploads
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/json') {
+      cb(null, true);
+    } else {
+      cb(new Error('Sadece JSON dosyaları kabul edilir'));
+    }
+  }
+});
+
+// User import schema
+const userImportSchema = z.object({
+  isim: z.string().min(1, "İsim zorunludur"),
+  soyisim: z.string().min(1, "Soyisim zorunludur"),
+  tc: z.string().length(11, "T.C. Kimlik Numarası 11 haneli olmalıdır"),
+  sifre: z.string().min(1, "Şifre zorunludur"),
+  rol: z.enum(['genelsekreterlik', 'genelbaskan', 'moderator'], {
+    errorMap: () => ({ message: "Geçersiz rol" })
+  }),
+  masaNo: z.number().optional(),
+  masaAdi: z.string().optional(),
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -161,6 +188,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Update user error:', error);
       res.status(400).json({ message: 'Kullanıcı güncellenemedi' });
+    }
+  });
+
+  app.post('/api/users/import', requireAuth, requireRole(['genelsekreterlik']), upload.single('file'), async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: 'Dosya gereklidir' });
+      }
+
+      const jsonData = JSON.parse(req.file.buffer.toString());
+      
+      // Validate array
+      if (!Array.isArray(jsonData)) {
+        return res.status(400).json({ message: 'JSON dosyası bir dizi olmalıdır' });
+      }
+
+      let imported = 0;
+      let tablesCreated = 0;
+      const errors: string[] = [];
+      const createdTables = new Set<number>();
+
+      for (let i = 0; i < jsonData.length; i++) {
+        try {
+          const userData = userImportSchema.parse(jsonData[i]);
+          
+          // Check if user already exists
+          const existingUser = await storage.getUserByTcNumber(userData.tc);
+          if (existingUser) {
+            errors.push(`Satır ${i + 1}: TC ${userData.tc} zaten kayıtlı`);
+            continue;
+          }
+
+          // If table number is provided, check if table exists
+          if (userData.masaNo && !createdTables.has(userData.masaNo)) {
+            const existingTable = await storage.getTableByNumber(userData.masaNo);
+            if (!existingTable) {
+              // Create table
+              const tableName = userData.masaAdi || `Masa ${userData.masaNo}`;
+              await storage.createTable({
+                number: userData.masaNo,
+                name: tableName,
+                isActive: true,
+              });
+              createdTables.add(userData.masaNo);
+              tablesCreated++;
+            }
+          }
+
+          // Create user
+          const hashedPassword = await hashPassword(userData.sifre);
+          await storage.createUser({
+            firstName: userData.isim,
+            lastName: userData.soyisim,
+            tcNumber: userData.tc,
+            password: hashedPassword,
+            role: userData.rol,
+            tableNumber: userData.masaNo || null,
+            isActive: true,
+          });
+          
+          imported++;
+        } catch (error) {
+          if (error instanceof z.ZodError) {
+            errors.push(`Satır ${i + 1}: ${error.errors.map(e => e.message).join(', ')}`);
+          } else {
+            errors.push(`Satır ${i + 1}: Bilinmeyen hata`);
+          }
+        }
+      }
+
+      // Log activity
+      await storage.logActivity({
+        userId: req.user!.id,
+        action: 'import_users',
+        details: `${imported} kullanıcı içe aktarıldı${tablesCreated > 0 ? `, ${tablesCreated} masa oluşturuldu` : ''}`,
+        metadata: { imported, tablesCreated, errors: errors.length },
+        ipAddress: req.ip,
+      });
+
+      res.json({
+        imported,
+        tablesCreated,
+        total: jsonData.length,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (error) {
+      console.error('Import users error:', error);
+      res.status(400).json({ message: 'İçe aktarma başarısız' });
     }
   });
 
@@ -355,9 +470,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Feedback routes
-  app.get('/api/feedback', requireAuth, requireRole(['genelsekreterlik']), async (req, res) => {
+  app.get('/api/feedback', requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const feedbackItems = await storage.getAllFeedback();
+      let feedbackItems;
+      
+      if (req.user!.role === 'genelsekreterlik') {
+        // Genelsekreterlik can see all feedback
+        feedbackItems = await storage.getAllFeedback();
+      } else if (req.user!.role === 'moderator') {
+        // Moderators can only see their own feedback
+        feedbackItems = await storage.getFeedbackForUser(req.user!.id);
+      } else {
+        return res.status(403).json({ message: 'Bu sayfaya erişim yetkiniz yok' });
+      }
+      
       res.json(feedbackItems);
     } catch (error) {
       res.status(500).json({ message: 'Geri bildirimler alınamadı' });
@@ -408,6 +534,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put('/api/feedback/:id/respond', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { response } = req.body;
+      
+      if (!response || response.trim() === '') {
+        return res.status(400).json({ message: 'Yanıt metni gereklidir' });
+      }
+      
+      await storage.respondToFeedback(id, response, req.user!.id);
+      
+      res.json({ message: 'Geri bildirime yanıt verildi' });
+    } catch (error) {
+      res.status(500).json({ message: 'Yanıt gönderilemedi' });
+    }
+  });
+
   // Activity logs
   app.get('/api/logs', requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
@@ -430,7 +573,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Tables
   app.get('/api/tables', requireAuth, async (req, res) => {
     try {
-      const tablesList = await storage.getAllTables();
+      const tablesList = await storage.getAllTablesWithStats();
       res.json(tablesList);
     } catch (error) {
       res.status(500).json({ message: 'Masalar alınamadı' });
@@ -469,7 +612,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/tables/:id', requireAuth, requireRole(['adminpro']), async (req: AuthenticatedRequest, res) => {
+  app.delete('/api/tables/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       const table = await storage.getTable(id);

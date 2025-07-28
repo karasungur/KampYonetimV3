@@ -16,7 +16,7 @@ import { z } from "zod";
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['genelbaskan', 'genelsekreterlik', 'moderator']);
 export const questionTypeEnum = pgEnum('question_type', ['general', 'specific']);
-export const logActionEnum = pgEnum('log_action', ['login', 'logout', 'create_question', 'edit_question', 'delete_question', 'create_answer', 'edit_answer', 'delete_answer', 'create_user', 'edit_user', 'delete_user', 'send_feedback']);
+export const logActionEnum = pgEnum('log_action', ['login', 'logout', 'create_question', 'edit_question', 'delete_question', 'create_answer', 'edit_answer', 'delete_answer', 'create_user', 'edit_user', 'delete_user', 'send_feedback', 'import_users']);
 
 // Users table
 export const users = pgTable("users", {
@@ -72,6 +72,9 @@ export const feedback = pgTable("feedback", {
   questionId: varchar("question_id").notNull().references(() => questions.id),
   userId: varchar("user_id").notNull().references(() => users.id), // moderator who sent feedback
   message: text("message").notNull(),
+  response: text("response"), // Response from genelsekreterlik
+  respondedBy: varchar("responded_by").references(() => users.id), // who responded
+  respondedAt: timestamp("responded_at"),
   isRead: boolean("is_read").notNull().default(false),
   isResolved: boolean("is_resolved").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -161,6 +164,9 @@ export const insertAnswerSchema = createInsertSchema(answers).omit({
 
 export const insertFeedbackSchema = createInsertSchema(feedback).omit({
   id: true,
+  response: true,
+  respondedBy: true,
+  respondedAt: true,
   createdAt: true,
 });
 
@@ -204,6 +210,7 @@ export type FeedbackWithDetails = Feedback & {
   questionText?: string | null;
   userName?: string | null;
   userTableNumber?: number | null;
+  respondedByName?: string | null;
 };
 
 export type ActivityLogWithUser = ActivityLog & {
