@@ -14,6 +14,7 @@ import FeedbackPage from "@/pages/feedback";
 import LogsPage from "@/pages/logs";
 import ModeratorQuestionsPage from "@/pages/moderator-questions";
 import ResponsesPage from "@/pages/responses";
+import TablesPage from "@/pages/tables";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -44,6 +45,7 @@ function Router() {
       <Route path="/feedback" component={FeedbackPage} />
       <Route path="/logs" component={LogsPage} />
       <Route path="/responses" component={ResponsesPage} />
+      <Route path="/tables" component={TablesPage} />
       <Route component={NotFound} />
     </Switch>
   );

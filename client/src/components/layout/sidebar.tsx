@@ -27,6 +27,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     adminpro: [
       { path: "/", label: "Ana Panel", icon: LayoutDashboard },
       { path: "/questions", label: "Soru Yönetimi", icon: HelpCircle },
+      { path: "/tables", label: "Masa Yönetimi", icon: Users },
       { path: "/users", label: "Kullanıcı Yönetimi", icon: Users },
       { path: "/reports", label: "Raporlar", icon: BarChart3 },
       { path: "/feedback", label: "Geri Bildirimler", icon: MessageSquare },

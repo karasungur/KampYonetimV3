@@ -401,6 +401,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Table management routes (adminpro only)
+  app.post('/api/tables', requireAuth, requireRole(['adminpro']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { number, name } = req.body;
+      
+      // Validate input
+      if (!number || number <= 0) {
+        return res.status(400).json({ message: 'Geçerli bir masa numarası giriniz' });
+      }
+
+      const table = await storage.createTable({ number, name });
+      
+      // Log activity
+      await storage.logActivity({
+        userId: req.user!.id,
+        action: 'create_user', // We don't have create_table action in the enum, using create_user
+        details: `Yeni masa oluşturuldu: Masa ${number}`,
+        metadata: { tableId: table.id },
+        ipAddress: req.ip,
+      });
+      
+      res.status(201).json(table);
+    } catch (error: any) {
+      console.error('Error creating table:', error);
+      if (error.code === '23505') {
+        res.status(400).json({ message: 'Bu masa numarası zaten mevcut' });
+      } else {
+        res.status(500).json({ message: 'Masa oluşturulurken hata oluştu' });
+      }
+    }
+  });
+
+  app.delete('/api/tables/:id', requireAuth, requireRole(['adminpro']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const table = await storage.getTable(id);
+      
+      if (!table) {
+        return res.status(404).json({ message: 'Masa bulunamadı' });
+      }
+      
+      await storage.deleteTable(id);
+      
+      // Log activity
+      await storage.logActivity({
+        userId: req.user!.id,
+        action: 'delete_user', // We don't have delete_table action in the enum, using delete_user
+        details: `Masa silindi: Masa ${table.number}`,
+        metadata: { tableId: id },
+        ipAddress: req.ip,
+      });
+      
+      res.status(200).json({ message: 'Masa başarıyla silindi' });
+    } catch (error) {
+      console.error('Error deleting table:', error);
+      res.status(500).json({ message: 'Masa silinirken hata oluştu' });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

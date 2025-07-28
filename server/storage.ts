@@ -38,6 +38,7 @@ export interface IStorage {
   createTable(table: InsertTable): Promise<Table>;
   getAllTables(): Promise<Table[]>;
   getTable(id: string): Promise<Table | undefined>;
+  deleteTable(id: string): Promise<void>;
   
   // Question operations
   createQuestion(question: InsertQuestion): Promise<Question>;
@@ -150,6 +151,13 @@ export class DatabaseStorage implements IStorage {
   async getTable(id: string): Promise<Table | undefined> {
     const [table] = await db.select().from(tables).where(eq(tables.id, id));
     return table || undefined;
+  }
+
+  async deleteTable(id: string): Promise<void> {
+    await db
+      .update(tables)
+      .set({ isActive: false })
+      .where(eq(tables.id, id));
   }
 
   // Question operations
