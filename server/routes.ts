@@ -248,7 +248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/answers', requireAuth, requireRole(['admin', 'adminpro']), async (req, res) => {
+  app.get('/api/answers', requireAuth, requireRole(['genelbaskan', 'genelsekreterlik']), async (req, res) => {
     try {
       const answers = await storage.getAllAnswers();
       res.json(answers);

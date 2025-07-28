@@ -18,6 +18,11 @@ The user requested all communications to be in Turkish.
   - "moderator" remains as "moderator"
 - Updated all database references, API endpoints, UI components, and role checks
 - Updated documentation to reflect new Turkish organizational structure
+- **Fixed remaining role references**: 
+  - Fixed user management page access for genelsekreterlik role (was checking for 'adminpro')
+  - Updated /api/answers route permissions to use new role names
+  - Fixed UserModal component to use new role types
+  - Updated comments in schema.ts to reference genelsekreterlik instead of adminpro
 
 ## System Architecture
 

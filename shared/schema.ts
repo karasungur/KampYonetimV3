@@ -66,7 +66,7 @@ export const answers = pgTable("answers", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-// Feedback from moderators to adminpro
+// Feedback from moderators to genelsekreterlik
 export const feedback = pgTable("feedback", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   questionId: varchar("question_id").notNull().references(() => questions.id),

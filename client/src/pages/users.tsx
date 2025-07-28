@@ -76,7 +76,7 @@ export default function UsersPage() {
     return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
   };
 
-  if (user?.role !== 'adminpro') {
+  if (user?.role !== 'genelsekreterlik') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Card>

@@ -18,7 +18,7 @@ export default function UserModal({ isOpen, onClose }: UserModalProps) {
   const [lastName, setLastName] = useState("");
   const [tcNumber, setTcNumber] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"moderator" | "admin" | "adminpro">("moderator");
+  const [role, setRole] = useState<"moderator" | "genelbaskan" | "genelsekreterlik">("moderator");
   const [tableNumber, setTableNumber] = useState("");
   
   const { toast } = useToast();
