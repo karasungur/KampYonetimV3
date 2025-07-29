@@ -13,6 +13,15 @@ This is a web-based management system for the AK Party Youth Branches Consultati
 
 ## Recent Changes
 
+### January 29, 2025
+- **Feedback Management Enhanced**: Added feedback deletion functionality for genelsekreterlik role
+- **Table Management Enhanced**: Updated table management to show user details and enable editing
+- **Export Formats Added**: Implemented Excel (.xlsx) and TXT export alongside existing CSV
+- **JSON Import Documentation**: Created comprehensive documentation with example format
+- **User Deletion Bug Fix**: Added cascade delete constraints to foreign keys to properly delete users with their associated data
+- **Confirmed**: Moderators can see responses from genelsekreterlik to their feedback
+- **Schema Updates**: Added updatedAt field to tables table and cascade delete constraints to all foreign keys
+
 ### January 28, 2025
 - **Role Renaming Completed**: Successfully renamed all user roles throughout the entire codebase:
   - "adminpro" → "genelsekreterlik" (General Secretariat)

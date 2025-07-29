@@ -40,6 +40,7 @@ export const tables = pgTable("tables", {
   name: varchar("name"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 // Questions
@@ -48,7 +49,7 @@ export const questions = pgTable("questions", {
   text: text("text").notNull(),
   type: questionTypeEnum("type").notNull().default('general'),
   assignedTables: jsonb("assigned_tables"), // Array of table numbers for specific questions
-  createdBy: varchar("created_by").notNull().references(() => users.id),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -58,7 +59,7 @@ export const questions = pgTable("questions", {
 export const answers = pgTable("answers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   questionId: varchar("question_id").notNull().references(() => questions.id, { onDelete: 'cascade' }),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   tableNumber: integer("table_number").notNull(),
   text: text("text").notNull(),
   orderIndex: integer("order_index").notNull().default(1), // For multiple answers per question
@@ -70,7 +71,7 @@ export const answers = pgTable("answers", {
 export const feedback = pgTable("feedback", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   questionId: varchar("question_id").notNull().references(() => questions.id),
-  userId: varchar("user_id").notNull().references(() => users.id), // moderator who sent feedback
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }), // moderator who sent feedback
   message: text("message").notNull(),
   response: text("response"), // Response from genelsekreterlik
   respondedBy: varchar("responded_by").references(() => users.id), // who responded
@@ -83,7 +84,7 @@ export const feedback = pgTable("feedback", {
 // Activity logs
 export const activityLogs = pgTable("activity_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   action: logActionEnum("action").notNull(),
   details: text("details"),
   metadata: jsonb("metadata"), // Additional data like question_id, table_number, etc.
