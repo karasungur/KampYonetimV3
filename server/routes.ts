@@ -7,10 +7,36 @@ import { z } from "zod";
 import multer from "multer";
 import * as XLSX from "xlsx";
 
+// TC Kimlik doğrulama fonksiyonu
+function validateTCNumber(tc: string): boolean {
+  if (tc.length !== 11) return false;
+  if (!/^\d+$/.test(tc)) return false;
+  
+  const digits = tc.split('').map(Number);
+  const firstDigit = digits[0];
+  if (firstDigit === 0) return false;
+  
+  // TC algoritması kontrolü
+  let oddSum = 0, evenSum = 0;
+  for (let i = 0; i < 9; i++) {
+    if (i % 2 === 0) oddSum += digits[i];
+    else evenSum += digits[i];
+  }
+  
+  const tenthDigit = ((oddSum * 7) - evenSum) % 10;
+  if (tenthDigit !== digits[9]) return false;
+  
+  const total = digits.slice(0, 10).reduce((a, b) => a + b, 0);
+  const eleventhDigit = total % 10;
+  
+  return eleventhDigit === digits[10];
+}
+
 // Login schema
 const loginSchema = z.object({
-  tcNumber: z.string().length(11, "T.C. Kimlik Numarası 11 haneli olmalıdır"),
-  password: z.string().min(1, "Şifre gereklidir"),
+  tcNumber: z.string().length(11, "T.C. Kimlik Numarası 11 haneli olmalıdır")
+    .refine(validateTCNumber, "Geçersiz T.C. Kimlik Numarası"),
+  password: z.string().min(6, "Şifre en az 6 karakter olmalıdır"),
 });
 
 // Configure multer for file uploads
@@ -30,8 +56,9 @@ const upload = multer({
 const userImportSchema = z.object({
   isim: z.string().min(1, "İsim zorunludur"),
   soyisim: z.string().min(1, "Soyisim zorunludur"),
-  tc: z.string().length(11, "T.C. Kimlik Numarası 11 haneli olmalıdır"),
-  sifre: z.string().min(1, "Şifre zorunludur"),
+  tc: z.string().length(11, "T.C. Kimlik Numarası 11 haneli olmalıdır")
+    .refine(validateTCNumber, "Geçersiz T.C. Kimlik Numarası"),
+  sifre: z.string().min(6, "Şifre en az 6 karakter olmalıdır"),
   rol: z.enum(['genelsekreterlik', 'genelbaskan', 'moderator'], {
     errorMap: () => ({ message: "Geçersiz rol" })
   }),

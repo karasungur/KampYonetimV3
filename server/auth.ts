@@ -3,7 +3,11 @@ import bcrypt from 'bcrypt';
 import type { Request, Response, NextFunction } from 'express';
 import type { User } from '@shared/schema';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'development' ? 'dev-secret-key' : undefined);
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable must be set in production');
+}
 
 export interface AuthenticatedRequest extends Request {
   user?: User;
@@ -17,14 +21,14 @@ export function generateToken(user: User): string {
       role: user.role,
       tableNumber: user.tableNumber 
     },
-    JWT_SECRET,
+    JWT_SECRET!,
     { expiresIn: '24h' }
   );
 }
 
 export function verifyToken(token: string): any {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, JWT_SECRET!);
   } catch (error) {
     return null;
   }
