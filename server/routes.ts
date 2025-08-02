@@ -6,6 +6,7 @@ import { insertUserSchema, insertQuestionSchema, insertAnswerSchema, insertFeedb
 import { z } from "zod";
 import multer from "multer";
 import * as XLSX from "xlsx";
+import rateLimit from "express-rate-limit";
 
 // TC Kimlik doğrulama fonksiyonu
 function validateTCNumber(tc: string): boolean {
@@ -31,6 +32,27 @@ function validateTCNumber(tc: string): boolean {
   
   return eleventhDigit === digits[10];
 }
+
+// Rate Limiting yapılandırmaları
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 dakika
+  max: 5, // Maksimum 5 deneme
+  message: 'Çok fazla giriş denemesi yaptınız. Lütfen 15 dakika sonra tekrar deneyin.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const createAccountLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 saat
+  max: 10, // Maksimum 10 kullanıcı oluşturma
+  message: 'Çok fazla kullanıcı oluşturma denemesi. Lütfen daha sonra tekrar deneyin.',
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 dakika
+  max: 100, // Maksimum 100 istek
+  message: 'Çok fazla istek gönderdiniz. Lütfen biraz bekleyin.',
+});
 
 // Login schema
 const loginSchema = z.object({
@@ -67,8 +89,17 @@ const userImportSchema = z.object({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Genel API rate limiting (auth hariç)
+  app.use('/api/', (req, res, next) => {
+    // Auth rotalarına rate limiting uygulanmasın (zaten kendi limitleri var)
+    if (req.path.startsWith('/api/auth/')) {
+      return next();
+    }
+    apiLimiter(req, res, next);
+  });
+
   // Auth routes
-  app.post('/api/auth/login', async (req, res) => {
+  app.post('/api/auth/login', loginLimiter, async (req, res) => {
     try {
       const { tcNumber, password } = loginSchema.parse(req.body);
       
@@ -166,7 +197,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/users', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+  app.post('/api/users', requireAuth, requireRole(['genelsekreterlik']), createAccountLimiter, async (req: AuthenticatedRequest, res) => {
     try {
       const userData = insertUserSchema.parse(req.body);
       
@@ -351,17 +382,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Question management routes
   app.get('/api/questions', requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      let questions;
+      // Pagination parametreleri
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100); // Max 100
+      const offset = (page - 1) * limit;
+      
+      let result;
       
       if (req.user!.role === 'moderator' && req.user!.tableNumber) {
         // Moderators only see questions assigned to their table
-        questions = await storage.getQuestionsForTable(req.user!.tableNumber);
+        result = await storage.getQuestionsForTable(req.user!.tableNumber, { limit, offset });
       } else {
         // Admins see all questions
-        questions = await storage.getAllQuestions();
+        result = await storage.getAllQuestions({ limit, offset });
       }
       
-      res.json(questions);
+      res.json({
+        data: result.questions,
+        pagination: {
+          page,
+          limit,
+          total: result.total,
+          totalPages: Math.ceil(result.total / limit)
+        }
+      });
     } catch (error) {
       res.status(500).json({ message: 'Sorular alınamadı' });
     }

@@ -51,8 +51,8 @@ export interface IStorage {
   createQuestion(question: InsertQuestion): Promise<Question>;
   updateQuestion(id: string, updates: Partial<InsertQuestion>): Promise<Question>;
   deleteQuestion(id: string): Promise<void>;
-  getAllQuestions(): Promise<QuestionWithStats[]>;
-  getQuestionsForTable(tableNumber: number): Promise<QuestionWithStats[]>;
+  getAllQuestions(pagination?: { limit: number; offset: number }): Promise<{ questions: QuestionWithStats[]; total: number }>;
+  getQuestionsForTable(tableNumber: number, pagination?: { limit: number; offset: number }): Promise<{ questions: QuestionWithStats[]; total: number }>;
   getQuestion(id: string): Promise<Question | undefined>;
   
   // Answer operations
@@ -180,12 +180,13 @@ export class DatabaseStorage implements IStorage {
         name: tables.name,
         isActive: tables.isActive,
         createdAt: tables.createdAt,
+        updatedAt: tables.updatedAt,
         userCount: count(users.id),
       })
       .from(tables)
       .leftJoin(users, and(eq(users.tableNumber, tables.number), eq(users.isActive, true)))
       .where(eq(tables.isActive, true))
-      .groupBy(tables.id, tables.number, tables.name, tables.isActive, tables.createdAt)
+      .groupBy(tables.id, tables.number, tables.name, tables.isActive, tables.createdAt, tables.updatedAt)
       .orderBy(tables.number);
 
     return tablesWithUsers;
@@ -275,8 +276,17 @@ export class DatabaseStorage implements IStorage {
       .where(eq(questions.id, id));
   }
 
-  async getAllQuestions(): Promise<QuestionWithStats[]> {
-    const result = await db
+  async getAllQuestions(pagination?: { limit: number; offset: number }): Promise<{ questions: QuestionWithStats[]; total: number }> {
+    // Önce toplam sayıyı al
+    const [totalResult] = await db
+      .select({ count: count() })
+      .from(questions)
+      .where(eq(questions.isActive, true));
+    
+    const total = totalResult?.count || 0;
+    
+    // Sonra sayfalanmış veriyi al
+    const baseQuery = db
       .select({
         id: questions.id,
         text: questions.text,
@@ -296,11 +306,32 @@ export class DatabaseStorage implements IStorage {
       .groupBy(questions.id, users.firstName, users.lastName)
       .orderBy(desc(questions.createdAt));
     
-    return result;
+    const questionsList = pagination 
+      ? await baseQuery.limit(pagination.limit).offset(pagination.offset)
+      : await baseQuery;
+    
+    return { questions: questionsList, total };
   }
 
-  async getQuestionsForTable(tableNumber: number): Promise<QuestionWithStats[]> {
-    const result = await db
+  async getQuestionsForTable(tableNumber: number, pagination?: { limit: number; offset: number }): Promise<{ questions: QuestionWithStats[]; total: number }> {
+    // Önce toplam sayıyı al
+    const [totalResult] = await db
+      .select({ count: count() })
+      .from(questions)
+      .where(
+        and(
+          eq(questions.isActive, true),
+          or(
+            eq(questions.type, 'general'),
+            sql`${questions.assignedTables}::jsonb ? ${tableNumber.toString()}`
+          )
+        )
+      );
+    
+    const total = totalResult?.count || 0;
+    
+    // Sonra sayfalanmış veriyi al
+    const baseQuery = db
       .select({
         id: questions.id,
         text: questions.text,
@@ -328,7 +359,11 @@ export class DatabaseStorage implements IStorage {
       .groupBy(questions.id, users.firstName, users.lastName)
       .orderBy(desc(questions.createdAt));
     
-    return result;
+    const questionsList = pagination 
+      ? await baseQuery.limit(pagination.limit).offset(pagination.offset)
+      : await baseQuery;
+    
+    return { questions: questionsList, total };
   }
 
   async getQuestion(id: string): Promise<Question | undefined> {
