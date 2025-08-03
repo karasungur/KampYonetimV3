@@ -191,14 +191,14 @@ export default function MainMenuPage() {
         <img 
           src={akPartiLogo} 
           alt="AK Parti" 
-          className="w-52 h-52 mx-auto mb-0 object-contain"
+          className="w-40 h-40 mx-auto mb-0 object-contain"
         />
         
         {/* Metin Resmi */}
         <img 
           src={metinResmi} 
           alt="AK Parti Gençlik Kolları Genel Sekreterlik - Strateji ve İstişare Kampı" 
-          className="w-80 md:w-96 mx-auto mb-0 object-contain -mt-4"
+          className="w-64 md:w-72 mx-auto mb-0 object-contain -mt-2"
         />
       </div>
 
