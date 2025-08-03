@@ -211,6 +211,7 @@ export const photoRequests = pgTable("photo_requests", {
   status: photoRequestStatusEnum("status").notNull().default('pending'),
   referencePhotoPath: varchar("reference_photo_path"), // Yüklenen referans fotoğraf yolu
   selectedFaceId: varchar("selected_face_id"), // Seçilen yüz ID'si
+  faceData: jsonb("face_data"), // Web'den gelen yüz embedding verileri
   processedAt: timestamp("processed_at"),
   emailSentAt: timestamp("email_sent_at"),
   matchedPhotosCount: integer("matched_photos_count").default(0),

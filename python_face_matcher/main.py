@@ -1456,6 +1456,11 @@ class MainWindow(QMainWindow):
                         }
                         
                         print(f"✨ Yeni istek web veritabanından alındı: {request_item['tcNumber']}")
+                        print(f"📊 Debug - Alınan veri:")
+                        print(f"   - TC: {request_item['tcNumber']}")
+                        print(f"   - Email: {request_item['email']}")
+                        print(f"   - Face Data: {len(request_item.get('faceData', []))} adet")
+                        print(f"   - Raw Face Data: {request_item.get('faceData', 'YOK')}")
                         self.process_photo_request(photo_request)
                         
         except Exception as e:

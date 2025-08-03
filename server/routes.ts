@@ -1355,6 +1355,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const requestData = insertPhotoRequestSchema.parse({
         ...requestBody,
+        faceData: req.body.faceData, // Web'den gelen yüz embedding verileri
         status: 'pending'
       });
       
@@ -1371,6 +1372,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           existingRequest 
         });
       }
+      
+      // Debug: Gelen veriyi kontrol et
+      console.log('📥 Web\'den gelen fotoğraf isteği:');
+      console.log('- TC:', requestData.tcNumber);
+      console.log('- Email:', requestData.email);
+      console.log('- Face Data:', req.body.faceData ? `${req.body.faceData.length} adet` : 'YOK');
+      console.log('- Selected Camp Days:', selectedCampDays);
       
       // İsteği veritabanına kaydet (Python GUI ayrı çalışacak)
       console.log('Fotoğraf isteği veritabanına kaydediliyor...');
