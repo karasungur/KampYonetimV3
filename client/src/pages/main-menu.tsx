@@ -103,6 +103,9 @@ export default function MainMenuPage() {
   const [photoEmail, setPhotoEmail] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [photoStep, setPhotoStep] = useState<'tc-input' | 'existing-request' | 'new-request'>('tc-input');
+  const [existingRequest, setExistingRequest] = useState<any>(null);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
 
   // Preload images
   useEffect(() => {
@@ -176,6 +179,9 @@ export default function MainMenuPage() {
     setPhotoEmail("");
     setUploadedFiles([]);
     setIsProcessing(false);
+    setPhotoStep('tc-input');
+    setExistingRequest(null);
+    setIsCheckingStatus(false);
   };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -580,36 +586,178 @@ export default function MainMenuPage() {
                       </div>
 
                       <div className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <Label htmlFor="photo-tc" className="text-gray-700 font-medium">
-                              T.C. Kimlik Numarası
-                            </Label>
-                            <Input
-                              id="photo-tc"
-                              type="text"
-                              maxLength={11}
-                              value={photoTcNumber}
-                              onChange={(e) => setPhotoTcNumber(e.target.value.replace(/[^0-9]/g, ''))}
-                              className="mt-1 focus:ring-orange-500 focus:border-orange-500"
-                              placeholder="11 haneli TC kimlik numaranız"
-                            />
+                        {/* TC Number Input Step */}
+                        {photoStep === 'tc-input' && (
+                          <div className="space-y-4">
+                            <div>
+                              <Label htmlFor="photo-tc" className="text-gray-700 font-medium">
+                                T.C. Kimlik Numarası
+                              </Label>
+                              <Input
+                                id="photo-tc"
+                                type="text"
+                                maxLength={11}
+                                value={photoTcNumber}
+                                onChange={(e) => setPhotoTcNumber(e.target.value.replace(/[^0-9]/g, ''))}
+                                className="mt-1 focus:ring-orange-500 focus:border-orange-500"
+                                placeholder="11 haneli TC kimlik numaranızı girin"
+                              />
+                            </div>
+                            
+                            <Button 
+                              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
+                              disabled={photoTcNumber.length !== 11 || isCheckingStatus}
+                              onClick={async () => {
+                                setIsCheckingStatus(true);
+                                try {
+                                  // Check for existing request
+                                  const response = await fetch(`/api/photo-requests/check/${photoTcNumber}`);
+                                  if (response.ok) {
+                                    const requestData = await response.json();
+                                    if (requestData.exists) {
+                                      setExistingRequest(requestData.request);
+                                      setPhotoStep('existing-request');
+                                    } else {
+                                      setPhotoStep('new-request');
+                                    }
+                                  } else {
+                                    setPhotoStep('new-request');
+                                  }
+                                } catch (error) {
+                                  console.error('Error checking request:', error);
+                                  setPhotoStep('new-request');
+                                } finally {
+                                  setIsCheckingStatus(false);
+                                }
+                              }}
+                            >
+                              {isCheckingStatus ? (
+                                <>
+                                  <Clock className="mr-2 w-4 h-4 animate-spin" />
+                                  Kontrol ediliyor...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle className="mr-2 w-4 h-4" />
+                                  Devam Et
+                                </>
+                              )}
+                            </Button>
                           </div>
-                          
-                          <div>
-                            <Label htmlFor="photo-email" className="text-gray-700 font-medium">
-                              E-posta Adresi
-                            </Label>
-                            <Input
-                              id="photo-email"
-                              type="email"
-                              value={photoEmail}
-                              onChange={(e) => setPhotoEmail(e.target.value)}
-                              className="mt-1 focus:ring-orange-500 focus:border-orange-500"
-                              placeholder="ornek@email.com"
-                            />
+                        )}
+
+                        {/* Existing Request Status */}
+                        {photoStep === 'existing-request' && existingRequest && (
+                          <div className="space-y-4">
+                            <Alert>
+                              <Clock className="h-4 w-4" />
+                              <AlertDescription>
+                                <strong>Mevcut İsteğiniz:</strong> {photoTcNumber} TC numarası için zaten bir fotoğraf isteği bulunuyor.
+                              </AlertDescription>
+                            </Alert>
+                            
+                            <div className="bg-orange-50 p-4 rounded-lg space-y-3">
+                              <div className="flex justify-between items-center">
+                                <span className="font-medium text-gray-700">Durum:</span>
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  existingRequest.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                  existingRequest.status === 'processing' ? 'bg-blue-100 text-blue-800' :
+                                  existingRequest.status === 'failed' ? 'bg-red-100 text-red-800' :
+                                  'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {existingRequest.status === 'completed' ? 'Tamamlandı' :
+                                   existingRequest.status === 'processing' ? 'İşleniyor' :
+                                   existingRequest.status === 'failed' ? 'Başarısız' : 'Bekliyor'}
+                                </span>
+                              </div>
+                              
+                              <div className="flex justify-between items-center">
+                                <span className="font-medium text-gray-700">E-posta:</span>
+                                <span className="text-gray-600">{existingRequest.email}</span>
+                              </div>
+                              
+                              <div className="flex justify-between items-center">
+                                <span className="font-medium text-gray-700">Oluşturma Tarihi:</span>
+                                <span className="text-gray-600">
+                                  {new Date(existingRequest.createdAt).toLocaleString('tr-TR')}
+                                </span>
+                              </div>
+                              
+                              {existingRequest.matchedPhotosCount !== undefined && (
+                                <div className="flex justify-between items-center">
+                                  <span className="font-medium text-gray-700">Bulunan Fotoğraf:</span>
+                                  <span className="text-gray-600">{existingRequest.matchedPhotosCount} adet</span>
+                                </div>
+                              )}
+                              
+                              {existingRequest.errorMessage && (
+                                <div className="text-red-600 text-sm">
+                                  <strong>Hata:</strong> {existingRequest.errorMessage}
+                                </div>
+                              )}
+                            </div>
+                            
+                            <div className="flex gap-3">
+                              <Button 
+                                variant="outline"
+                                className="flex-1"
+                                onClick={() => {
+                                  setPhotoTcNumber("");
+                                  setPhotoStep('tc-input');
+                                  setExistingRequest(null);
+                                }}
+                              >
+                                <ArrowLeft className="mr-2 w-4 h-4" />
+                                Geri Dön
+                              </Button>
+                              
+                              {existingRequest.status === 'failed' && (
+                                <Button 
+                                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+                                  onClick={() => {
+                                    setPhotoStep('new-request');
+                                  }}
+                                >
+                                  Yeni İstek Oluştur
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                        </div>
+                        )}
+
+                        {/* New Request Form */}
+                        {photoStep === 'new-request' && (
+                          <div className="space-y-6">
+                            <div className="flex items-center justify-between bg-green-50 p-3 rounded-lg">
+                              <div>
+                                <span className="font-medium text-green-800">TC: {photoTcNumber}</span>
+                                <p className="text-sm text-green-600">Yeni fotoğraf isteği oluşturuluyor</p>
+                              </div>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => {
+                                  setPhotoTcNumber("");
+                                  setPhotoStep('tc-input');
+                                }}
+                              >
+                                Değiştir
+                              </Button>
+                            </div>
+                            
+                            <div>
+                              <Label htmlFor="photo-email" className="text-gray-700 font-medium">
+                                E-posta Adresi
+                              </Label>
+                              <Input
+                                id="photo-email"
+                                type="email"
+                                value={photoEmail}
+                                onChange={(e) => setPhotoEmail(e.target.value)}
+                                className="mt-1 focus:ring-orange-500 focus:border-orange-500"
+                                placeholder="ornek@email.com"
+                              />
+                            </div>
 
                         <div>
                           <Label className="text-gray-700 font-medium mb-2 block">
@@ -673,41 +821,43 @@ export default function MainMenuPage() {
                           </div>
                         )}
 
-                        <Alert>
-                          <AlertCircle className="h-4 w-4" />
-                          <AlertDescription>
-                            <strong>Nasıl çalışır:</strong> Referans fotoğraflarınızı yükledikten sonra, sistem kamp fotoğrafları arasında sizin bulunduğunuz fotoğrafları bulup e-posta adresinize gönderecektir.
-                          </AlertDescription>
-                        </Alert>
+                            <Alert>
+                              <AlertCircle className="h-4 w-4" />
+                              <AlertDescription>
+                                <strong>Nasıl çalışır:</strong> Referans fotoğraflarınızı yükledikten sonra, sistem kamp fotoğrafları arasında sizin bulunduğunuz fotoğrafları bulup e-posta adresinize gönderecektir.
+                              </AlertDescription>
+                            </Alert>
 
-                        <Button 
-                          className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
-                          disabled={!photoTcNumber || photoTcNumber.length !== 11 || !photoEmail || uploadedFiles.length === 0 || isProcessing}
-                          onClick={() => {
-                            setIsProcessing(true);
-                            toast({
-                              title: "İstek Alındı",
-                              description: "Fotoğraf eşleştirme işlemi başlatıldı. Sonuçlar e-posta adresinize gönderilecektir.",
-                            });
-                            // Burada gerçek API çağrısı yapılacak
-                            setTimeout(() => {
-                              setIsProcessing(false);
-                              handleBackToMenu();
-                            }, 2000);
-                          }}
-                        >
-                          {isProcessing ? (
-                            <>
-                              <Clock className="mr-2 w-4 h-4 animate-spin" />
-                              İşlem başlatılıyor...
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle className="mr-2 w-4 h-4" />
-                              Fotoğrafları Bul ve Gönder
-                            </>
-                          )}
-                        </Button>
+                            <Button 
+                              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
+                              disabled={!photoEmail || uploadedFiles.length === 0 || isProcessing}
+                              onClick={() => {
+                                setIsProcessing(true);
+                                toast({
+                                  title: "İstek Alındı",
+                                  description: "Fotoğraf eşleştirme işlemi başlatıldı. Sonuçlar e-posta adresinize gönderilecektir.",
+                                });
+                                // Burada gerçek API çağrısı yapılacak
+                                setTimeout(() => {
+                                  setIsProcessing(false);
+                                  handleBackToMenu();
+                                }, 2000);
+                              }}
+                            >
+                              {isProcessing ? (
+                                <>
+                                  <Clock className="mr-2 w-4 h-4 animate-spin" />
+                                  İşlem başlatılıyor...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle className="mr-2 w-4 h-4" />
+                                  Fotoğrafları Bul ve Gönder
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </CardContent>
