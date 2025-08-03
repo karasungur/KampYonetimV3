@@ -167,7 +167,7 @@ export default function MainMenuPage() {
         console.log('Face-API initialized successfully');
       } catch (error) {
         console.error('Face-API initialization error:', error);
-        console.error('Error details:', error.message, error.stack);
+        console.error('Error details:', error instanceof Error ? error.message : 'Unknown error', error instanceof Error ? error.stack : '');
         // Fallback to basic functionality
         setIsFaceDetectionReady(false);
       }
@@ -1236,15 +1236,12 @@ export default function MainMenuPage() {
                                 setIsProcessing(true);
                                 try {
                                   // API'ye fotoğraf isteği gönder
-                                  await apiRequest('/api/photo-requests', {
-                                    method: 'POST',
-                                    body: {
-                                      tcNumber: photoTcNumber,
-                                      email: photoEmail,
-                                      selectedCampDays: selectedCampDays,
-                                      // Fotoğraflar daha sonra ayrı olarak yüklenecek
-                                      uploadedFilesCount: uploadedFiles.length
-                                    }
+                                  await apiRequest('POST', '/api/photo-requests', {
+                                    tcNumber: photoTcNumber,
+                                    email: photoEmail,
+                                    selectedCampDays: selectedCampDays,
+                                    // Fotoğraflar daha sonra ayrı olarak yüklenecek
+                                    uploadedFilesCount: uploadedFiles.length
                                   });
                                   
                                   toast({
