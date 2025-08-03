@@ -618,6 +618,55 @@ class PythonAPIServer:
                 
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
+        
+        @self.app.route('/api/process-photos', methods=['POST'])
+        def process_photos():
+            """Web sitesinden gelen fotoğraf işleme istekleri"""
+            try:
+                data = request.get_json()
+                tc_number = data.get('tcNumber')
+                email = data.get('email')
+                selected_camp_days = data.get('selectedCampDays', [])
+                uploaded_files_count = data.get('uploadedFilesCount', 0)
+                
+                if not tc_number or not email:
+                    return jsonify({'error': 'TC kimlik numarası ve e-posta gerekli'}), 400
+                
+                if not selected_camp_days:
+                    return jsonify({'error': 'En az bir kamp günü seçmelisiniz'}), 400
+                
+                # Seçilen kamp günlerini model isimlerine çevir
+                selected_models = []
+                for camp_day_id in selected_camp_days:
+                    if camp_day_id in trained_models:
+                        selected_models.append(camp_day_id)
+                
+                if not selected_models:
+                    return jsonify({'error': 'Seçilen kamp günleri için eğitilmiş model bulunamadı'}), 400
+                
+                # İsteği ana pencereye ilet
+                self.main_window.process_photo_request({
+                    'tcNumber': tc_number,
+                    'email': email,
+                    'selectedModels': selected_models,
+                    'selectedCampDays': selected_camp_days,
+                    'uploadedFilesCount': uploaded_files_count,
+                    'timestamp': datetime.now().isoformat(),
+                    'source': 'web_api'
+                })
+                
+                print(f"📩 Web'den fotoğraf işleme isteği alındı: {tc_number} ({len(selected_models)} model)")
+                
+                return jsonify({
+                    'message': 'Fotoğraf işleme isteği başarıyla alındı',
+                    'tcNumber': tc_number,
+                    'selectedModelsCount': len(selected_models),
+                    'status': 'processing'
+                })
+                
+            except Exception as e:
+                print(f"❌ Fotoğraf işleme isteği hatası: {str(e)}")
+                return jsonify({'error': str(e)}), 500
     
     def start_server(self):
         """API server'ı başlat"""
