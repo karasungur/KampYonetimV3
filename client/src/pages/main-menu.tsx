@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,7 +86,31 @@ export default function MainMenuPage() {
   const [activeSection, setActiveSection] = useState<ActiveSection>(null);
   const [tcNumber, setTcNumber] = useState("");
   const [password, setPassword] = useState("");
+  const [imagesLoaded, setImagesLoaded] = useState(false);
   const { login, isLoggingIn } = useAuth();
+
+  // Preload images
+  useEffect(() => {
+    const preloadImages = () => {
+      const logoImg = new Image();
+      const textImg = new Image();
+      
+      let loadedCount = 0;
+      const onImageLoad = () => {
+        loadedCount++;
+        if (loadedCount === 2) {
+          setImagesLoaded(true);
+        }
+      };
+      
+      logoImg.onload = onImageLoad;
+      textImg.onload = onImageLoad;
+      logoImg.src = akPartiLogo;
+      textImg.src = metinResmi;
+    };
+    
+    preloadImages();
+  }, []);
 
   const { data: menuSettings } = useQuery<MenuSettings>({
     queryKey: ["/api/menu-settings"],
@@ -191,15 +215,22 @@ export default function MainMenuPage() {
         <img 
           src={akPartiLogo} 
           alt="AK Parti" 
-          className="w-60 h-60 sm:w-56 sm:h-56 mx-auto mb-0 object-contain"
+          className={`w-60 h-60 sm:w-56 sm:h-56 mx-auto mb-0 object-contain transition-opacity duration-300 ${imagesLoaded ? 'opacity-100' : 'opacity-0'}`}
         />
         
         {/* Metin Resmi */}
         <img 
           src={metinResmi} 
           alt="AK Parti Gençlik Kolları Genel Sekreterlik - Strateji ve İstişare Kampı" 
-          className="w-72 sm:w-56 md:w-64 mx-auto mb-0 object-contain -mt-8"
+          className={`w-72 sm:w-56 md:w-64 mx-auto mb-0 object-contain -mt-8 transition-opacity duration-300 ${imagesLoaded ? 'opacity-100' : 'opacity-0'}`}
         />
+        
+        {/* Loading placeholder */}
+        {!imagesLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="animate-pulse bg-white/20 rounded-full w-60 h-60 sm:w-56 sm:h-56"></div>
+          </div>
+        )}
       </div>
 
       {/* Mobile Optimized Menu Grid */}
@@ -287,7 +318,7 @@ export default function MainMenuPage() {
     >
       <div className="max-w-4xl mx-auto p-2 md:p-4 h-screen flex flex-col justify-start pt-4">
         {!activeSection ? renderMainMenu() : (
-          <div className="animate-in slide-in-from-right-4 duration-150">
+          <div className="animate-in slide-in-from-right-4 duration-75">
             {/* Back Button */}
             <div className="mb-6">
               <Button
