@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { requireAuth, requireRole, generateToken, comparePassword, hashPassword, type AuthenticatedRequest } from "./auth";
-import { insertUserSchema, insertQuestionSchema, insertAnswerSchema, insertFeedbackSchema } from "@shared/schema";
+import { insertUserSchema, insertQuestionSchema, insertAnswerSchema, insertFeedbackSchema, insertProgramEventSchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import * as XLSX from "xlsx";
@@ -963,9 +963,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/program-events', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
     try {
-      const event = await storage.createProgramEvent(req.body);
+      const eventData = insertProgramEventSchema.parse(req.body);
+      const event = await storage.createProgramEvent(eventData);
       res.status(201).json(event);
     } catch (error) {
+      console.error('Create program event error:', error);
       res.status(400).json({ message: 'Etkinlik oluşturulamadı' });
     }
   });
@@ -973,9 +975,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/program-events/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
-      const event = await storage.updateProgramEvent(id, req.body);
+      const eventData = insertProgramEventSchema.partial().parse(req.body);
+      const event = await storage.updateProgramEvent(id, eventData);
       res.json(event);
     } catch (error) {
+      console.error('Update program event error:', error);
       res.status(400).json({ message: 'Etkinlik güncellenemedi' });
     }
   });
