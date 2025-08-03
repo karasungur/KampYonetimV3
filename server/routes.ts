@@ -17,7 +17,7 @@ try {
   // Object storage şu an mock olarak çalışıyor
   ObjectStorageService = null;
 } catch (error) {
-  console.warn('Object storage not available:', error.message);
+  console.warn('Object storage not available:', (error as Error).message);
 }
 
 // TC Kimlik doğrulama fonksiyonu
@@ -1504,9 +1504,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Request'i tamamlandı olarak işaretle
           await storage.updatePhotoRequest(id, {
             status: 'completed',
-            matchedPhotosCount: mockMatches.length,
-            processedAt: new Date(),
-            emailSentAt: new Date()
+            matchedPhotosCount: mockMatches.length
           });
           
         } catch (error) {
@@ -1609,6 +1607,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { imagePath } = req.params;
     // Mock image response
     res.status(404).json({ message: 'Görsel bulunamadı (mock mode)' });
+  });
+
+  // Python API Integration Endpoints
+  // Python tarafından çağrılan endpoint'ler
+  app.post('/api/process-photo-request', async (req, res) => {
+    try {
+      const { tcNumber, email, referencePhotos, selectedCampDays } = req.body;
+      
+      if (!tcNumber || !email || !selectedCampDays?.length) {
+        return res.status(400).json({ error: 'Eksik parametreler' });
+      }
+      
+      // Photo request'i veritabanına kaydet
+      const photoRequest = await storage.createPhotoRequest({
+        tcNumber,
+        email,
+        status: 'processing'
+      });
+      
+      // Selected camp days'i kaydet
+      for (const campDayId of selectedCampDays) {
+        await storage.createPhotoRequestDay({
+          photoRequestId: photoRequest.id,
+          campDayId
+        });
+      }
+      
+      res.json({ 
+        message: 'İstek başarıyla alındı',
+        requestId: photoRequest.id,
+        tcNumber 
+      });
+      
+    } catch (error) {
+      console.error('Process photo request error:', error);
+      res.status(500).json({ error: 'İstek işlenirken hata oluştu' });
+    }
+  });
+
+  app.get('/api/request-status/:tcNumber', async (req, res) => {
+    try {
+      const { tcNumber } = req.params;
+      
+      // Son photo request'i bul
+      const photoRequest = await storage.getPhotoRequestByTc(tcNumber);
+      
+      if (!photoRequest) {
+        return res.status(404).json({ status: 'not_found' });
+      }
+      
+      res.json({
+        status: photoRequest.status,
+        progress: 0, // Progress buraya eklenmeli
+        startTime: photoRequest.createdAt,
+        message: photoRequest.errorMessage || ''
+      });
+      
+    } catch (error) {
+      console.error('Get request status error:', error);
+      res.status(500).json({ error: 'Durum sorgulanırken hata oluştu' });
+    }
+  });
+
+  app.post('/api/update-request-status', async (req, res) => {
+    try {
+      const { tcNumber, status, progress, message } = req.body;
+      
+      if (!tcNumber) {
+        return res.status(400).json({ error: 'TC number gerekli' });
+      }
+      
+      // Son photo request'i güncelle
+      const photoRequest = await storage.getPhotoRequestByTc(tcNumber);
+      
+      if (photoRequest) {
+        await storage.updatePhotoRequest(photoRequest.id, {
+          status,
+          errorMessage: message
+        });
+      }
+      
+      res.json({ message: 'Durum güncellendi' });
+      
+    } catch (error) {
+      console.error('Update request status error:', error);
+      res.status(500).json({ error: 'Durum güncellenirken hata oluştu' });
+    }
   });
 
   const httpServer = createServer(app);

@@ -25,6 +25,7 @@ from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
 import zipfile
+import base64
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -466,10 +467,14 @@ class MainWindow(QMainWindow):
         self.setup_ui()
         self.setup_api_monitoring()
         self.load_face_database()
+        self.load_camp_day_models()
         
         # Python API Server'ı başlat
         self.api_server = PythonAPIServer(self)
         self.api_server.start_server()
+        
+        # Web API ile senkronizasyon
+        QTimer.singleShot(2000, self.sync_with_web_api)  # 2 saniye sonra başlat
     
     def init_face_analysis(self):
         """Face analysis modelini başlat"""
@@ -706,22 +711,50 @@ class MainWindow(QMainWindow):
         tc_number = request_data['tcNumber']
         email = request_data['email']
         reference_photos = request_data.get('referencePhotos', [])
+        selected_camp_days = request_data.get('selectedCampDays', [])
         
         try:
             # Referans fotoğrafları işle ve embedding'leri oluştur
             reference_embeddings = []
             
             self.log(f"Referans fotoğrafları işleniyor: {len(reference_photos)} adet")
+            self.log(f"Seçilen kamp günleri: {selected_camp_days}")
             
             for photo_data in reference_photos:
-                # Base64 veya URL'den fotoğrafı işle
-                # Bu kısımda gerçek embedding oluşturulacak
-                # Şimdilik mock embedding
-                mock_embedding = np.random.rand(512).astype(np.float32)
-                reference_embeddings.append(mock_embedding)
+                try:
+                    # Base64 format: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ..."
+                    if photo_data.startswith('data:image'):
+                        # Base64'ü decode et
+                        header, encoded = photo_data.split(',', 1)
+                        image_data = base64.b64decode(encoded)
+                        nparr = np.frombuffer(image_data, np.uint8)
+                        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                        
+                        if img is not None and face_app is not None:
+                            # Yüzleri tespit et
+                            faces = face_app.get(img)
+                            if faces:
+                                # İlk yüzün embedding'ini al
+                                reference_embeddings.append(faces[0].embedding)
+                                self.log(f"Embedding oluşturuldu: {len(faces)} yüz tespit edildi")
+                            else:
+                                self.log("Referans fotoğrafında yüz tespit edilemedi")
+                        else:
+                            self.log("Fotoğraf işlenemedi veya Face API hazır değil")
+                    else:
+                        self.log("Geçersiz fotoğraf formatı")
+                except Exception as e:
+                    self.log(f"Referans fotoğraf işleme hatası: {str(e)}")
+                    # Hata durumunda mock embedding ekle
+                    mock_embedding = np.random.rand(512).astype(np.float32)
+                    reference_embeddings.append(mock_embedding)
+            
+            if not reference_embeddings:
+                self.log("Hiç geçerli referans embedding'i oluşturulamadı")
+                return
             
             # Worker thread'i başlat
-            worker = PhotoMatchingWorker(tc_number, reference_embeddings, email)
+            worker = PhotoMatchingWorker(tc_number, reference_embeddings, email, selected_camp_days)
             worker.progress.connect(self.update_matching_progress)
             worker.finished.connect(self.on_matching_finished)
             worker.error.connect(self.on_matching_error)
@@ -1005,10 +1038,51 @@ class MainWindow(QMainWindow):
                 global available_camp_days
                 available_camp_days = response.json()
                 self.log(f"Web API'den {len(available_camp_days)} kamp günü alındı")
+                
+                # Kamp günlerini GUI listesine ekle
+                self.update_camp_days_list()
             else:
                 self.log(f"Web API bağlantı hatası: {response.status_code}")
         except Exception as e:
             self.log(f"Web API senkronizasyon hatası: {str(e)}")
+    
+    def load_camp_day_models(self):
+        """Mevcut kamp günü modellerini yükle"""
+        global camp_day_models
+        try:
+            models_dir = "./models"
+            if os.path.exists(models_dir):
+                for item in os.listdir(models_dir):
+                    item_path = os.path.join(models_dir, item)
+                    if os.path.isdir(item_path):
+                        db_path = os.path.join(item_path, "face_database.pkl")
+                        if os.path.exists(db_path):
+                            try:
+                                with open(db_path, 'rb') as f:
+                                    camp_day_models[item] = pickle.load(f)
+                                self.log(f"Model yüklendi: {item} - {len(camp_day_models[item])} fotoğraf")
+                            except Exception as e:
+                                self.log(f"Model yükleme hatası {item}: {str(e)}")
+                
+                self.log(f"Toplam {len(camp_day_models)} kamp günü modeli yüklendi")
+                self.update_statistics()
+            else:
+                self.log("Models klasörü bulunamadı")
+        except Exception as e:
+            self.log(f"Model yükleme genel hatası: {str(e)}")
+    
+    def update_camp_days_list(self):
+        """Kamp günleri listesini güncelle"""
+        try:
+            # GUI'de kamp günleri listesi varsa güncelle
+            if hasattr(self, 'camp_days_list'):
+                self.camp_days_list.clear()
+                for day in available_camp_days:
+                    item = QListWidgetItem(f"{day.get('dayName', 'Unknown')} - {day.get('dayDate', '')[:10]}")
+                    item.setData(Qt.UserRole, day.get('id'))
+                    self.camp_days_list.addItem(item)
+        except Exception as e:
+            self.log(f"Kamp günleri listesi güncelleme hatası: {str(e)}")
 
 def main():
     """Ana fonksiyon"""
