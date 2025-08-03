@@ -106,6 +106,7 @@ export default function MainMenuPage() {
   const [photoStep, setPhotoStep] = useState<'tc-input' | 'existing-request' | 'new-request'>('tc-input');
   const [existingRequest, setExistingRequest] = useState<any>(null);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [tcError, setTcError] = useState("");
 
   // Preload images
   useEffect(() => {
@@ -170,6 +171,31 @@ export default function MainMenuPage() {
     setActiveSection(section);
   };
 
+  // TC kimlik numarası doğrulama fonksiyonu
+  const validateTCNumber = (tc: string): boolean => {
+    if (tc.length !== 11) return false;
+    if (!/^\d+$/.test(tc)) return false;
+    
+    const digits = tc.split('').map(Number);
+    const firstDigit = digits[0];
+    if (firstDigit === 0) return false;
+    
+    // TC algoritması kontrolü
+    let oddSum = 0, evenSum = 0;
+    for (let i = 0; i < 9; i++) {
+      if (i % 2 === 0) oddSum += digits[i];
+      else evenSum += digits[i];
+    }
+    
+    const tenthDigit = ((oddSum * 7) - evenSum) % 10;
+    if (tenthDigit !== digits[9]) return false;
+    
+    const total = digits.slice(0, 10).reduce((a, b) => a + b, 0);
+    const eleventhDigit = total % 10;
+    
+    return eleventhDigit === digits[10];
+  };
+
   const handleBackToMenu = () => {
     setActiveSection(null);
     setTcNumber("");
@@ -182,6 +208,7 @@ export default function MainMenuPage() {
     setPhotoStep('tc-input');
     setExistingRequest(null);
     setIsCheckingStatus(false);
+    setTcError("");
   };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -598,15 +625,34 @@ export default function MainMenuPage() {
                                 type="text"
                                 maxLength={11}
                                 value={photoTcNumber}
-                                onChange={(e) => setPhotoTcNumber(e.target.value.replace(/[^0-9]/g, ''))}
-                                className="mt-1 focus:ring-orange-500 focus:border-orange-500"
+                                onChange={(e) => {
+                                  const value = e.target.value.replace(/[^0-9]/g, '');
+                                  setPhotoTcNumber(value);
+                                  setTcError("");
+                                  
+                                  // TC kimlik kontrolü
+                                  if (value.length === 11) {
+                                    if (!validateTCNumber(value)) {
+                                      setTcError("Geçersiz T.C. Kimlik Numarası");
+                                    }
+                                  }
+                                }}
+                                className={`mt-1 focus:ring-orange-500 focus:border-orange-500 ${
+                                  tcError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''
+                                }`}
                                 placeholder="11 haneli TC kimlik numaranızı girin"
                               />
+                              {tcError && (
+                                <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+                                  <AlertCircle className="w-4 h-4" />
+                                  {tcError}
+                                </p>
+                              )}
                             </div>
                             
                             <Button 
                               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
-                              disabled={photoTcNumber.length !== 11 || isCheckingStatus}
+                              disabled={photoTcNumber.length !== 11 || tcError !== "" || isCheckingStatus}
                               onClick={async () => {
                                 setIsCheckingStatus(true);
                                 try {
