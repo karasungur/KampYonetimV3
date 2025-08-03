@@ -191,7 +191,7 @@ export default function MainMenuPage() {
         <img 
           src={akPartiLogo} 
           alt="AK Parti" 
-          className="w-40 h-40 sm:w-32 sm:h-32 mx-auto mb-0 object-contain"
+          className="w-48 h-48 sm:w-44 sm:h-44 mx-auto mb-0 object-contain"
         />
         
         {/* Metin Resmi */}
@@ -203,15 +203,15 @@ export default function MainMenuPage() {
       </div>
 
       {/* Mobile Optimized Menu Grid */}
-      <div className="grid grid-cols-3 gap-3 max-w-md mx-auto">
+      <div className="grid grid-cols-3 gap-2 max-w-sm mx-auto">
         {/* Moderatör Girişi */}
         {menuSettings.moderatorLoginEnabled && (
           <div className="aspect-square" onClick={() => handleSectionClick('login')}>
-            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-3 md:p-4 cursor-pointer group">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-full flex items-center justify-center mb-2 group-hover:bg-orange-600 transition-colors">
-                <UserCheck className="w-5 h-5 md:w-6 md:h-6 text-white" />
+            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-2 md:p-3 cursor-pointer group">
+              <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-500 rounded-full flex items-center justify-center mb-1 md:mb-2 group-hover:bg-orange-600 transition-colors">
+                <UserCheck className="w-4 h-4 md:w-5 md:h-5 text-white" />
               </div>
-              <div className="text-xs md:text-sm font-medium text-gray-700 text-center leading-tight">
+              <div className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {menuSettings.moderatorLoginTitle}
               </div>
             </div>
@@ -221,11 +221,11 @@ export default function MainMenuPage() {
         {/* Program Akışı */}
         {menuSettings.programFlowEnabled && (
           <div className="aspect-square" onClick={() => handleSectionClick('program')}>
-            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-3 md:p-4 cursor-pointer group">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-full flex items-center justify-center mb-2 group-hover:bg-orange-600 transition-colors">
-                <Calendar className="w-5 h-5 md:w-6 md:h-6 text-white" />
+            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-2 md:p-3 cursor-pointer group">
+              <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-500 rounded-full flex items-center justify-center mb-1 md:mb-2 group-hover:bg-orange-600 transition-colors">
+                <Calendar className="w-4 h-4 md:w-5 md:h-5 text-white" />
               </div>
-              <div className="text-xs md:text-sm font-medium text-gray-700 text-center leading-tight">
+              <div className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {menuSettings.programFlowTitle}
               </div>
             </div>
@@ -235,11 +235,11 @@ export default function MainMenuPage() {
         {/* Fotoğraflar */}
         {menuSettings.photosEnabled && (
           <div className="aspect-square">
-            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-3 md:p-4 cursor-pointer group">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-full flex items-center justify-center mb-2 group-hover:bg-orange-600 transition-colors">
-                <Camera className="w-5 h-5 md:w-6 md:h-6 text-white" />
+            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-2 md:p-3 cursor-pointer group">
+              <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-500 rounded-full flex items-center justify-center mb-1 md:mb-2 group-hover:bg-orange-600 transition-colors">
+                <Camera className="w-4 h-4 md:w-5 md:h-5 text-white" />
               </div>
-              <div className="text-xs md:text-sm font-medium text-gray-700 text-center leading-tight">
+              <div className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {menuSettings.photosTitle}
               </div>
               <div className="text-xs text-gray-400 mt-1">
@@ -252,11 +252,11 @@ export default function MainMenuPage() {
         {/* Sosyal Medya */}
         {menuSettings.socialMediaEnabled && (
           <div className="aspect-square" onClick={() => handleSectionClick('social')}>
-            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-3 md:p-4 cursor-pointer group">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-full flex items-center justify-center mb-2 group-hover:bg-orange-600 transition-colors">
-                <Share2 className="w-5 h-5 md:w-6 md:h-6 text-white" />
+            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-2 md:p-3 cursor-pointer group">
+              <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-500 rounded-full flex items-center justify-center mb-1 md:mb-2 group-hover:bg-orange-600 transition-colors">
+                <Share2 className="w-4 h-4 md:w-5 md:h-5 text-white" />
               </div>
-              <div className="text-xs md:text-sm font-medium text-gray-700 text-center leading-tight">
+              <div className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {menuSettings.socialMediaTitle}
               </div>
             </div>
@@ -266,11 +266,11 @@ export default function MainMenuPage() {
         {/* Ekibimiz */}
         {menuSettings.teamEnabled && (
           <div className="aspect-square" onClick={() => handleSectionClick('team')}>
-            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-3 md:p-4 cursor-pointer group">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-full flex items-center justify-center mb-2 group-hover:bg-orange-600 transition-colors">
-                <Users className="w-5 h-5 md:w-6 md:h-6 text-white" />
+            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-2 md:p-3 cursor-pointer group">
+              <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-500 rounded-full flex items-center justify-center mb-1 md:mb-2 group-hover:bg-orange-600 transition-colors">
+                <Users className="w-4 h-4 md:w-5 md:h-5 text-white" />
               </div>
-              <div className="text-xs md:text-sm font-medium text-gray-700 text-center leading-tight">
+              <div className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {menuSettings.teamTitle}
               </div>
             </div>
