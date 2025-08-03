@@ -1,10 +1,13 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { apiRequest } from "@/lib/queryClient";
 import { 
   UserCheck, 
   Calendar, 
@@ -17,7 +20,11 @@ import {
   ExternalLink,
   Construction,
   ArrowLeft,
-  LogIn
+  LogIn,
+  Upload,
+  CheckCircle,
+  AlertCircle,
+  Image as ImageIcon
 } from "lucide-react";
 import { 
   SiX, 
@@ -79,7 +86,7 @@ interface TeamMember {
   displayOrder: number;
 }
 
-type ActiveSection = 'program' | 'social' | 'team' | 'login' | null;
+type ActiveSection = 'program' | 'social' | 'team' | 'login' | 'photos' | null;
 
 export default function MainMenuPage() {
   const [, navigate] = useLocation();
@@ -88,6 +95,14 @@ export default function MainMenuPage() {
   const [password, setPassword] = useState("");
   const [imagesLoaded, setImagesLoaded] = useState(false);
   const { login, isLoggingIn } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
+  // Photos section states
+  const [photoTcNumber, setPhotoTcNumber] = useState("");
+  const [photoEmail, setPhotoEmail] = useState("");
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Preload images
   useEffect(() => {
@@ -156,6 +171,11 @@ export default function MainMenuPage() {
     setActiveSection(null);
     setTcNumber("");
     setPassword("");
+    // Reset photo states
+    setPhotoTcNumber("");
+    setPhotoEmail("");
+    setUploadedFiles([]);
+    setIsProcessing(false);
   };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -265,7 +285,7 @@ export default function MainMenuPage() {
 
         {/* Fotoğraflar */}
         {menuSettings.photosEnabled && (
-          <div className="aspect-square" onClick={() => navigate('/photos')}>
+          <div className="aspect-square" onClick={() => handleSectionClick('photos')}>
             <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-2 md:p-3 cursor-pointer group">
               <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-500 rounded-full flex items-center justify-center mb-1 md:mb-2 group-hover:bg-orange-600 transition-colors">
                 <Camera className="w-4 h-4 md:w-5 md:h-5 text-white" />
@@ -537,6 +557,158 @@ export default function MainMenuPage() {
                           {isLoggingIn ? 'Giriş yapılıyor...' : 'Giriş Yap'}
                         </Button>
                       </form>
+                    </div>
+                  </CardContent>
+                </>
+              )}
+
+              {/* Photos Content */}
+              {activeSection === 'photos' && menuSettings.photosEnabled && (
+                <>
+                  <CardHeader className="bg-gradient-to-r from-orange-500 to-yellow-500 text-white py-4">
+                    <CardTitle className="text-xl flex items-center gap-3">
+                      <Camera className="w-6 h-6" />
+                      Kamp Fotoğraflarınızı Alın
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <div className="max-w-2xl mx-auto">
+                      <div className="text-center mb-8">
+                        <Camera className="w-16 h-16 mx-auto text-orange-500 mb-4" />
+                        <h3 className="text-xl font-semibold text-gray-900 mb-2">Fotoğraflarınızı Bulun</h3>
+                        <p className="text-gray-600">TC kimlik numaranızı girin, referans fotoğraflarınızı yükleyin ve kamp fotoğraflarınızı e-posta ile alın.</p>
+                      </div>
+
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="photo-tc" className="text-gray-700 font-medium">
+                              T.C. Kimlik Numarası
+                            </Label>
+                            <Input
+                              id="photo-tc"
+                              type="text"
+                              maxLength={11}
+                              value={photoTcNumber}
+                              onChange={(e) => setPhotoTcNumber(e.target.value.replace(/[^0-9]/g, ''))}
+                              className="mt-1 focus:ring-orange-500 focus:border-orange-500"
+                              placeholder="11 haneli TC kimlik numaranız"
+                            />
+                          </div>
+                          
+                          <div>
+                            <Label htmlFor="photo-email" className="text-gray-700 font-medium">
+                              E-posta Adresi
+                            </Label>
+                            <Input
+                              id="photo-email"
+                              type="email"
+                              value={photoEmail}
+                              onChange={(e) => setPhotoEmail(e.target.value)}
+                              className="mt-1 focus:ring-orange-500 focus:border-orange-500"
+                              placeholder="ornek@email.com"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label className="text-gray-700 font-medium mb-2 block">
+                            Referans Fotoğraflarınız
+                          </Label>
+                          <div 
+                            className="border-2 border-dashed border-orange-300 rounded-lg p-8 text-center bg-orange-50/50 hover:bg-orange-50 transition-colors"
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+                              setUploadedFiles(prev => [...prev, ...files]);
+                            }}
+                            onDragOver={(e) => e.preventDefault()}
+                          >
+                            <Upload className="w-12 h-12 mx-auto text-orange-400 mb-4" />
+                            <p className="text-gray-600 mb-2">Fotoğraflarınızı sürükleyip bırakın veya</p>
+                            <Button 
+                              variant="outline" 
+                              className="border-orange-300 text-orange-600 hover:bg-orange-50"
+                              onClick={() => {
+                                const input = document.createElement('input');
+                                input.type = 'file';
+                                input.multiple = true;
+                                input.accept = 'image/*';
+                                input.onchange = (e) => {
+                                  const files = Array.from((e.target as HTMLInputElement).files || []);
+                                  setUploadedFiles(prev => [...prev, ...files]);
+                                };
+                                input.click();
+                              }}
+                            >
+                              Dosya Seç
+                            </Button>
+                            <p className="text-xs text-gray-500 mt-2">PNG, JPG, JPEG dosyaları kabul edilir</p>
+                          </div>
+                        </div>
+
+                        {uploadedFiles.length > 0 && (
+                          <div>
+                            <h4 className="font-medium text-gray-700 mb-3">Yüklenen Fotoğraflar ({uploadedFiles.length})</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                              {uploadedFiles.map((file, index) => (
+                                <div key={index} className="relative group">
+                                  <img 
+                                    src={URL.createObjectURL(file)} 
+                                    alt={file.name}
+                                    className="w-full h-24 object-cover rounded-lg"
+                                  />
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={() => setUploadedFiles(prev => prev.filter((_, i) => i !== index))}
+                                  >
+                                    ×
+                                  </Button>
+                                  <p className="text-xs text-gray-500 mt-1 truncate">{file.name}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <Alert>
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            <strong>Nasıl çalışır:</strong> Referans fotoğraflarınızı yükledikten sonra, sistem kamp fotoğrafları arasında sizin bulunduğunuz fotoğrafları bulup e-posta adresinize gönderecektir.
+                          </AlertDescription>
+                        </Alert>
+
+                        <Button 
+                          className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
+                          disabled={!photoTcNumber || photoTcNumber.length !== 11 || !photoEmail || uploadedFiles.length === 0 || isProcessing}
+                          onClick={() => {
+                            setIsProcessing(true);
+                            toast({
+                              title: "İstek Alındı",
+                              description: "Fotoğraf eşleştirme işlemi başlatıldı. Sonuçlar e-posta adresinize gönderilecektir.",
+                            });
+                            // Burada gerçek API çağrısı yapılacak
+                            setTimeout(() => {
+                              setIsProcessing(false);
+                              handleBackToMenu();
+                            }, 2000);
+                          }}
+                        >
+                          {isProcessing ? (
+                            <>
+                              <Clock className="mr-2 w-4 h-4 animate-spin" />
+                              İşlem başlatılıyor...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle className="mr-2 w-4 h-4" />
+                              Fotoğrafları Bul ve Gönder
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </>
