@@ -1351,36 +1351,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Önce Python API'ye gönder
-      let pythonResponse;
-      try {
-        pythonResponse = await fetch('http://localhost:8080/api/process-photos', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            tcNumber: requestData.tcNumber,
-            email: requestData.email,
-            selectedCampDays: selectedCampDays || [],
-            uploadedFilesCount: uploadedFilesCount || 0
-          }),
-          signal: AbortSignal.timeout(5000) // 5 saniye timeout
-        });
-        
-        if (!pythonResponse.ok) {
-          throw new Error(`Python API error: ${pythonResponse.status}`);
-        }
-        
-        console.log('Python API\'ye başarıyla gönderildi');
-      } catch (error) {
-        console.error('Python API\'ye bağlanılamadı:', (error as Error).message);
-        return res.status(503).json({ 
-          message: 'Fotoğraf işleme servisi şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.' 
-        });
-      }
-      
-      // Python başarılı ise SQL'e kaydet
+      // İsteği veritabanına kaydet (Python GUI ayrı çalışacak)
+      console.log('Fotoğraf isteği veritabanına kaydediliyor...');
       const photoRequest = await storage.createPhotoRequest(requestData);
       
       // Seçilen kamp günlerini kaydet
@@ -1397,7 +1369,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...photoRequest,
         selectedCampDaysCount: selectedCampDays?.length || 0,
         uploadedFilesCount: uploadedFilesCount || 0,
-        pythonProcessing: true
+        message: 'İsteğiniz başarıyla kaydedildi. Python GUI uygulamasından işlenecektir.'
       });
     } catch (error) {
       console.error('Photo request creation error:', error);
