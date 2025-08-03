@@ -58,18 +58,20 @@ export default function PhotosPage() {
   // TC numarası ile önceki talep kontrolü
   const checkExistingRequest = useCallback(async (tc: string) => {
     try {
-      const response = await apiRequest(`/api/photo-requests/check/${tc}`);
-      if (response && typeof response === 'object' && 'exists' in response) {
-        if (response.exists && response.request) {
-          setCurrentRequest(response.request as PhotoRequest);
-          if (response.request.status === 'completed') {
+      const response = await apiRequest('GET', `/api/photo-requests/check/${tc}`);
+      const responseData = await response.json();
+      if (responseData && typeof responseData === 'object' && 'exists' in responseData) {
+        if (responseData.exists && responseData.request) {
+          setCurrentRequest(responseData.request as PhotoRequest);
+          if (responseData.request.status === 'completed') {
             setStep('completed');
-          } else if (response.request.detectedFacesCount && response.request.detectedFacesCount > 0) {
+          } else if (responseData.request.detectedFacesCount && responseData.request.detectedFacesCount > 0) {
             setStep('faces');
             // Tespit edilen yüzleri yükle
-            const facesResponse = await apiRequest(`/api/photo-requests/${response.request.id}/faces`);
-            if (Array.isArray(facesResponse)) {
-              setDetectedFaces(facesResponse);
+            const facesResponse = await apiRequest('GET', `/api/photo-requests/${responseData.request.id}/faces`);
+            const facesData = await facesResponse.json();
+            if (Array.isArray(facesData)) {
+              setDetectedFaces(facesData);
             }
           }
           return true;
@@ -99,16 +101,11 @@ export default function PhotosPage() {
       }
 
       // Yeni talep oluştur
-      const response = await apiRequest('/api/photo-requests', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ tcNumber, email }),
-      });
+      const response = await apiRequest('POST', '/api/photo-requests', { tcNumber, email });
+      const responseData = await response.json();
       
-      if (response && typeof response === 'object') {
-        const photoRequest = response as PhotoRequest;
+      if (responseData && typeof responseData === 'object') {
+        const photoRequest = responseData as PhotoRequest;
         setCurrentRequest(photoRequest);
         setStep('upload');
         return photoRequest;
@@ -135,14 +132,13 @@ export default function PhotosPage() {
 
   // Fotoğraf yükleme parametreleri
   const handleGetUploadParameters = async () => {
-    const response = await apiRequest('/api/objects/upload', {
-      method: 'POST',
-    });
+    const response = await apiRequest('POST', '/api/objects/upload');
+    const responseData = await response.json();
     
-    if (response && typeof response === 'object' && 'uploadURL' in response) {
+    if (responseData && typeof responseData === 'object' && 'uploadURL' in responseData) {
       return {
         method: 'PUT' as const,
-        url: response.uploadURL as string,
+        url: responseData.uploadURL as string,
       };
     }
     
@@ -157,15 +153,10 @@ export default function PhotosPage() {
       }
       
       const uploadedFile = result.successful[0];
-      const response = await apiRequest(`/api/photo-requests/${currentRequest.id}/upload`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          referencePhotoURL: uploadedFile.uploadURL,
-        }),
+      const response = await apiRequest('POST', `/api/photo-requests/${currentRequest.id}/upload`, {
+        referencePhotoURL: uploadedFile.uploadURL,
       });
+      const responseData = await response.json();
       
       return response;
     },
@@ -192,9 +183,10 @@ export default function PhotosPage() {
     if (!currentRequest) return;
     
     try {
-      const response = await apiRequest(`/api/photo-requests/${currentRequest.id}/faces`);
-      if (Array.isArray(response) && response.length > 0) {
-        setDetectedFaces(response);
+      const response = await apiRequest('GET', `/api/photo-requests/${currentRequest.id}/faces`);
+      const responseData = await response.json();
+      if (Array.isArray(responseData) && responseData.length > 0) {
+        setDetectedFaces(responseData);
         setStep('faces');
       } else {
         // Henüz yüz tespit edilmedi, tekrar dene
@@ -212,13 +204,7 @@ export default function PhotosPage() {
         throw new Error('Geçerli talep bulunamadı');
       }
       
-      await apiRequest(`/api/photo-requests/${currentRequest.id}/select-face`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ faceId }),
-      });
+      await apiRequest('POST', `/api/photo-requests/${currentRequest.id}/select-face`, { faceId });
       
       return faceId;
     },

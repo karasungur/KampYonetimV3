@@ -1296,15 +1296,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // FOTOĞRAF YÖNETİMİ API ROTALARI
   // =============================================================================
 
-  // Object Storage upload URL endpoint (Mock)
+  // Object Storage upload URL endpoint (Development)
   app.post('/api/objects/upload', async (req, res) => {
     try {
-      // Mock upload URL for development
-      const mockUploadURL = `https://mock-storage.example.com/upload/${Date.now()}`;
-      res.json({ uploadURL: mockUploadURL });
+      // Development mode için geçici upload URL
+      const uploadURL = `${req.protocol}://${req.get('host')}/api/upload-temp/${nanoid()}`;
+      res.json({ uploadURL });
     } catch (error) {
       console.error('Upload URL error:', error);
       res.status(500).json({ error: 'Upload URL alınamadı' });
+    }
+  });
+
+  // Geçici upload endpoint (Development)
+  app.put('/api/upload-temp/:id', imageUpload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'Dosya yüklenemedi' });
+      }
+      
+      // Upload URL'ini döndür
+      const uploadURL = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+      res.json({ 
+        uploadURL,
+        message: 'Dosya başarıyla yüklendi'
+      });
+    } catch (error) {
+      console.error('Temp upload error:', error);
+      res.status(500).json({ error: 'Dosya yüklenemedi' });
     }
   });
 

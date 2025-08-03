@@ -63,6 +63,22 @@ CONFIG = {
     'MAX_CONCURRENT_REQUESTS': int(os.getenv('MAX_CONCURRENT_REQUESTS', '3'))
 }
 
+# AK Parti renk şeması (HSL değerleri)
+AK_COLORS = {
+    'YELLOW': '#F59E0B',        # hsl(37, 100%, 47%) - AK Parti sarısı
+    'YELLOW_DARK': '#D97706',   # hsl(37, 100%, 38%) - Koyu sarı
+    'BLUE': '#1E88E5',          # hsl(209, 100%, 40%) - AK Parti mavisi
+    'BLUE_DARK': '#1565C0',     # hsl(209, 100%, 35%) - Koyu mavi
+    'TEXT': '#1F2937',          # hsl(12, 8%, 14%) - Ana metin
+    'GRAY': '#6B7280',          # hsl(0, 0%, 40%) - Gri metin
+    'LIGHT_GRAY': '#F3F4F6',    # hsl(0, 0%, 96%) - Açık gri
+    'WHITE': '#FFFFFF',
+    'BLACK': '#000000',
+    'SUCCESS': '#10B981',
+    'ERROR': '#EF4444',
+    'WARNING': '#F59E0B'
+}
+
 # Global değişkenler
 face_app = None
 camp_day_models = {}  # Her kamp günü için ayrı model: {camp_day_id: face_database}
@@ -70,69 +86,150 @@ processing_queue = queue.Queue()
 current_requests = {}
 request_lock = Lock()
 available_camp_days = []  # Web'den çekilecek kamp günleri listesi
+api_connection_status = {'connected': False, 'last_check': None, 'error': None}
+
+def fetch_camp_days_from_api():
+    """Web API'den kamp günlerini çek"""
+    global available_camp_days, api_connection_status
+    try:
+        response = requests.get(f"{CONFIG['WEB_API_URL']}/api/camp-days", timeout=10)
+        if response.status_code == 200:
+            camp_days_data = response.json()
+            available_camp_days = camp_days_data
+            api_connection_status = {
+                'connected': True,
+                'last_check': datetime.now(),
+                'error': None
+            }
+            print(f"Kamp günleri başarıyla yüklendi: {len(available_camp_days)} gün")
+            return True
+        else:
+            api_connection_status = {
+                'connected': False,
+                'last_check': datetime.now(),
+                'error': f"HTTP {response.status_code}"
+            }
+            return False
+    except Exception as e:
+        api_connection_status = {
+            'connected': False,
+            'last_check': datetime.now(),
+            'error': str(e)
+        }
+        print(f"Kamp günleri yüklenirken hata: {str(e)}")
+        return False
+
+def test_api_connection():
+    """API bağlantısını test et"""
+    try:
+        response = requests.get(f"{CONFIG['WEB_API_URL']}/api/python/health", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            api_connection_status.update({
+                'connected': True,
+                'last_check': datetime.now(),
+                'error': None,
+                'queue_size': data.get('queueSize', 0),
+                'processing': data.get('processing', 0)
+            })
+            return True
+        else:
+            api_connection_status.update({
+                'connected': False,
+                'last_check': datetime.now(),
+                'error': f"HTTP {response.status_code}"
+            })
+            return False
+    except Exception as e:
+        api_connection_status.update({
+            'connected': False,
+            'last_check': datetime.now(),
+            'error': str(e)
+        })
+        return False
 
 class StyledWidget:
-    """Modern görünüm için stil tanımları"""
+    """AK Parti tasarımına uygun modern görünüm"""
     
     @staticmethod
-    def apply_dark_theme(app):
-        """Koyu tema uygula"""
+    def apply_ak_theme(app):
+        """AK Parti tema uygula"""
         palette = QPalette()
-        palette.setColor(QPalette.Window, QColor(45, 45, 48))
-        palette.setColor(QPalette.WindowText, QColor(255, 255, 255))
-        palette.setColor(QPalette.Base, QColor(35, 35, 38))
-        palette.setColor(QPalette.AlternateBase, QColor(60, 60, 63))
+        # Açık tema (AK Parti web sitesi gibi)
+        palette.setColor(QPalette.Window, QColor(255, 255, 255))  # Beyaz arkaplan
+        palette.setColor(QPalette.WindowText, QColor(31, 41, 55))  # Ana metin
+        palette.setColor(QPalette.Base, QColor(255, 255, 255))  # Input arkaplanı
+        palette.setColor(QPalette.AlternateBase, QColor(243, 244, 246))  # Açık gri
         palette.setColor(QPalette.ToolTipBase, QColor(255, 255, 255))
-        palette.setColor(QPalette.ToolTipText, QColor(255, 255, 255))
-        palette.setColor(QPalette.Text, QColor(255, 255, 255))
-        palette.setColor(QPalette.Button, QColor(45, 45, 48))
-        palette.setColor(QPalette.ButtonText, QColor(255, 255, 255))
-        palette.setColor(QPalette.BrightText, QColor(255, 0, 0))
-        palette.setColor(QPalette.Link, QColor(42, 130, 218))
-        palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+        palette.setColor(QPalette.ToolTipText, QColor(31, 41, 55))
+        palette.setColor(QPalette.Text, QColor(31, 41, 55))
+        palette.setColor(QPalette.Button, QColor(255, 255, 255))
+        palette.setColor(QPalette.ButtonText, QColor(31, 41, 55))
+        palette.setColor(QPalette.BrightText, QColor(239, 68, 68))  # Hata rengi
+        palette.setColor(QPalette.Link, QColor(30, 136, 229))  # AK mavi
+        palette.setColor(QPalette.Highlight, QColor(245, 158, 11))  # AK sarı
         palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
         app.setPalette(palette)
     
     @staticmethod
     def create_card_frame():
-        """Modern kart görünümü oluştur"""
+        """Modern kart görünümü oluştur (AK Parti stili)"""
         frame = QFrame()
         frame.setFrameStyle(QFrame.Box)
-        frame.setStyleSheet("""
-            QFrame {
-                border: 1px solid #3C3C3C;
-                border-radius: 8px;
-                background-color: #2D2D30;
-                margin: 5px;
-                padding: 10px;
-            }
+        frame.setStyleSheet(f"""
+            QFrame {{
+                border: 1px solid #E5E7EB;
+                border-radius: 12px;
+                background-color: {AK_COLORS['WHITE']};
+                margin: 8px;
+                padding: 16px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }}
         """)
         return frame
     
     @staticmethod
     def style_button(button, color='primary'):
-        """Buton stilleri"""
+        """AK Parti stili butonlar"""
         colors = {
-            'primary': 'background-color: #0078D4; color: white;',
-            'success': 'background-color: #107C10; color: white;',
-            'warning': 'background-color: #FF8C00; color: white;',
-            'danger': 'background-color: #D83B01; color: white;',
+            'primary': f'background-color: {AK_COLORS["YELLOW"]}; color: white;',
+            'secondary': f'background-color: {AK_COLORS["BLUE"]}; color: white;',
+            'success': f'background-color: {AK_COLORS["SUCCESS"]}; color: white;',
+            'warning': f'background-color: {AK_COLORS["WARNING"]}; color: white;',
+            'danger': f'background-color: {AK_COLORS["ERROR"]}; color: white;',
+            'outline': f'background-color: transparent; color: {AK_COLORS["YELLOW"]}; border: 2px solid {AK_COLORS["YELLOW"]};',
+        }
+        
+        hover_colors = {
+            'primary': AK_COLORS['YELLOW_DARK'],
+            'secondary': AK_COLORS['BLUE_DARK'],
+            'success': '#059669',
+            'warning': '#D97706',
+            'danger': '#DC2626',
+            'outline': AK_COLORS['YELLOW_DARK'],
         }
         
         button.setStyleSheet(f"""
             QPushButton {{
                 {colors.get(color, colors['primary'])}
                 border: none;
-                border-radius: 4px;
-                padding: 8px 16px;
-                font-weight: bold;
-                font-size: 12px;
+                border-radius: 8px;
+                padding: 12px 24px;
+                font-weight: 600;
+                font-size: 14px;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                min-height: 20px;
             }}
             QPushButton:hover {{
-                opacity: 0.8;
+                background-color: {hover_colors.get(color, hover_colors['primary'])};
+                transform: translateY(-1px);
             }}
             QPushButton:pressed {{
-                background-color: #005A9E;
+                transform: translateY(0px);
+            }}
+            QPushButton:disabled {{
+                background-color: #D1D5DB;
+                color: #9CA3AF;
             }}
         """)
 
@@ -389,7 +486,9 @@ class PythonAPIServer:
             return jsonify({
                 'status': 'healthy',
                 'timestamp': datetime.now().isoformat(),
-                'face_database_ready': len(face_database) > 0
+                'face_database_ready': len(camp_day_models) > 0,
+                'available_camp_days': len(available_camp_days),
+                'api_connection': api_connection_status['connected']
             })
         
         @self.app.route('/api/process-photo-request', methods=['POST'])
@@ -459,7 +558,7 @@ class PythonAPIServer:
             print(f"API Server başlatma hatası: {str(e)}")
 
 class MainWindow(QMainWindow):
-    """Ana pencere sınıfı"""
+    """Ana pencere sınıfı - AK Parti stili arayüz"""
     
     def __init__(self):
         super().__init__()
@@ -473,8 +572,18 @@ class MainWindow(QMainWindow):
         self.api_server = PythonAPIServer(self)
         self.api_server.start_server()
         
-        # Web API ile senkronizasyon
-        QTimer.singleShot(2000, self.sync_with_web_api)  # 2 saniye sonra başlat
+        # API bağlantı test timer'ı
+        self.api_test_timer = QTimer()
+        self.api_test_timer.timeout.connect(self.test_api_connection_ui)
+        self.api_test_timer.start(10000)  # 10 saniyede bir test et
+        
+        # Kamp günleri yükleme timer'ı
+        self.camp_days_timer = QTimer()
+        self.camp_days_timer.timeout.connect(self.fetch_camp_days_ui)
+        self.camp_days_timer.start(30000)  # 30 saniyede bir güncelle
+        
+        # İlk yükleme
+        QTimer.singleShot(2000, self.initial_setup)  # 2 saniye sonra başlat
     
     def init_face_analysis(self):
         """Face analysis modelini başlat"""
@@ -493,25 +602,39 @@ class MainWindow(QMainWindow):
             face_app = None
     
     def setup_ui(self):
-        """Kullanıcı arayüzü kurulumu"""
+        """Kullanıcı arayüzü kurulumu - AK Parti stili"""
         self.setWindowTitle("AK Parti Gençlik Kolları - Kamp Fotoğraf Sistemi")
-        self.setGeometry(100, 100, 1400, 900)
+        self.setGeometry(100, 100, 1600, 1000)
         self.setWindowIcon(QIcon("./assets/akparti_icon.png"))
         
         # Ana widget
         central_widget = QWidget()
+        central_widget.setStyleSheet(f"background-color: {AK_COLORS['LIGHT_GRAY']};")
         self.setCentralWidget(central_widget)
         
-        # Ana layout
-        main_layout = QHBoxLayout(central_widget)
+        # Başlık çubuğu
+        header = self.create_header()
+        
+        # Ana içerik
+        content_widget = QWidget()
+        main_layout = QHBoxLayout(content_widget)
+        main_layout.setSpacing(16)
+        main_layout.setContentsMargins(16, 16, 16, 16)
         
         # Sol panel - Kontroller
         left_panel = self.create_control_panel()
         main_layout.addWidget(left_panel, 1)
         
-        # Sağ panel - Monitoring
+        # Sağ panel - Monitoring ve Kamp Günleri
         right_panel = self.create_monitoring_panel()
         main_layout.addWidget(right_panel, 2)
+        
+        # Ana layout'a ekle
+        main_container_layout = QVBoxLayout(central_widget)
+        main_container_layout.setContentsMargins(0, 0, 0, 0)
+        main_container_layout.setSpacing(0)
+        main_container_layout.addWidget(header)
+        main_container_layout.addWidget(content_widget)
     
     def create_control_panel(self):
         """Sol kontrol paneli"""
@@ -1086,25 +1209,88 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.log(f"Model yükleme genel hatası: {str(e)}")
     
+    def initial_setup(self):
+        """Başlangıç kurulum işlemleri"""
+        self.test_api_connection_ui()
+        self.fetch_camp_days_ui()
+    
+    def test_api_connection_ui(self):
+        """API bağlantısını test et ve UI'yi güncelle"""
+        success = test_api_connection()
+        if hasattr(self, 'api_status_label'):
+            if success:
+                status_text = "🟢 Bağlandı"
+                if 'queue_size' in api_connection_status:
+                    status_text += f" | Kuyruk: {api_connection_status['queue_size']}"
+                self.api_status_label.setText(status_text)
+                
+                # İstatistikleri güncelle
+                if hasattr(self, 'api_stats_label') and 'queue_size' in api_connection_status and 'processing' in api_connection_status:
+                    self.api_stats_label.setText(f"Kuyruk: {api_connection_status['queue_size']}, İşlenen: {api_connection_status['processing']}")
+            else:
+                error_msg = api_connection_status.get('error', 'Bilinmeyen hata')
+                self.api_status_label.setText(f"🔴 Bağlantı yok: {error_msg}")
+                if hasattr(self, 'api_stats_label'):
+                    self.api_stats_label.setText("Kuyruk: -, İşlenen: -")
+    
+    def fetch_camp_days_ui(self):
+        """Kamp günlerini çek ve UI'yi güncelle"""
+        success = fetch_camp_days_from_api()
+        if success:
+            self.update_camp_days_list()
+            print(f"Kamp günleri başarıyla güncellendi: {len(available_camp_days)} gün")
+        else:
+            print("Kamp günleri güncellenemedi")
+
     def update_camp_days_list(self):
         """Kamp günleri listesini güncelle"""
         try:
             # GUI'de kamp günleri listesi varsa güncelle
             if hasattr(self, 'camp_days_list'):
                 self.camp_days_list.clear()
-                for day in available_camp_days:
-                    item = QListWidgetItem(f"{day.get('dayName', 'Unknown')} - {day.get('dayDate', '')[:10]}")
-                    item.setData(Qt.UserRole, day.get('id'))
+                for camp_day in available_camp_days:
+                    # Model durumuna göre ikon seç
+                    status_icon = {
+                        'ready': '🟢',
+                        'training': '🟡',
+                        'not_trained': '🔴',
+                        'error': '🔴'
+                    }.get(camp_day.get('modelStatus', 'not_trained'), '🔴')
+                    
+                    # Liste item'ı oluştur
+                    item_text = f"{status_icon} {camp_day.get('dayName', 'Bilinmeyen Gün')}"
+                    item_text += f"\n   📷 {camp_day.get('photoCount', 0)} fotoğraf"
+                    item_text += f" | 👤 {camp_day.get('faceCount', 0)} yüz"
+                    
+                    item = QListWidgetItem(item_text)
+                    item.setData(Qt.UserRole, camp_day)  # Veriyi sakla
+                    
+                    # Durum rengine göre stil
+                    if camp_day.get('modelStatus') == 'ready':
+                        item.setBackground(QColor(220, 252, 231))  # Açık yeşil
+                    elif camp_day.get('modelStatus') == 'training':
+                        item.setBackground(QColor(254, 243, 199))  # Açık sarı
+                    else:
+                        item.setBackground(QColor(254, 226, 226))  # Açık kırmızı
+                    
                     self.camp_days_list.addItem(item)
+                
+                # Eğitilmiş model sayısını güncelle
+                if hasattr(self, 'model_status_label'):
+                    ready_models = len([c for c in available_camp_days if c.get('modelStatus') == 'ready'])
+                    self.model_status_label.setText(f"🧠 Eğitilmiş model: {ready_models}/{len(available_camp_days)}")
         except Exception as e:
-            self.log(f"Kamp günleri listesi güncelleme hatası: {str(e)}")
+            if hasattr(self, 'log'):
+                self.log(f"Kamp günleri listesi güncelleme hatası: {str(e)}")
+            else:
+                print(f"Kamp günleri listesi güncelleme hatası: {str(e)}")
 
 def main():
     """Ana fonksiyon"""
     app = QApplication(sys.argv)
     
-    # Koyu tema uygula
-    StyledWidget.apply_dark_theme(app)
+    # AK Parti tema uygula
+    StyledWidget.apply_ak_theme(app)
     
     # Ana pencereyi oluştur
     window = MainWindow()
