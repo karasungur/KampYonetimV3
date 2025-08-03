@@ -676,8 +676,8 @@ class MainWindow(QMainWindow):
         """API durumunu kontrol eden worker"""
         while True:
             try:
-                # Web API'ye ping at
-                response = requests.get(f"{CONFIG['WEB_API_URL']}/api/photo-requests/queue", 
+                # Web API'ye ping at (Python için özel endpoint)
+                response = requests.get(f"{CONFIG['WEB_API_URL']}/api/python/health", 
                                       timeout=10,
                                       headers={'Content-Type': 'application/json'})
                 if response.status_code == 200:
@@ -815,11 +815,15 @@ class MainWindow(QMainWindow):
                     current_requests[tc_number]['email_worker'] = email_worker
         else:
             self.log(f"Eşleşme bulunamadı - {tc_number}")
+            # Web API'ye bildirim gönder - eşleşme bulunamadı
+            self.notify_web_api(tc_number, True, "Eşleşme bulunamadı", 0)
             self.complete_request(tc_number, "Eşleşme bulunamadı", 0)
     
     def on_matching_error(self, tc_number, error_message):
         """Eşleştirme hatası"""
         self.log(f"Eşleştirme hatası - {tc_number}: {error_message}")
+        # Web API'ye hata bildir
+        self.notify_web_api(tc_number, False, f"Eşleştirme hatası: {error_message}", 0)
         self.complete_request(tc_number, "Hata", 0)
     
     def update_email_progress(self, tc_number, message):
@@ -836,17 +840,28 @@ class MainWindow(QMainWindow):
             self.log(f"E-posta gönderim hatası - {tc_number}")
             status = "E-posta hatası"
         
-        # Web API'ye sonucu bildir
-        self.notify_web_api(tc_number, success)
-        self.complete_request(tc_number, status, -1)
+        # Web API'ye e-posta sonucunu bildir
+        if success and tc_number in current_requests:
+            match_count = len(current_requests[tc_number].get('matched_photos', []))
+            self.notify_web_api(tc_number, True, f"E-posta başarıyla gönderildi - {match_count} fotoğraf", match_count)
+        else:
+            self.notify_web_api(tc_number, False, "E-posta gönderim hatası", 0)
+        
+        self.complete_request(tc_number, status, -1 if not success else (match_count if 'match_count' in locals() else 0))
     
-    def notify_web_api(self, tc_number, success):
+    def notify_web_api(self, tc_number, success, message=None, match_count=0):
         """Web API'ye sonucu bildir"""
         try:
-            requests.post(f"{CONFIG['WEB_API_URL']}/api/photo-requests/{tc_number}/complete", 
-                         json={'success': success}, timeout=5)
-        except:
-            pass
+            requests.post(f"{CONFIG['WEB_API_URL']}/api/python/photo-request/{tc_number}/complete", 
+                         json={
+                             'success': success,
+                             'message': message,
+                             'matchCount': match_count
+                         }, 
+                         timeout=10)
+            print(f"Web API bildirildi: TC={tc_number}, Success={success}, Matches={match_count}")
+        except Exception as e:
+            print(f"Web API bildirme hatası: {str(e)}")
     
     def complete_request(self, tc_number, status, match_count):
         """Talebi tamamla"""

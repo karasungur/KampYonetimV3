@@ -1696,6 +1696,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Python API için özel endpoint'ler (authentication-free)
+  // Python yüz tanıma servisinin API durumunu kontrol etmesi için
+  app.get('/api/python/health', async (req, res) => {
+    try {
+      const queueItems = await storage.getQueueStatus();
+      res.json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        queueSize: queueItems.length,
+        processing: queueItems.filter(item => item.startedAt && !item.completedAt).length
+      });
+    } catch (error) {
+      console.error('Python health check error:', error);
+      res.status(500).json({ 
+        status: 'error',
+        message: 'Health check failed'
+      });
+    }
+  });
+
+  // Python servisinin işlem tamamlandığını bildirmesi için
+  app.post('/api/python/photo-request/:tcNumber/complete', async (req, res) => {
+    try {
+      const { tcNumber } = req.params;
+      const { success, message, matchCount } = req.body;
+
+      console.log(`Python API: Photo request completed for TC: ${tcNumber}, Success: ${success}, Matches: ${matchCount}`);
+
+      // İsteği veritabanında güncelle
+      const photoRequest = await storage.getPhotoRequestByTc(tcNumber);
+      if (photoRequest) {
+        await storage.updatePhotoRequest(photoRequest.id, {
+          status: success ? 'completed' : 'failed',
+          errorMessage: success ? null : (message || 'İşlem sırasında hata oluştu')
+        });
+      }
+
+      res.json({ 
+        message: 'Status updated successfully',
+        tcNumber 
+      });
+    } catch (error) {
+      console.error('Python complete request error:', error);
+      res.status(500).json({ 
+        error: 'Failed to update request status' 
+      });
+    }
+  });
+
+  // Python servisinin yeni işlemler alması için
+  app.get('/api/python/next-request', async (req, res) => {
+    try {
+      const nextQueueItem = await storage.getNextInQueue();
+      if (nextQueueItem) {
+        // İsteği işleme al
+        await storage.updateQueueProgress(nextQueueItem.id, 0, 'Python servisi tarafından başlatılıyor');
+        
+        // Photo request bilgilerini de al
+        const photoRequest = await storage.getPhotoRequest(nextQueueItem.photoRequestId);
+        
+        res.json({
+          queueId: nextQueueItem.id,
+          photoRequest: photoRequest
+        });
+      } else {
+        res.json(null);
+      }
+    } catch (error) {
+      console.error('Get next request error:', error);
+      res.status(500).json({ error: 'Failed to get next request' });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
