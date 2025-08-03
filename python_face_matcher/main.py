@@ -25,6 +25,10 @@ from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
 import zipfile
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, 
