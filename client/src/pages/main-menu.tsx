@@ -42,6 +42,7 @@ import { useLocation } from "wouter";
 import backgroundImage from "@assets/GK-KAMP LOGOTYPE -BACKROUND - Düzenlendi_1754227727579.png";
 import akPartiLogo from "@assets/akpartilogo_1753719301210.png";
 import metinResmi from "@assets/metin_1754239817975.png";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface MenuSettings {
   moderatorLoginEnabled: boolean;
@@ -86,6 +87,20 @@ interface TeamMember {
   displayOrder: number;
 }
 
+interface CampDay {
+  id: string;
+  dayName: string;
+  dayDate: string;
+  modelPath: string | null;
+  modelStatus: string;
+  photoCount: number;
+  faceCount: number;
+  lastTrainedAt: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 type ActiveSection = 'program' | 'social' | 'team' | 'login' | 'photos' | null;
 
 export default function MainMenuPage() {
@@ -107,6 +122,7 @@ export default function MainMenuPage() {
   const [existingRequest, setExistingRequest] = useState<any>(null);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [tcError, setTcError] = useState("");
+  const [selectedCampDays, setSelectedCampDays] = useState<string[]>([]);
 
   // Preload images
   useEffect(() => {
@@ -148,6 +164,11 @@ export default function MainMenuPage() {
   const { data: teamMembers } = useQuery<TeamMember[]>({
     queryKey: ["/api/team-members"],
     enabled: menuSettings?.teamEnabled || false,
+  });
+
+  const { data: campDays } = useQuery<CampDay[]>({
+    queryKey: ["/api/camp-days"],
+    enabled: menuSettings?.photosEnabled || false,
   });
 
   // Eğer hiçbir menü aktif değilse, otomatik olarak giriş sayfasına yönlendir
@@ -791,6 +812,66 @@ export default function MainMenuPage() {
                               </Button>
                             </div>
                             
+                            {/* Kamp günü seçimi */}
+                            <div>
+                              <Label className="text-gray-700 font-medium">
+                                Aranacak Kamp Günleri
+                              </Label>
+                              <p className="text-sm text-gray-600 mb-3">
+                                Fotoğraflarınızın aranacağı kamp günlerini seçiniz:
+                              </p>
+                              <div className="space-y-3 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
+                                {campDays && campDays.length > 0 ? (
+                                  campDays.map((day) => (
+                                    <div key={day.id} className="flex items-center space-x-3">
+                                      <Checkbox
+                                        id={`day-${day.id}`}
+                                        checked={selectedCampDays.includes(day.id)}
+                                        onCheckedChange={(checked) => {
+                                          if (checked) {
+                                            setSelectedCampDays([...selectedCampDays, day.id]);
+                                          } else {
+                                            setSelectedCampDays(selectedCampDays.filter(id => id !== day.id));
+                                          }
+                                        }}
+                                      />
+                                      <label
+                                        htmlFor={`day-${day.id}`}
+                                        className="text-sm font-medium leading-none cursor-pointer flex-1"
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <span>{day.dayName}</span>
+                                          <div className="text-xs text-gray-500 flex items-center gap-2">
+                                            <span className={`px-2 py-1 rounded text-xs ${
+                                              day.modelStatus === 'ready' ? 'bg-green-100 text-green-700' :
+                                              day.modelStatus === 'training' ? 'bg-yellow-100 text-yellow-700' :
+                                              day.modelStatus === 'error' ? 'bg-red-100 text-red-700' :
+                                              'bg-gray-100 text-gray-700'
+                                            }`}>
+                                              {day.modelStatus === 'ready' && 'Hazır'}
+                                              {day.modelStatus === 'training' && 'Eğitiliyor'}
+                                              {day.modelStatus === 'error' && 'Hata'}
+                                              {day.modelStatus === 'not_trained' && 'Eğitilmedi'}
+                                            </span>
+                                            <span>{day.photoCount} fotoğraf</span>
+                                          </div>
+                                        </div>
+                                      </label>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="text-sm text-gray-500 py-4 text-center">
+                                    Henüz kamp günü eklenmemiş
+                                  </div>
+                                )}
+                              </div>
+                              {selectedCampDays.length === 0 && (
+                                <p className="text-xs text-red-600 mt-1">
+                                  En az bir kamp günü seçmelisiniz
+                                </p>
+                              )}
+                            </div>
+                            
                             <div>
                               <Label htmlFor="photo-email" className="text-gray-700 font-medium">
                                 E-posta Adresi
@@ -876,18 +957,42 @@ export default function MainMenuPage() {
 
                             <Button 
                               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
-                              disabled={!photoEmail || uploadedFiles.length === 0 || isProcessing}
-                              onClick={() => {
+                              disabled={!photoEmail || uploadedFiles.length === 0 || selectedCampDays.length === 0 || isProcessing}
+                              onClick={async () => {
                                 setIsProcessing(true);
-                                toast({
-                                  title: "İstek Alındı",
-                                  description: "Fotoğraf eşleştirme işlemi başlatıldı. Sonuçlar e-posta adresinize gönderilecektir.",
-                                });
-                                // Burada gerçek API çağrısı yapılacak
-                                setTimeout(() => {
-                                  setIsProcessing(false);
+                                try {
+                                  // API'ye fotoğraf isteği gönder
+                                  await apiRequest('/api/photo-requests', {
+                                    method: 'POST',
+                                    body: {
+                                      tcNumber: photoTcNumber,
+                                      email: photoEmail,
+                                      selectedCampDays: selectedCampDays,
+                                      // Fotoğraflar daha sonra ayrı olarak yüklenecek
+                                      uploadedFilesCount: uploadedFiles.length
+                                    }
+                                  });
+                                  
+                                  toast({
+                                    title: "İstek Alındı",
+                                    description: `Fotoğraf eşleştirme işlemi başlatıldı. ${selectedCampDays.length} kamp günü seçildi. Sonuçlar e-posta adresinize gönderilecektir.`,
+                                  });
+                                  
+                                  // Form'u sıfırla
+                                  setPhotoTcNumber("");
+                                  setPhotoEmail("");
+                                  setUploadedFiles([]);
+                                  setSelectedCampDays([]);
                                   handleBackToMenu();
-                                }, 2000);
+                                } catch (error) {
+                                  toast({
+                                    title: "Hata",
+                                    description: "İstek gönderilirken bir hata oluştu. Lütfen tekrar deneyin.",
+                                    variant: "destructive"
+                                  });
+                                } finally {
+                                  setIsProcessing(false);
+                                }
                               }}
                             >
                               {isProcessing ? (

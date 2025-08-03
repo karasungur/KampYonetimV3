@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { requireAuth, requireRole, generateToken, comparePassword, hashPassword, type AuthenticatedRequest } from "./auth";
-import { insertUserSchema, insertQuestionSchema, insertAnswerSchema, insertFeedbackSchema, insertProgramEventSchema, insertUploadedFileSchema, insertPageLayoutSchema, insertPageElementSchema, insertPhotoRequestSchema, insertDetectedFaceSchema, insertPhotoDatabaseSchema, insertPhotoMatchSchema, insertProcessingQueueSchema } from "@shared/schema";
+import { insertUserSchema, insertQuestionSchema, insertAnswerSchema, insertFeedbackSchema, insertProgramEventSchema, insertUploadedFileSchema, insertPageLayoutSchema, insertPageElementSchema, insertPhotoRequestSchema, insertDetectedFaceSchema, insertPhotoDatabaseSchema, insertPhotoMatchSchema, insertProcessingQueueSchema, insertCampDaySchema, insertPhotoRequestDaySchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import * as XLSX from "xlsx";
@@ -1544,6 +1544,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Get queue status error:', error);
       res.status(500).json({ message: 'Kuyruk durumu getirilemedi' });
+    }
+  });
+
+  // Camp days endpoints
+  app.get('/api/camp-days', async (req, res) => {
+    try {
+      const campDays = await storage.getAllCampDays();
+      res.json(campDays);
+    } catch (error) {
+      console.error('Get camp days error:', error);
+      res.status(500).json({ message: 'Kamp günleri alınırken hata oluştu' });
+    }
+  });
+
+  app.post('/api/camp-days', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const validatedData = insertCampDaySchema.parse(req.body);
+      const campDay = await storage.createCampDay(validatedData);
+      res.status(201).json(campDay);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: 'Geçersiz veri',
+          errors: error.errors 
+        });
+      }
+      console.error('Create camp day error:', error);
+      res.status(500).json({ message: 'Kamp günü oluşturulurken hata oluştu' });
+    }
+  });
+
+  app.put('/api/camp-days/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const validatedData = insertCampDaySchema.partial().parse(req.body);
+      const campDay = await storage.updateCampDay(id, validatedData);
+      res.json(campDay);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: 'Geçersiz veri',
+          errors: error.errors 
+        });
+      }
+      console.error('Update camp day error:', error);
+      res.status(500).json({ message: 'Kamp günü güncellenirken hata oluştu' });
+    }
+  });
+
+  app.delete('/api/camp-days/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteCampDay(id);
+      res.json({ message: 'Kamp günü silindi' });
+    } catch (error) {
+      console.error('Delete camp day error:', error);
+      res.status(500).json({ message: 'Kamp günü silinirken hata oluştu' });
     }
   });
 

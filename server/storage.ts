@@ -17,6 +17,8 @@ import {
   photoDatabase,
   photoMatches,
   processingQueue,
+  campDays,
+  photoRequestDays,
   type User,
   type InsertUser,
   type Table,
@@ -53,6 +55,10 @@ import {
   type InsertPhotoMatch,
   type ProcessingQueue,
   type InsertProcessingQueue,
+  type CampDay,
+  type InsertCampDay,
+  type PhotoRequestDay,
+  type InsertPhotoRequestDay,
   type UserWithStats,
   type QuestionWithStats,
   type AnswerWithDetails,
@@ -202,6 +208,17 @@ export interface IStorage {
   updateQueueProgress(id: string, progress: number, currentStep: string): Promise<void>;
   completeQueueItem(id: string): Promise<void>;
   getQueueStatus(): Promise<ProcessingQueueWithDetails[]>;
+  
+  // Camp days operations
+  getAllCampDays(): Promise<CampDay[]>;
+  createCampDay(campDay: InsertCampDay): Promise<CampDay>;
+  updateCampDay(id: string, updates: Partial<InsertCampDay>): Promise<CampDay>;
+  deleteCampDay(id: string): Promise<void>;
+  
+  // Photo request days operations
+  createPhotoRequestDay(requestDay: InsertPhotoRequestDay): Promise<PhotoRequestDay>;
+  getPhotoRequestDays(photoRequestId: string): Promise<CampDay[]>;
+  deletePhotoRequestDays(photoRequestId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1314,6 +1331,66 @@ export class DatabaseStorage implements IStorage {
       .orderBy(processingQueue.queuePosition);
     
     return result;
+  }
+
+  // Camp days operations
+  async getAllCampDays(): Promise<CampDay[]> {
+    return db.select().from(campDays).where(eq(campDays.isActive, true)).orderBy(campDays.dayDate);
+  }
+
+  async createCampDay(insertCampDay: InsertCampDay): Promise<CampDay> {
+    const [campDay] = await db
+      .insert(campDays)
+      .values(insertCampDay)
+      .returning();
+    return campDay;
+  }
+
+  async updateCampDay(id: string, updates: Partial<InsertCampDay>): Promise<CampDay> {
+    const [campDay] = await db
+      .update(campDays)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(campDays.id, id))
+      .returning();
+    return campDay;
+  }
+
+  async deleteCampDay(id: string): Promise<void> {
+    await db.delete(campDays).where(eq(campDays.id, id));
+  }
+
+  // Photo request days operations
+  async createPhotoRequestDay(insertRequestDay: InsertPhotoRequestDay): Promise<PhotoRequestDay> {
+    const [requestDay] = await db
+      .insert(photoRequestDays)
+      .values(insertRequestDay)
+      .returning();
+    return requestDay;
+  }
+
+  async getPhotoRequestDays(photoRequestId: string): Promise<CampDay[]> {
+    const result = await db
+      .select({
+        id: campDays.id,
+        dayName: campDays.dayName,
+        dayDate: campDays.dayDate,
+        modelPath: campDays.modelPath,
+        modelStatus: campDays.modelStatus,
+        photoCount: campDays.photoCount,
+        faceCount: campDays.faceCount,
+        lastTrainedAt: campDays.lastTrainedAt,
+        isActive: campDays.isActive,
+        createdAt: campDays.createdAt,
+        updatedAt: campDays.updatedAt,
+      })
+      .from(photoRequestDays)
+      .innerJoin(campDays, eq(photoRequestDays.campDayId, campDays.id))
+      .where(eq(photoRequestDays.photoRequestId, photoRequestId));
+    return result;
+  }
+
+  async deletePhotoRequestDays(photoRequestId: string): Promise<void> {
+    await db.delete(photoRequestDays).where(eq(photoRequestDays.photoRequestId, photoRequestId));
   }
 }
 

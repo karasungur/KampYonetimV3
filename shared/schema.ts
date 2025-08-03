@@ -272,6 +272,29 @@ export const processingQueue = pgTable("processing_queue", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Camp days - Kamp günleri (günlük model yönetimi için)
+export const campDays = pgTable("camp_days", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  dayName: varchar("day_name").notNull(), // "15 Ağustos", "16 Ağustos" vb.
+  dayDate: timestamp("day_date").notNull(),
+  modelPath: varchar("model_path"), // Python modeli dosya yolu
+  modelStatus: varchar("model_status").notNull().default('not_trained'), // 'not_trained', 'training', 'ready', 'error'
+  photoCount: integer("photo_count").default(0), // Bu güne ait fotoğraf sayısı
+  faceCount: integer("face_count").default(0), // Bu güne ait tespit edilen yüz sayısı
+  lastTrainedAt: timestamp("last_trained_at"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Photo request days - Fotoğraf isteklerinin hangi günlere ait olduğunu belirten ilişki tablosu
+export const photoRequestDays = pgTable("photo_request_days", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  photoRequestId: varchar("photo_request_id").notNull().references(() => photoRequests.id, { onDelete: 'cascade' }),
+  campDayId: varchar("camp_day_id").notNull().references(() => campDays.id, { onDelete: 'cascade' }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   questions: many(questions),
@@ -348,6 +371,7 @@ export const photoRequestsRelations = relations(photoRequests, ({ many }) => ({
   detectedFaces: many(detectedFaces),
   photoMatches: many(photoMatches),
   processingQueue: many(processingQueue),
+  photoRequestDays: many(photoRequestDays),
 }));
 
 export const detectedFacesRelations = relations(detectedFaces, ({ one }) => ({
@@ -380,6 +404,21 @@ export const processingQueueRelations = relations(processingQueue, ({ one }) => 
   photoRequest: one(photoRequests, {
     fields: [processingQueue.photoRequestId],
     references: [photoRequests.id],
+  }),
+}));
+
+export const campDaysRelations = relations(campDays, ({ many }) => ({
+  photoRequestDays: many(photoRequestDays),
+}));
+
+export const photoRequestDaysRelations = relations(photoRequestDays, ({ one }) => ({
+  photoRequest: one(photoRequests, {
+    fields: [photoRequestDays.photoRequestId],
+    references: [photoRequests.id],
+  }),
+  campDay: one(campDays, {
+    fields: [photoRequestDays.campDayId],
+    references: [campDays.id],
   }),
 }));
 
@@ -490,6 +529,17 @@ export const insertProcessingQueueSchema = createInsertSchema(processingQueue).o
   createdAt: true,
 });
 
+export const insertCampDaySchema = createInsertSchema(campDays).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPhotoRequestDaySchema = createInsertSchema(photoRequestDays).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -527,6 +577,10 @@ export type PhotoMatch = typeof photoMatches.$inferSelect;
 export type InsertPhotoMatch = z.infer<typeof insertPhotoMatchSchema>;
 export type ProcessingQueue = typeof processingQueue.$inferSelect;
 export type InsertProcessingQueue = z.infer<typeof insertProcessingQueueSchema>;
+export type CampDay = typeof campDays.$inferSelect;
+export type InsertCampDay = z.infer<typeof insertCampDaySchema>;
+export type PhotoRequestDay = typeof photoRequestDays.$inferSelect;
+export type InsertPhotoRequestDay = z.infer<typeof insertPhotoRequestDaySchema>;
 
 // Additional types for API responses
 export type UserWithStats = User & {
@@ -573,6 +627,12 @@ export type PhotoRequestWithDetails = PhotoRequest & {
   selectedFace?: DetectedFace | null;
   matchesCount?: number;
   queuePosition?: number;
+  selectedDays?: CampDay[];
+};
+
+export type CampDayWithStats = CampDay & {
+  requestsCount?: number;
+  isSelected?: boolean;
 };
 
 export type DetectedFaceWithRequest = DetectedFace & {
