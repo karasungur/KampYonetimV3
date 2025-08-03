@@ -16,6 +16,10 @@ import LogsPage from "@/pages/logs";
 import ModeratorQuestionsPage from "@/pages/moderator-questions";
 import ResponsesPage from "@/pages/responses";
 import TablesPage from "@/pages/tables";
+import MenuSettingsPage from "@/pages/menu-settings";
+import ProgramEventsPage from "@/pages/program-events";
+import SocialMediaPage from "@/pages/social-media";
+import TeamMembersPage from "@/pages/team-members";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -44,6 +48,10 @@ function Router() {
       <Route path="/logs" component={LogsPage} />
       <Route path="/responses" component={ResponsesPage} />
       <Route path="/tables" component={TablesPage} />
+      <Route path="/menu-settings" component={MenuSettingsPage} />
+      <Route path="/program-events" component={ProgramEventsPage} />
+      <Route path="/social-media" component={SocialMediaPage} />
+      <Route path="/team-members" component={TeamMembersPage} />
       <Route component={NotFound} />
     </Switch>
   );

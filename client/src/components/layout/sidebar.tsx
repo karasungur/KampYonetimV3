@@ -11,6 +11,9 @@ import {
   History,
   MessageCircle,
   LogOut,
+  Settings,
+  Calendar,
+  Share2,
 } from "lucide-react";
 import akPartiLogo from "@assets/akpartilogo_1753719301210.png";
 
@@ -33,6 +36,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       { path: "/reports", label: "Raporlar", icon: BarChart3 },
       { path: "/feedback", label: "Geri Bildirimler", icon: MessageSquare },
       { path: "/logs", label: "Sistem Logları", icon: History },
+      { path: "/menu-settings", label: "Menü Ayarları", icon: Settings },
+      { path: "/program-events", label: "Program Etkinlikleri", icon: Calendar },
+      { path: "/social-media", label: "Sosyal Medya", icon: Share2 },
+      { path: "/team-members", label: "Ekip Üyeleri", icon: Users },
     ],
     genelbaskan: [
       { path: "/", label: "Ana Panel", icon: LayoutDashboard },
