@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { LogIn } from "lucide-react";
 import { useLocation } from "wouter";
 import akPartiLogo from "@assets/akpartilogo_1753719301210.png";
+import backgroundImage from "@assets/GK-KAMP LOGOTYPE -BACKROUND - Düzenlendi_1754227727579.png";
 
 export default function LoginPage() {
   const [tcNumber, setTcNumber] = useState("");
@@ -27,7 +28,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-ak-yellow/10 to-ak-blue/10">
+    <div 
+      className="min-h-screen flex flex-col items-center justify-center bg-cover bg-center bg-no-repeat"
+      style={{ backgroundImage: `url(${backgroundImage})` }}
+    >
       {/* Logo doğrudan mavi arka plan üzerinde */}
       <div className="mb-8">
         <img 
