@@ -1406,45 +1406,199 @@ class MainWindow(QMainWindow):
         """Periyodik API durumu kontrolü"""
         self.processing_section.check_api_status()
 
+class HeadlessPhotoMatcher:
+    """GUI olmadan sadece API server'ı çalıştıran sınıf"""
+    
+    def __init__(self):
+        self.app = Flask(__name__)
+        self.processing_requests = {}
+        # Test API bağlantısı
+        self.test_api_connection()
+        self.setup_routes()
+    
+    def test_api_connection(self):
+        """Web API bağlantısını test et"""
+        try:
+            import requests
+            response = requests.get(f"{CONFIG['WEB_API_URL']}/api/camp-days", timeout=5)
+            if response.status_code == 200:
+                print(f"✅ Web API bağlantısı başarılı: {CONFIG['WEB_API_URL']}")
+                api_connection_status['connected'] = True
+            else:
+                print(f"⚠️  Web API bağlantı hatası: {response.status_code}")
+                api_connection_status['connected'] = False
+        except Exception as e:
+            print(f"⚠️  Web API'ye bağlanılamadı: {str(e)}")
+            api_connection_status['connected'] = False
+        api_connection_status['last_check'] = datetime.now()
+    
+    def setup_routes(self):
+        """API route'larını tanımla"""
+        
+        @self.app.route('/api/health', methods=['GET'])
+        def health_check():
+            return jsonify({
+                'status': 'healthy',
+                'timestamp': datetime.now().isoformat(),
+                'trained_models': len(trained_models),
+                'api_connection': api_connection_status['connected'],
+                'device': device_info
+            })
+        
+        @self.app.route('/api/process-photos', methods=['POST'])
+        def process_photos():
+            """Web sitesinden gelen fotoğraf işleme istekleri"""
+            try:
+                data = request.get_json()
+                tc_number = data.get('tcNumber')
+                email = data.get('email')
+                selected_camp_days = data.get('selectedCampDays', [])
+                uploaded_files_count = data.get('uploadedFilesCount', 0)
+                
+                if not tc_number or not email:
+                    return jsonify({'error': 'TC number and email required'}), 400
+                
+                # Convert camp day IDs to model names
+                selected_models = []
+                for camp_day_id in selected_camp_days:
+                    if camp_day_id in trained_models:
+                        selected_models.append(camp_day_id)
+                
+                if not selected_models:
+                    return jsonify({'error': 'Seçilen kamp günleri için eğitilmiş model bulunamadı'}), 400
+                
+                # İsteği işleme kuyruğuna ekle
+                request_id = f"{tc_number}_{int(datetime.now().timestamp())}"
+                self.processing_requests[request_id] = {
+                    'tcNumber': tc_number,
+                    'email': email,
+                    'selectedModels': selected_models,
+                    'selectedCampDays': selected_camp_days,
+                    'uploadedFilesCount': uploaded_files_count,
+                    'timestamp': datetime.now().isoformat(),
+                    'status': 'queued',
+                    'source': 'web_api'
+                }
+                
+                print(f"✨ Yeni fotoğraf isteği alındı: {tc_number}")
+                print(f"   E-posta: {email}")
+                print(f"   Seçilen modeller: {len(selected_models)} adet")
+                print(f"   Yüklenen dosya: {uploaded_files_count} adet")
+                
+                return jsonify({
+                    'message': 'Fotoğraf işleme isteği başarıyla alındı',
+                    'tcNumber': tc_number,
+                    'selectedModelsCount': len(selected_models),
+                    'requestId': request_id,
+                    'status': 'processing'
+                })
+                
+            except Exception as e:
+                print(f"❌ API hatası: {str(e)}")
+                return jsonify({'error': str(e)}), 500
+        
+        @self.app.route('/api/status/<request_id>', methods=['GET'])
+        def get_request_status(request_id):
+            """İstek durumunu kontrol et"""
+            if request_id in self.processing_requests:
+                return jsonify(self.processing_requests[request_id])
+            else:
+                return jsonify({'error': 'Request not found'}), 404
+        
+        @self.app.route('/api/models', methods=['GET'])
+        def get_models():
+            """Eğitilmiş modelleri listele"""
+            model_list = []
+            for model_id, model_info in trained_models.items():
+                model_list.append({
+                    'id': model_id,
+                    'name': model_info['name'],
+                    'trainedAt': model_info['date'],
+                    'faceCount': model_info['face_count']
+                })
+            return jsonify(model_list)
+    
+    def run(self):
+        """Flask server'ı çalıştır"""
+        print(f"🚀 Flask API Server başlatılıyor...")
+        print(f"   Port: {CONFIG['PYTHON_API_PORT']}")
+        print(f"   Yüz analizi: {device_info['type']} ({device_info['name']})")
+        print(f"   Eğitilmiş model: {len(trained_models)} adet")
+        print(f"   API URL: http://localhost:{CONFIG['PYTHON_API_PORT']}")
+        
+        self.app.run(
+            host='0.0.0.0',
+            port=CONFIG['PYTHON_API_PORT'],
+            debug=False,
+            threaded=True
+        )
+
+def start_headless_server():
+    """Headless modda server başlat"""
+    try:
+        print("🔧 Headless Photo Matcher başlatılıyor...")
+        matcher = HeadlessPhotoMatcher()
+        matcher.run()
+    except Exception as e:
+        print(f"❌ Headless server başlatma hatası: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
 def main():
     """Ana fonksiyon"""
-    app = QApplication(sys.argv)
+    # Headless mode için argüman kontrolü
+    headless = '--headless' in sys.argv or os.getenv('HEADLESS') == 'true'
     
-    # AK Parti temasını uygula
-    app.setStyle('Fusion')
-    palette = QPalette()
-    palette.setColor(QPalette.Window, QColor(255, 255, 255))
-    palette.setColor(QPalette.WindowText, QColor(31, 41, 55))
-    palette.setColor(QPalette.Base, QColor(255, 255, 255))
-    palette.setColor(QPalette.AlternateBase, QColor(249, 250, 251))
-    palette.setColor(QPalette.ToolTipBase, QColor(255, 255, 255))
-    palette.setColor(QPalette.ToolTipText, QColor(31, 41, 55))
-    palette.setColor(QPalette.Text, QColor(31, 41, 55))
-    palette.setColor(QPalette.Button, QColor(255, 255, 255))
-    palette.setColor(QPalette.ButtonText, QColor(31, 41, 55))
-    palette.setColor(QPalette.BrightText, QColor(239, 68, 68))
-    palette.setColor(QPalette.Link, QColor(30, 136, 229))
-    palette.setColor(QPalette.Highlight, QColor(245, 158, 11))
-    palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
-    app.setPalette(palette)
-    
-    # Font ayarla
-    font = QFont("Segoe UI", 10)
-    app.setFont(font)
-    
-    # Yüz analizi sistemini başlat
-    if not init_face_analysis():
-        QMessageBox.critical(None, "Hata", "Yüz analizi sistemi başlatılamadı!")
-        sys.exit(1)
-    
-    # Eğitilmiş modelleri yükle
-    load_trained_models()
-    
-    # Ana pencereyi göster
-    window = MainWindow()
-    window.show()
-    
-    sys.exit(app.exec_())
+    if headless:
+        print("🔧 Headless modda başlatılıyor...")
+        
+        # İlk olarak sadece eğitilmiş modelleri yükle
+        load_trained_models()
+        
+        # Yüz analizi sistemini daha sonra yükleyeceğiz (gerektiğinde)
+        print(f"📁 Eğitilmiş modeller yüklendi: {len(trained_models)} adet")
+        
+        # Headless server'ı başlat
+        start_headless_server()
+    else:
+        app = QApplication(sys.argv)
+        
+        # AK Parti temasını uygula
+        app.setStyle('Fusion')
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor(255, 255, 255))
+        palette.setColor(QPalette.WindowText, QColor(31, 41, 55))
+        palette.setColor(QPalette.Base, QColor(255, 255, 255))
+        palette.setColor(QPalette.AlternateBase, QColor(249, 250, 251))
+        palette.setColor(QPalette.ToolTipBase, QColor(255, 255, 255))
+        palette.setColor(QPalette.ToolTipText, QColor(31, 41, 55))
+        palette.setColor(QPalette.Text, QColor(31, 41, 55))
+        palette.setColor(QPalette.Button, QColor(255, 255, 255))
+        palette.setColor(QPalette.ButtonText, QColor(31, 41, 55))
+        palette.setColor(QPalette.BrightText, QColor(239, 68, 68))
+        palette.setColor(QPalette.Link, QColor(30, 136, 229))
+        palette.setColor(QPalette.Highlight, QColor(245, 158, 11))
+        palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+        app.setPalette(palette)
+        
+        # Font ayarla
+        font = QFont("Segoe UI", 10)
+        app.setFont(font)
+        
+        # Yüz analizi sistemini başlat
+        if not init_face_analysis():
+            QMessageBox.critical(None, "Hata", "Yüz analizi sistemi başlatılamadı!")
+            sys.exit(1)
+        
+        # Eğitilmiş modelleri yükle
+        load_trained_models()
+        
+        # Ana pencereyi göster
+        window = MainWindow()
+        window.show()
+        
+        sys.exit(app.exec_())
 
 if __name__ == "__main__":
     main()
