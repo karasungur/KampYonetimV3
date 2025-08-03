@@ -1330,8 +1330,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Yeni fotoğraf talebi oluşturma
   app.post('/api/photo-requests', async (req, res) => {
     try {
+      const { selectedCampDays, uploadedFilesCount, ...requestBody } = req.body;
+      
       const requestData = insertPhotoRequestSchema.parse({
-        ...req.body,
+        ...requestBody,
         status: 'pending'
       });
       
@@ -1351,16 +1353,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const photoRequest = await storage.createPhotoRequest(requestData);
       
+      // Seçilen kamp günlerini kaydet
+      if (selectedCampDays && Array.isArray(selectedCampDays) && selectedCampDays.length > 0) {
+        for (const campDayId of selectedCampDays) {
+          await storage.createPhotoRequestDay({
+            photoRequestId: photoRequest.id,
+            campDayId: campDayId
+          });
+        }
+      }
+      
       // Aktivite logu
       await storage.logActivity({
         userId: 'system',
         action: 'create_question', // En yakın action type
-        details: `Fotoğraf talebi oluşturuldu: ${requestData.tcNumber}`,
-        metadata: { tcNumber: requestData.tcNumber, email: requestData.email },
+        details: `Fotoğraf talebi oluşturuldu: ${requestData.tcNumber} (${selectedCampDays?.length || 0} kamp günü seçildi)`,
+        metadata: { 
+          tcNumber: requestData.tcNumber, 
+          email: requestData.email,
+          selectedCampDays: selectedCampDays?.length || 0,
+          uploadedFilesCount: uploadedFilesCount || 0
+        },
         ipAddress: req.ip
       });
       
-      res.status(201).json(photoRequest);
+      res.status(201).json({
+        ...photoRequest,
+        selectedCampDaysCount: selectedCampDays?.length || 0,
+        uploadedFilesCount: uploadedFilesCount || 0
+      });
     } catch (error) {
       console.error('Photo request creation error:', error);
       res.status(400).json({ message: 'Fotoğraf talebi oluşturulamadı' });
