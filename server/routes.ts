@@ -1621,6 +1621,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Python'dan model senkronizasyonu endpoint'i
+  app.post('/api/python/sync-models', async (req, res) => {
+    try {
+      const { models } = req.body;
+      
+      if (!models || !Array.isArray(models)) {
+        return res.status(400).json({ message: 'Geçersiz model verisi' });
+      }
+
+      // Önce mevcut kamp günlerini temizle (sadece Python'dan gelenler kalacak)
+      await storage.deleteAllCampDays();
+
+      // Yeni modelleri kamp günü olarak kaydet
+      for (const model of models) {
+        const campDayData = {
+          id: model.id,
+          dayName: model.name,
+          dayDate: new Date(model.trainedAt),
+          modelPath: `./models/${model.id}/face_database.pkl`,
+          modelStatus: 'trained' as const,
+          photoCount: 0, // Python'dan gelmedi ise varsayılan
+          faceCount: model.faceCount || 0,
+          lastTrainedAt: new Date(model.trainedAt),
+          isActive: true
+        };
+
+        await storage.createCampDay(campDayData);
+      }
+
+      res.json({ 
+        message: 'Modeller başarıyla senkronize edildi',
+        syncedCount: models.length 
+      });
+      
+    } catch (error) {
+      console.error('Model sync error:', error);
+      res.status(500).json({ message: 'Model senkronizasyonu başarısız' });
+    }
+  });
+
   // Mock görsel servis (gerçek uygulamada object storage kullanılacak)
   app.get('/api/images/:imagePath', (req, res) => {
     const { imagePath } = req.params;

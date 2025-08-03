@@ -214,6 +214,7 @@ export interface IStorage {
   createCampDay(campDay: InsertCampDay): Promise<CampDay>;
   updateCampDay(id: string, updates: Partial<InsertCampDay>): Promise<CampDay>;
   deleteCampDay(id: string): Promise<void>;
+  deleteAllCampDays(): Promise<void>;
   
   // Photo request days operations
   createPhotoRequestDay(requestDay: InsertPhotoRequestDay): Promise<PhotoRequestDay>;
@@ -1357,6 +1358,10 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCampDay(id: string): Promise<void> {
     await db.delete(campDays).where(eq(campDays.id, id));
+  }
+
+  async deleteAllCampDays(): Promise<void> {
+    await db.delete(campDays);
   }
 
   // Photo request days operations
