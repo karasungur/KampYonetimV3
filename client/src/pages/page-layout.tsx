@@ -284,6 +284,31 @@ export default function PageLayoutPage() {
     },
   });
 
+  const deleteLayoutMutation = useMutation({
+    mutationFn: async (layoutId: string) => {
+      const response = await fetch(`/api/page-layouts/${layoutId}`, {
+        method: 'DELETE',
+        headers: setAuthHeader(),
+      });
+      if (!response.ok) throw new Error('Failed to delete layout');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/page-layouts"] });
+      setSelectedLayout(null);
+      toast({
+        title: "Başarılı",
+        description: "Sayfa düzeni silindi",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Hata",
+        description: "Sayfa düzeni silinemedi",
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteElement = useMutation({
     mutationFn: async (elementId: string) => {
       const response = await fetch(`/api/page-elements/${elementId}`, {
@@ -440,26 +465,49 @@ export default function PageLayoutPage() {
                       {layouts.map((layout) => (
                         <div
                           key={layout.id}
-                          className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                          className={`p-3 rounded-lg border transition-all ${
                             selectedLayout === layout.id
                               ? 'border-ak-yellow bg-ak-yellow/10'
                               : layout.isActive
                               ? 'border-green-200 bg-green-50'
                               : 'border-gray-200 hover:border-gray-300'
                           }`}
-                          onClick={() => setSelectedLayout(layout.id)}
                         >
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">{layout.name}</span>
-                            {layout.isActive && (
-                              <Badge variant="default" className="bg-green-600">
-                                Aktif
-                              </Badge>
-                            )}
+                          <div 
+                            className="cursor-pointer"
+                            onClick={() => setSelectedLayout(layout.id)}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">{layout.name}</span>
+                              {layout.isActive && (
+                                <Badge variant="default" className="bg-green-600">
+                                  Aktif
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-500 mt-1">
+                              {layout.elements?.length || 0} öğe
+                            </p>
                           </div>
-                          <p className="text-sm text-gray-500 mt-1">
-                            {layout.elements?.length || 0} öğe
-                          </p>
+                          {selectedLayout === layout.id && (
+                            <div className="mt-2 pt-2 border-t border-gray-200">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm('Bu düzeni silmek istediğinizden emin misiniz?')) {
+                                    deleteLayoutMutation.mutate(layout.id);
+                                  }
+                                }}
+                                className="text-red-600 hover:text-red-700 text-xs"
+                                disabled={deleteLayoutMutation.isPending}
+                              >
+                                <Trash2 className="w-3 h-3 mr-1" />
+                                {deleteLayoutMutation.isPending ? 'Siliniyor...' : 'Sil'}
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </CardContent>
@@ -517,11 +565,11 @@ export default function PageLayoutPage() {
                             <div>
                               <Label>Masaüstü Arkaplan</Label>
                               <Select
-                                value={selectedLayoutData.backgroundImageDesktop || ""}
+                                value={selectedLayoutData.backgroundImageDesktop || "none"}
                                 onValueChange={(value) => {
                                   updateLayoutMutation.mutate({
                                     id: selectedLayoutData.id,
-                                    updates: { backgroundImageDesktop: value || null }
+                                    updates: { backgroundImageDesktop: value === "none" ? null : value }
                                   });
                                 }}
                               >
@@ -529,7 +577,7 @@ export default function PageLayoutPage() {
                                   <SelectValue placeholder="Görsel seçin" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="">Görsel yok</SelectItem>
+                                  <SelectItem value="none">Görsel yok</SelectItem>
                                   {uploadedFiles.map((file) => (
                                     <SelectItem key={file.id} value={file.id}>
                                       {file.originalName}
@@ -541,11 +589,11 @@ export default function PageLayoutPage() {
                             <div>
                               <Label>Mobil Arkaplan</Label>
                               <Select
-                                value={selectedLayoutData.backgroundImageMobile || ""}
+                                value={selectedLayoutData.backgroundImageMobile || "none"}
                                 onValueChange={(value) => {
                                   updateLayoutMutation.mutate({
                                     id: selectedLayoutData.id,
-                                    updates: { backgroundImageMobile: value || null }
+                                    updates: { backgroundImageMobile: value === "none" ? null : value }
                                   });
                                 }}
                               >
@@ -553,7 +601,7 @@ export default function PageLayoutPage() {
                                   <SelectValue placeholder="Görsel seçin" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="">Görsel yok</SelectItem>
+                                  <SelectItem value="none">Görsel yok</SelectItem>
                                   {uploadedFiles.map((file) => (
                                     <SelectItem key={file.id} value={file.id}>
                                       {file.originalName}
@@ -885,6 +933,16 @@ export default function PageLayoutPage() {
                           backgroundColor: selectedLayoutData.backgroundColor,
                           backgroundSize: selectedLayoutData.backgroundSize,
                           backgroundPosition: selectedLayoutData.backgroundPosition,
+                          backgroundImage: (() => {
+                            const bgImageId = previewMode === 'desktop' 
+                              ? selectedLayoutData.backgroundImageDesktop 
+                              : selectedLayoutData.backgroundImageMobile;
+                            if (bgImageId && bgImageId !== 'none') {
+                              const bgFile = uploadedFiles.find(f => f.id === bgImageId);
+                              return bgFile ? `url(${bgFile.filePath})` : 'none';
+                            }
+                            return 'none';
+                          })()
                         }}
                         onMouseMove={handleElementDrag}
                         onMouseUp={handleElementDragEnd}

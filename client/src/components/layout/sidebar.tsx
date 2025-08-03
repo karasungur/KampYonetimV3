@@ -91,7 +91,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <p className="text-xs font-semibold ak-gray uppercase tracking-wider">Menü</p>
           </div>
           
-          <div className="space-y-2 px-4 overflow-y-auto h-full pb-20">
+          <div className="space-y-2 px-4 overflow-y-auto" style={{ height: 'calc(100vh - 280px)' }}>
             {items.map((item) => {
               const Icon = item.icon;
               const isActive = location === item.path;

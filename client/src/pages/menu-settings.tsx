@@ -23,6 +23,10 @@ interface MenuSettings {
   photosTitle: string;
   socialMediaTitle: string;
   teamTitle: string;
+  mainTitle: string;
+  mainSlogan: string;
+  campTitle: string;
+  systemTitle: string;
 }
 
 export default function MenuSettingsPage() {
@@ -38,6 +42,10 @@ export default function MenuSettingsPage() {
     photosTitle: "Fotoğraflar",
     socialMediaTitle: "Sosyal Medya",
     teamTitle: "Ekibimiz",
+    mainTitle: "AK Parti Gençlik Kolları",
+    mainSlogan: "Milletin Gücüyle SINIRLARI AŞAN LİDERLİK",
+    campTitle: "İrade, İstikamet ve İstişare Kampı",
+    systemTitle: "Yönetim Sistemi",
   });
   
   const { user } = useAuth();
@@ -274,6 +282,61 @@ export default function MenuSettingsPage() {
                         onChange={(e) => handleTitleChange('teamTitle', e.target.value)}
                         className="mt-1"
                         disabled={!formData.teamEnabled}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ana Sayfa Metinleri */}
+                <div className="p-4 border rounded-lg bg-blue-50">
+                  <h3 className="text-lg font-semibold mb-4 text-blue-900">Ana Sayfa Metinleri</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="mainTitle" className="text-sm text-gray-600">
+                        Ana Başlık
+                      </Label>
+                      <Input
+                        id="mainTitle"
+                        value={formData.mainTitle}
+                        onChange={(e) => handleTitleChange('mainTitle', e.target.value)}
+                        className="mt-1"
+                        placeholder="AK Parti Gençlik Kolları"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="mainSlogan" className="text-sm text-gray-600">
+                        Ana Slogan
+                      </Label>
+                      <Input
+                        id="mainSlogan"
+                        value={formData.mainSlogan}
+                        onChange={(e) => handleTitleChange('mainSlogan', e.target.value)}
+                        className="mt-1"
+                        placeholder="Milletin Gücüyle SINIRLARI AŞAN LİDERLİK"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="campTitle" className="text-sm text-gray-600">
+                        Kamp Başlığı
+                      </Label>
+                      <Input
+                        id="campTitle"
+                        value={formData.campTitle}
+                        onChange={(e) => handleTitleChange('campTitle', e.target.value)}
+                        className="mt-1"
+                        placeholder="İrade, İstikamet ve İstişare Kampı"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="systemTitle" className="text-sm text-gray-600">
+                        Sistem Başlığı
+                      </Label>
+                      <Input
+                        id="systemTitle"
+                        value={formData.systemTitle}
+                        onChange={(e) => handleTitleChange('systemTitle', e.target.value)}
+                        className="mt-1"
+                        placeholder="Yönetim Sistemi"
                       />
                     </div>
                   </div>

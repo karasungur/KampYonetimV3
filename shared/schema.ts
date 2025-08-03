@@ -106,6 +106,11 @@ export const menuSettings = pgTable("menu_settings", {
   photosTitle: varchar("photos_title").default("Fotoğraflar"),
   socialMediaTitle: varchar("social_media_title").default("Sosyal Medya"),
   teamTitle: varchar("team_title").default("Ekibimiz"),
+  // Ana sayfa metinleri
+  mainTitle: varchar("main_title").default("AK Parti Gençlik Kolları"),
+  mainSlogan: varchar("main_slogan").default("Milletin Gücüyle SINIRLARI AŞAN LİDERLİK"),
+  campTitle: varchar("camp_title").default("İrade, İstikamet ve İstişare Kampı"),
+  systemTitle: varchar("system_title").default("Yönetim Sistemi"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
