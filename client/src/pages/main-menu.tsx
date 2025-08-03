@@ -191,7 +191,7 @@ export default function MainMenuPage() {
         <img 
           src={akPartiLogo} 
           alt="AK Parti" 
-          className="w-48 h-48 sm:w-44 sm:h-44 mx-auto mb-0 object-contain"
+          className="w-56 h-56 sm:w-52 sm:h-52 mx-auto mb-0 object-contain"
         />
         
         {/* Metin Resmi */}
@@ -285,7 +285,7 @@ export default function MainMenuPage() {
       className="min-h-screen bg-cover bg-center bg-no-repeat flex flex-col"
       style={{ backgroundImage: `url(${backgroundImage})` }}
     >
-      <div className="max-w-4xl mx-auto p-2 md:p-4 h-screen flex flex-col justify-center">
+      <div className="max-w-4xl mx-auto p-2 md:p-4 h-screen flex flex-col justify-start pt-4">
         {!activeSection ? renderMainMenu() : (
           <div className="animate-in slide-in-from-right-4 duration-150">
             {/* Back Button */}
