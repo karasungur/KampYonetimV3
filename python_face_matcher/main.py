@@ -1214,26 +1214,43 @@ class RequestProcessingSection(QWidget):
     def start_photo_matching(self, tc_number, request_data, progress_bar, table_row):
         """Fotoğraf eşleştirme işlemini başlat"""
         try:
-            # Referans fotoğrafları işle
+            # Web'den gelen yüz verilerini işle
             reference_embeddings = []
-            for photo_b64 in request_data['referencePhotos']:
-                try:
-                    # Base64'ten resme çevir
-                    image_data = base64.b64decode(photo_b64.split(',')[1])  # data:image/jpeg;base64,... formatından
-                    nparr = np.frombuffer(image_data, np.uint8)
-                    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                    
-                    # Yüz tespiti
-                    faces = face_app.get(img) if face_app else None
-                    if faces:
-                        for face in faces:
-                            reference_embeddings.append(face.embedding)
-                except Exception as e:
-                    print(f"Referans fotoğraf işleme hatası: {str(e)}")
+            
+            # Yeni format: faceData (web'den gelen embedding verileri)
+            if 'faceData' in request_data and request_data['faceData']:
+                for face_item in request_data['faceData']:
+                    try:
+                        if 'embedding' in face_item and face_item['embedding']:
+                            embedding = np.array(face_item['embedding'], dtype=np.float32)
+                            reference_embeddings.append(embedding)
+                            print(f"✅ Web'den embedding verisi alındı (boyut: {len(embedding)})")
+                    except Exception as e:
+                        print(f"Web embedding işleme hatası: {str(e)}")
+            
+            # Eski format: referencePhotos (base64 fotoğraflar) - uyumluluk için
+            elif 'referencePhotos' in request_data:
+                for photo_b64 in request_data['referencePhotos']:
+                    try:
+                        # Base64'ten resme çevir
+                        image_data = base64.b64decode(photo_b64.split(',')[1])  # data:image/jpeg;base64,... formatından
+                        nparr = np.frombuffer(image_data, np.uint8)
+                        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                        
+                        # Yüz tespiti
+                        faces = face_app.get(img) if face_app else None
+                        if faces:
+                            for face in faces:
+                                reference_embeddings.append(face.embedding)
+                    except Exception as e:
+                        print(f"Referans fotoğraf işleme hatası: {str(e)}")
             
             if not reference_embeddings:
-                self.requests_table.setItem(table_row, 2, QTableWidgetItem("Hata: Yüz tespit edilemedi"))
+                self.requests_table.setItem(table_row, 2, QTableWidgetItem("Hata: Yüz verisi bulunamadı"))
+                print("❌ Hiç embedding verisi bulunamadı")
                 return
+                
+            print(f"✅ Toplam {len(reference_embeddings)} yüz embedding'i hazır")
             
             # Eşleştirme worker'ını başlat
             matching_worker = PhotoMatchingWorker(
@@ -1431,8 +1448,9 @@ class MainWindow(QMainWindow):
                         photo_request = {
                             'tcNumber': request_item['tcNumber'],
                             'email': request_item['email'],
+                            'faceData': request_item.get('faceData', []),  # Web'den gelen yüz verileri
                             'selectedModels': [],  # Kamp günlerinden çevirece
-                            'selectedCampDays': [],  # Kamp günleri bilgisini al
+                            'selectedCampDays': request_item.get('selectedCampDays', []),
                             'timestamp': request_item['createdAt'],
                             'source': 'web_database'
                         }
