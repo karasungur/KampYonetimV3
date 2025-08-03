@@ -663,8 +663,9 @@ class MainWindow(QMainWindow):
         self.active_table.setHorizontalHeaderLabels([
             "TC No", "E-posta", "Durum", "İlerleme", "Başlama Saati"
         ])
-        if self.active_table.horizontalHeader():
-            self.active_table.horizontalHeader().setStretchLastSection(True)
+        header = self.active_table.horizontalHeader()
+        if header:
+            header.setStretchLastSection(True)
         layout.addWidget(self.active_table)
         
         return widget
@@ -679,8 +680,9 @@ class MainWindow(QMainWindow):
         self.history_table.setHorizontalHeaderLabels([
             "TC No", "E-posta", "Durum", "Eşleşme Sayısı", "Başlama", "Bitiş"
         ])
-        if self.history_table.horizontalHeader():
-            self.history_table.horizontalHeader().setStretchLastSection(True)
+        header = self.history_table.horizontalHeader()
+        if header:
+            header.setStretchLastSection(True)
         layout.addWidget(self.history_table)
         
         return widget
