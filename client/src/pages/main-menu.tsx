@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { 
   UserCheck, 
   Calendar, 
@@ -81,6 +84,9 @@ type ActiveSection = 'program' | 'social' | 'team' | 'login' | null;
 export default function MainMenuPage() {
   const [, navigate] = useLocation();
   const [activeSection, setActiveSection] = useState<ActiveSection>(null);
+  const [tcNumber, setTcNumber] = useState("");
+  const [password, setPassword] = useState("");
+  const { login, isLoggingIn } = useAuth();
 
   const { data: menuSettings } = useQuery<MenuSettings>({
     queryKey: ["/api/menu-settings"],
@@ -124,6 +130,13 @@ export default function MainMenuPage() {
 
   const handleBackToMenu = () => {
     setActiveSection(null);
+    setTcNumber("");
+    setPassword("");
+  };
+
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    login({ tcNumber, password });
   };
 
   const getSocialMediaIcon = (platform: string) => {
@@ -178,19 +191,19 @@ export default function MainMenuPage() {
         <img 
           src={akPartiLogo} 
           alt="AK Parti" 
-          className="w-72 h-72 mx-auto mb-6 object-contain"
+          className="w-72 h-72 mx-auto mb-4 object-contain"
         />
         
         {/* Metin Resmi */}
         <img 
           src={metinResmi} 
           alt="AK Parti Gençlik Kolları Genel Sekreterlik - Strateji ve İstişare Kampı" 
-          className="w-80 md:w-96 mx-auto mb-6 object-contain"
+          className="w-80 md:w-96 mx-auto mb-4 object-contain"
         />
       </div>
 
       {/* Mobile Optimized Menu Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-w-xs md:max-w-sm mx-auto mb-4 md:mb-0">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-w-xs md:max-w-sm mx-auto mb-2 md:mb-0">
         {/* Moderatör Girişi */}
         {menuSettings.moderatorLoginEnabled && (
           <div className="aspect-square" onClick={() => handleSectionClick('login')}>
@@ -266,7 +279,7 @@ export default function MainMenuPage() {
       </div>
       
       {/* Footer */}
-      <div className="text-center mt-12">
+      <div className="text-center mt-6">
         <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 inline-block">
           <p className="text-white/90 text-sm font-medium">
             © 2025 AK Parti Gençlik Kolları Genel Sekreterlik
@@ -465,19 +478,47 @@ export default function MainMenuPage() {
                         <p className="text-gray-600 text-sm">Sistem erişimi için TC kimlik numaranız ve şifrenizi giriniz</p>
                       </div>
                       
-                      <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-center">
-                        <UserCheck className="w-12 h-12 mx-auto text-orange-500 mb-3" />
-                        <p className="text-sm text-orange-700 mb-4">
-                          Güvenli giriş için lütfen ayrı giriş sayfasını kullanın
-                        </p>
-                        <button
-                          onClick={() => navigate('/login')}
-                          className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
+                      <form onSubmit={handleLoginSubmit} className="space-y-4">
+                        <div>
+                          <Label htmlFor="tcno" className="text-gray-700 font-medium">
+                            T.C. Kimlik Numarası
+                          </Label>
+                          <Input
+                            id="tcno"
+                            type="text"
+                            maxLength={11}
+                            value={tcNumber}
+                            onChange={(e) => setTcNumber(e.target.value)}
+                            className="mt-1 focus:ring-orange-500 focus:border-orange-500"
+                            placeholder="11 haneli T.C. kimlik numaranız"
+                            required
+                          />
+                        </div>
+                        
+                        <div>
+                          <Label htmlFor="password" className="text-gray-700 font-medium">
+                            Şifre
+                          </Label>
+                          <Input
+                            id="password"
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="mt-1 focus:ring-orange-500 focus:border-orange-500"
+                            placeholder="Şifrenizi giriniz"
+                            required
+                          />
+                        </div>
+                        
+                        <Button 
+                          type="submit" 
+                          className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 mt-6"
+                          disabled={isLoggingIn}
                         >
-                          <LogIn className="w-4 h-4" />
-                          Giriş Sayfasına Git
-                        </button>
-                      </div>
+                          <LogIn className="mr-2" size={16} />
+                          {isLoggingIn ? 'Giriş yapılıyor...' : 'Giriş Yap'}
+                        </Button>
+                      </form>
                     </div>
                   </CardContent>
                 </>
