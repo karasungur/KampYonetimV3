@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 AK Parti Gençlik Kolları Kamp Fotoğraf Eşleştirme Sistemi
-Web API ile entegre çalışan Python yüz tanıma sistemi
+İki Bölümlü Yönetim Arayüzü: Model Eğitimi ve İstek İşleme
 """
 
 import sys
@@ -34,12 +34,12 @@ load_dotenv()
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, 
     QLabel, QPushButton, QListWidget, QListWidgetItem, QProgressBar,
-    QGroupBox, QTextEdit, QSpinBox, QCheckBox, QFrame, QScrollArea,
-    QGridLayout, QTabWidget, QTableWidget, QTableWidgetItem,
-    QHeaderView, QSizePolicy, QFileDialog, QMessageBox
+    QGroupBox, QTextEdit, QFrame, QScrollArea,
+    QGridLayout, QTableWidget, QTableWidgetItem,
+    QHeaderView, QSizePolicy, QFileDialog, QMessageBox, QSplitter
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSize
-from PyQt5.QtGui import QPixmap, QImage, QIcon, QFont, QPalette, QColor
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
+from PyQt5.QtGui import QFont, QPalette, QColor
 
 from flask import Flask, request, jsonify
 from insightface.app import FaceAnalysis
@@ -48,13 +48,10 @@ from insightface.app import FaceAnalysis
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-# Konfigürasyon - Çevre değişkenlerinden alınabilir
+# Konfigürasyon
 CONFIG = {
-    'WEB_API_URL': os.getenv('WEB_API_URL', 'https://your-replit-app.replit.app'),  # Replit web API URL
-    'PYTHON_API_PORT': int(os.getenv('PYTHON_API_PORT', 8080)),  # Python API portu
-    'PHOTO_DATABASE_PATH': './kamp_fotograflari',
-    'USER_UPLOADS_PATH': './kullanici_yukleme',
-    'FACE_DATABASE_PATH': './yuz_veritabani.pkl',
+    'WEB_API_URL': os.getenv('WEB_API_URL', 'https://your-replit-app.replit.app'),
+    'PYTHON_API_PORT': int(os.getenv('PYTHON_API_PORT', 8080)),
     'EMAIL_FROM': os.getenv('EMAIL_FROM', 'kamp@akparti.org.tr'),
     'EMAIL_PASSWORD': os.getenv('EMAIL_PASSWORD', 'your_email_password'),
     'SMTP_SERVER': os.getenv('SMTP_SERVER', 'smtp.gmail.com'),
@@ -63,213 +60,140 @@ CONFIG = {
     'MAX_CONCURRENT_REQUESTS': int(os.getenv('MAX_CONCURRENT_REQUESTS', '3'))
 }
 
-# AK Parti renk şeması (HSL değerleri)
+# AK Parti renk şeması
 AK_COLORS = {
-    'YELLOW': '#F59E0B',        # hsl(37, 100%, 47%) - AK Parti sarısı
-    'YELLOW_DARK': '#D97706',   # hsl(37, 100%, 38%) - Koyu sarı
-    'BLUE': '#1E88E5',          # hsl(209, 100%, 40%) - AK Parti mavisi
-    'BLUE_DARK': '#1565C0',     # hsl(209, 100%, 35%) - Koyu mavi
-    'TEXT': '#1F2937',          # hsl(12, 8%, 14%) - Ana metin
-    'GRAY': '#6B7280',          # hsl(0, 0%, 40%) - Gri metin
-    'LIGHT_GRAY': '#F3F4F6',    # hsl(0, 0%, 96%) - Açık gri
+    'YELLOW': '#F59E0B',
+    'BLUE': '#1E88E5',
     'WHITE': '#FFFFFF',
-    'BLACK': '#000000',
+    'GRAY': '#6B7280',
+    'LIGHT_GRAY': '#F9FAFB',
     'SUCCESS': '#10B981',
-    'ERROR': '#EF4444',
-    'WARNING': '#F59E0B'
+    'ERROR': '#EF4444'
 }
 
 # Global değişkenler
 face_app = None
-camp_day_models = {}  # Her kamp günü için ayrı model: {camp_day_id: face_database}
+trained_models = {}  # {camp_day_id: {'name': str, 'date': str, 'model_path': str, 'face_count': int}}
 processing_queue = queue.Queue()
 current_requests = {}
 request_lock = Lock()
-available_camp_days = []  # Web'den çekilecek kamp günleri listesi
-api_connection_status = {'connected': False, 'last_check': None, 'error': None}
+api_connection_status = {'connected': False, 'last_check': None}
 
-def fetch_camp_days_from_api():
-    """Web API'den kamp günlerini çek"""
-    global available_camp_days, api_connection_status
+def init_face_analysis():
+    """Yüz analizi sistemini başlat"""
+    global face_app
     try:
-        response = requests.get(f"{CONFIG['WEB_API_URL']}/api/camp-days", timeout=10)
+        face_app = FaceAnalysis(providers=['CPUExecutionProvider'])
+        face_app.prepare(ctx_id=0, det_size=(640, 640))
+        return True
+    except Exception as e:
+        print(f"Yüz analizi başlatma hatası: {str(e)}")
+        return False
+
+def load_trained_models():
+    """Eğitilmiş modelleri yükle"""
+    global trained_models
+    models_dir = "./models"
+    if not os.path.exists(models_dir):
+        os.makedirs(models_dir)
+        return
+    
+    trained_models = {}
+    for item in os.listdir(models_dir):
+        model_dir = os.path.join(models_dir, item)
+        if os.path.isdir(model_dir):
+            model_file = os.path.join(model_dir, "face_database.pkl")
+            info_file = os.path.join(model_dir, "model_info.json")
+            
+            if os.path.exists(model_file) and os.path.exists(info_file):
+                try:
+                    with open(info_file, 'r', encoding='utf-8') as f:
+                        model_info = json.load(f)
+                    trained_models[item] = model_info
+                except Exception as e:
+                    print(f"Model info yükleme hatası - {item}: {str(e)}")
+
+def test_api_connection():
+    """Web API bağlantısını test et"""
+    global api_connection_status
+    try:
+        response = requests.get(f"{CONFIG['WEB_API_URL']}/api/camp-days", timeout=5)
         if response.status_code == 200:
-            camp_days_data = response.json()
-            available_camp_days = camp_days_data
             api_connection_status = {
                 'connected': True,
-                'last_check': datetime.now(),
-                'error': None
+                'last_check': datetime.now()
             }
-            print(f"Kamp günleri başarıyla yüklendi: {len(available_camp_days)} gün")
             return True
         else:
             api_connection_status = {
                 'connected': False,
-                'last_check': datetime.now(),
-                'error': f"HTTP {response.status_code}"
+                'last_check': datetime.now()
             }
             return False
     except Exception as e:
         api_connection_status = {
             'connected': False,
-            'last_check': datetime.now(),
-            'error': str(e)
+            'last_check': datetime.now()
         }
-        print(f"Kamp günleri yüklenirken hata: {str(e)}")
         return False
 
-def test_api_connection():
-    """API bağlantısını test et"""
+def sync_models_to_web():
+    """Eğitilmiş modelleri web API'ye gönder"""
     try:
-        response = requests.get(f"{CONFIG['WEB_API_URL']}/api/python/health", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            api_connection_status.update({
-                'connected': True,
-                'last_check': datetime.now(),
-                'error': None,
-                'queue_size': data.get('queueSize', 0),
-                'processing': data.get('processing', 0)
+        model_list = []
+        for model_id, model_info in trained_models.items():
+            model_list.append({
+                'id': model_id,
+                'name': model_info['name'],
+                'trainedAt': model_info['date'],
+                'faceCount': model_info['face_count']
             })
-            return True
-        else:
-            api_connection_status.update({
-                'connected': False,
-                'last_check': datetime.now(),
-                'error': f"HTTP {response.status_code}"
-            })
-            return False
+        
+        response = requests.post(
+            f"{CONFIG['WEB_API_URL']}/api/python/sync-models",
+            json={'models': model_list},
+            timeout=10
+        )
+        return response.status_code == 200
     except Exception as e:
-        api_connection_status.update({
-            'connected': False,
-            'last_check': datetime.now(),
-            'error': str(e)
-        })
+        print(f"Model senkronizasyon hatası: {str(e)}")
         return False
 
-class StyledWidget:
-    """AK Parti tasarımına uygun modern görünüm"""
-    
-    @staticmethod
-    def apply_ak_theme(app):
-        """AK Parti tema uygula"""
-        palette = QPalette()
-        # Açık tema (AK Parti web sitesi gibi)
-        palette.setColor(QPalette.Window, QColor(255, 255, 255))  # Beyaz arkaplan
-        palette.setColor(QPalette.WindowText, QColor(31, 41, 55))  # Ana metin
-        palette.setColor(QPalette.Base, QColor(255, 255, 255))  # Input arkaplanı
-        palette.setColor(QPalette.AlternateBase, QColor(243, 244, 246))  # Açık gri
-        palette.setColor(QPalette.ToolTipBase, QColor(255, 255, 255))
-        palette.setColor(QPalette.ToolTipText, QColor(31, 41, 55))
-        palette.setColor(QPalette.Text, QColor(31, 41, 55))
-        palette.setColor(QPalette.Button, QColor(255, 255, 255))
-        palette.setColor(QPalette.ButtonText, QColor(31, 41, 55))
-        palette.setColor(QPalette.BrightText, QColor(239, 68, 68))  # Hata rengi
-        palette.setColor(QPalette.Link, QColor(30, 136, 229))  # AK mavi
-        palette.setColor(QPalette.Highlight, QColor(245, 158, 11))  # AK sarı
-        palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
-        app.setPalette(palette)
-    
-    @staticmethod
-    def create_card_frame():
-        """Modern kart görünümü oluştur (AK Parti stili)"""
-        frame = QFrame()
-        frame.setFrameStyle(QFrame.Box)
-        frame.setStyleSheet(f"""
-            QFrame {{
-                border: 1px solid #E5E7EB;
-                border-radius: 12px;
-                background-color: {AK_COLORS['WHITE']};
-                margin: 8px;
-                padding: 16px;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            }}
-        """)
-        return frame
-    
-    @staticmethod
-    def style_button(button, color='primary'):
-        """AK Parti stili butonlar"""
-        colors = {
-            'primary': f'background-color: {AK_COLORS["YELLOW"]}; color: white;',
-            'secondary': f'background-color: {AK_COLORS["BLUE"]}; color: white;',
-            'success': f'background-color: {AK_COLORS["SUCCESS"]}; color: white;',
-            'warning': f'background-color: {AK_COLORS["WARNING"]}; color: white;',
-            'danger': f'background-color: {AK_COLORS["ERROR"]}; color: white;',
-            'outline': f'background-color: transparent; color: {AK_COLORS["YELLOW"]}; border: 2px solid {AK_COLORS["YELLOW"]};',
-        }
-        
-        hover_colors = {
-            'primary': AK_COLORS['YELLOW_DARK'],
-            'secondary': AK_COLORS['BLUE_DARK'],
-            'success': '#059669',
-            'warning': '#D97706',
-            'danger': '#DC2626',
-            'outline': AK_COLORS['YELLOW_DARK'],
-        }
-        
-        button.setStyleSheet(f"""
-            QPushButton {{
-                {colors.get(color, colors['primary'])}
-                border: none;
-                border-radius: 8px;
-                padding: 12px 24px;
-                font-weight: 600;
-                font-size: 14px;
-                font-family: 'Segoe UI', Arial, sans-serif;
-                min-height: 20px;
-            }}
-            QPushButton:hover {{
-                background-color: {hover_colors.get(color, hover_colors['primary'])};
-                transform: translateY(-1px);
-            }}
-            QPushButton:pressed {{
-                transform: translateY(0px);
-            }}
-            QPushButton:disabled {{
-                background-color: #D1D5DB;
-                color: #9CA3AF;
-            }}
-        """)
-
-class FaceAnalysisWorker(QThread):
-    """Yüz analizi worker thread'i"""
-    progress = pyqtSignal(str, int)
-    finished = pyqtSignal(dict)
+class ModelTrainingWorker(QThread):
+    """Model eğitimi worker thread'i"""
+    progress = pyqtSignal(str, int)  # message, percentage
+    finished = pyqtSignal(str, dict)  # model_id, model_info
     error = pyqtSignal(str)
     
-    def __init__(self, folder_path, recursive=True, camp_day_id=None):
+    def __init__(self, model_id, model_name, photos_folder):
         super().__init__()
-        self.folder_path = folder_path
-        self.recursive = recursive
-        self.camp_day_id = camp_day_id
+        self.model_id = model_id
+        self.model_name = model_name
+        self.photos_folder = photos_folder
     
     def run(self):
-        global camp_day_models
         try:
-            self.progress.emit(f"Fotoğraflar taranıyor... {self.camp_day_id or 'Genel'}", 0)
+            self.progress.emit(f"Model eğitimi başlıyor: {self.model_name}", 0)
             
             # Fotoğraf dosyalarını bul
             image_files = []
-            if self.recursive:
-                for root, dirs, files in os.walk(self.folder_path):
-                    for file in files:
-                        if file.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
-                            image_files.append(os.path.join(root, file))
-            else:
-                for file in os.listdir(self.folder_path):
+            for root, dirs, files in os.walk(self.photos_folder):
+                for file in files:
                     if file.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
-                        image_files.append(os.path.join(self.folder_path, file))
+                        image_files.append(os.path.join(root, file))
+            
+            if not image_files:
+                self.error.emit("Klasörde hiç fotoğraf bulunamadı")
+                return
             
             total_files = len(image_files)
-            current_database = {}
+            face_database = {}
+            total_faces = 0
+            
+            self.progress.emit(f"Fotoğraflar analiz ediliyor... ({total_files} dosya)", 10)
             
             for idx, image_path in enumerate(image_files):
                 try:
-                    self.progress.emit(f"İşleniyor: {os.path.basename(image_path)}", 
-                                     int((idx + 1) / total_files * 100))
-                    
                     # Resmi oku
                     img = cv2.imread(image_path)
                     if img is None:
@@ -279,43 +203,61 @@ class FaceAnalysisWorker(QThread):
                     faces = face_app.get(img) if face_app else None
                     
                     if faces:
-                        current_database[image_path] = {
+                        face_database[image_path] = {
                             'faces': [],
-                            'timestamp': datetime.now().isoformat(),
-                            'camp_day_id': self.camp_day_id
+                            'timestamp': datetime.now().isoformat()
                         }
                         
                         for face in faces:
                             face_data = {
                                 'bbox': face.bbox.tolist(),
                                 'embedding': face.embedding.tolist(),
-                                'landmark_2d_106': face.landmark_2d_106.tolist() if hasattr(face, 'landmark_2d_106') else None,
-                                'age': getattr(face, 'age', None),
-                                'gender': getattr(face, 'gender', None)
+                                'landmark_2d_106': face.landmark_2d_106.tolist() if hasattr(face, 'landmark_2d_106') else None
                             }
-                            current_database[image_path]['faces'].append(face_data)
-                
+                            face_database[image_path]['faces'].append(face_data)
+                            total_faces += 1
+                    
+                    # İlerleme güncelle
+                    progress = 10 + int((idx + 1) / total_files * 80)
+                    self.progress.emit(f"İşlenen: {idx + 1}/{total_files} - {total_faces} yüz tespit edildi", progress)
+                    
                 except Exception as e:
-                    print(f"Hata - {image_path}: {str(e)}")
+                    print(f"Fotoğraf işleme hatası - {image_path}: {str(e)}")
                     continue
             
-            # Veritabanını kaydet
-            if self.camp_day_id:
-                db_path = f"./models/{self.camp_day_id}/face_database.pkl"
-                os.makedirs(f"./models/{self.camp_day_id}", exist_ok=True)
-                with open(db_path, 'wb') as f:
-                    pickle.dump(current_database, f)
-                # Global model'e de ekle
-                camp_day_models[self.camp_day_id] = current_database
-            else:
-                # Eski sistem için uyumluluk
-                with open(CONFIG['FACE_DATABASE_PATH'], 'wb') as f:
-                    pickle.dump(current_database, f)
+            if total_faces == 0:
+                self.error.emit("Hiç yüz tespit edilemedi")
+                return
             
-            self.finished.emit(current_database)
+            # Model dosyalarını kaydet
+            self.progress.emit("Model kaydediliyor...", 90)
+            
+            model_dir = f"./models/{self.model_id}"
+            os.makedirs(model_dir, exist_ok=True)
+            
+            # Face database'i kaydet
+            model_file = os.path.join(model_dir, "face_database.pkl")
+            with open(model_file, 'wb') as f:
+                pickle.dump(face_database, f)
+            
+            # Model bilgilerini kaydet
+            model_info = {
+                'name': self.model_name,
+                'date': datetime.now().isoformat(),
+                'face_count': total_faces,
+                'photo_count': len(face_database),
+                'model_path': model_file
+            }
+            
+            info_file = os.path.join(model_dir, "model_info.json")
+            with open(info_file, 'w', encoding='utf-8') as f:
+                json.dump(model_info, f, ensure_ascii=False, indent=2)
+            
+            self.progress.emit("Model başarıyla eğitildi", 100)
+            self.finished.emit(self.model_id, model_info)
             
         except Exception as e:
-            self.error.emit(f"Analiz hatası: {str(e)}")
+            self.error.emit(f"Model eğitimi hatası: {str(e)}")
 
 class PhotoMatchingWorker(QThread):
     """Fotoğraf eşleştirme worker thread'i"""
@@ -323,33 +265,38 @@ class PhotoMatchingWorker(QThread):
     finished = pyqtSignal(str, list)  # tc_number, matched_photos
     error = pyqtSignal(str, str)  # tc_number, error_message
     
-    def __init__(self, tc_number, reference_embeddings, email, selected_camp_days=None):
+    def __init__(self, tc_number, reference_embeddings, email, selected_models):
         super().__init__()
         self.tc_number = tc_number
         self.reference_embeddings = reference_embeddings
         self.email = email
-        self.selected_camp_days = selected_camp_days or []
+        self.selected_models = selected_models
     
     def run(self):
         try:
-            self.progress.emit(f"Eşleştirme başlıyor - {self.tc_number}", 0, self.tc_number)
+            self.progress.emit(f"Eşleştirme başlıyor", 0, self.tc_number)
             
             matched_photos = []
             total_photos = 0
             processed = 0
             
-            # Seçilen kamp günlerindeki tüm fotoğrafları birleştir
+            # Seçilen modellerdeki tüm fotoğrafları birleştir
             all_photos = {}
-            if self.selected_camp_days:
-                for camp_day_id in self.selected_camp_days:
-                    if camp_day_id in camp_day_models:
-                        for photo_path, photo_data in camp_day_models[camp_day_id].items():
+            for model_id in self.selected_models:
+                model_file = f"./models/{model_id}/face_database.pkl"
+                if os.path.exists(model_file):
+                    try:
+                        with open(model_file, 'rb') as f:
+                            model_data = pickle.load(f)
+                        for photo_path, photo_data in model_data.items():
                             all_photos[photo_path] = photo_data
-                        self.progress.emit(f"Kamp günü yüklendi: {camp_day_id}", 0, self.tc_number)
+                        self.progress.emit(f"Model yüklendi: {model_id}", 0, self.tc_number)
+                    except Exception as e:
+                        print(f"Model yükleme hatası - {model_id}: {str(e)}")
             
             total_photos = len(all_photos)
             if total_photos == 0:
-                self.error.emit(self.tc_number, "Seçilen kamp günlerinde fotoğraf bulunamadı")
+                self.error.emit(self.tc_number, "Seçilen modellerde fotoğraf bulunamadı")
                 return
             
             for photo_path, photo_data in all_photos.items():
@@ -367,7 +314,7 @@ class PhotoMatchingWorker(QThread):
                                     'similarity': float(similarity),
                                     'bbox': face_data['bbox']
                                 })
-                                break  # Bu fotoğraf için eşleşme bulundu
+                                break
                     
                     processed += 1
                     progress = int((processed / total_photos) * 100)
@@ -428,17 +375,17 @@ class EmailSender(QThread):
             msg['Subject'] = f"AK Parti Gençlik Kolları Kamp Fotoğraflarınız - {self.tc_number}"
             
             body = f"""
-            Sayın Katılımcımız,
-            
-            AK Parti Gençlik Kolları İrade, İstikamet ve İstişare Kampı fotoğraflarınız hazır!
-            
-            Tespit edilen fotoğraf sayısı: {len(self.matched_photos)}
-            TC Kimlik No: {self.tc_number}
-            
-            Fotoğraflarınız ekte ZIP dosyası olarak gönderilmiştir.
-            
-            Saygılarımızla,
-            AK Parti Gençlik Kolları Genel Sekreterliği
+Sayın Katılımcımız,
+
+AK Parti Gençlik Kolları İrade, İstikamet ve İstişare Kampı fotoğraflarınız hazır!
+
+Tespit edilen fotoğraf sayısı: {len(self.matched_photos)}
+TC Kimlik No: {self.tc_number}
+
+Fotoğraflarınız ekte ZIP dosyası olarak gönderilmiştir.
+
+Saygılarımızla,
+AK Parti Gençlik Kolları Genel Sekreterliği
             """
             
             msg.attach(MIMEText(body, 'plain', 'utf-8'))
@@ -486,8 +433,7 @@ class PythonAPIServer:
             return jsonify({
                 'status': 'healthy',
                 'timestamp': datetime.now().isoformat(),
-                'face_database_ready': len(camp_day_models) > 0,
-                'available_camp_days': len(available_camp_days),
+                'trained_models': len(trained_models),
                 'api_connection': api_connection_status['connected']
             })
         
@@ -498,52 +444,34 @@ class PythonAPIServer:
                 tc_number = data.get('tcNumber')
                 email = data.get('email')
                 reference_photos = data.get('referencePhotos', [])
-                selected_camp_days = data.get('selectedCampDays', [])
+                selected_models = data.get('selectedModels', [])
                 
                 if not tc_number or not email:
                     return jsonify({'error': 'TC number and email required'}), 400
                 
-                if not selected_camp_days:
-                    return jsonify({'error': 'En az bir kamp günü seçmelisiniz'}), 400
+                if not selected_models:
+                    return jsonify({'error': 'En az bir model seçmelisiniz'}), 400
                 
-                # İsteği kuyruğa al
-                self.main_window.queue_photo_request({
+                # İsteği ana pencereye ilet
+                self.main_window.process_photo_request({
                     'tcNumber': tc_number,
                     'email': email,
                     'referencePhotos': reference_photos,
-                    'selectedCampDays': selected_camp_days,
+                    'selectedModels': selected_models,
                     'timestamp': datetime.now().isoformat()
                 })
                 
                 return jsonify({
-                    'message': 'Request queued successfully',
+                    'message': 'Request received successfully',
                     'tcNumber': tc_number
                 })
                 
-            except Exception as e:
-                return jsonify({'error': str(e)}), 500
-        
-        @self.app.route('/api/request-status/<tc_number>', methods=['GET'])
-        def get_request_status(tc_number):
-            try:
-                with request_lock:
-                    if tc_number in current_requests:
-                        request_data = current_requests[tc_number]
-                        return jsonify({
-                            'status': request_data.get('status', 'unknown'),
-                            'progress': request_data.get('progress', 0),
-                            'startTime': request_data.get('start_time', '').isoformat() if request_data.get('start_time') else None,
-                            'message': request_data.get('message', '')
-                        })
-                    else:
-                        return jsonify({'status': 'not_found'}), 404
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
     
     def start_server(self):
         """API server'ı başlat"""
         try:
-            # Thread'de çalıştır ki GUI bloklanmasın
             server_thread = Thread(
                 target=lambda: self.app.run(
                     host='0.0.0.0', 
@@ -557,714 +485,734 @@ class PythonAPIServer:
         except Exception as e:
             print(f"API Server başlatma hatası: {str(e)}")
 
-class MainWindow(QMainWindow):
-    """Ana pencere sınıfı - AK Parti stili arayüz"""
+class ModelTrainingSection(QWidget):
+    """Model Eğitimi Bölümü"""
     
     def __init__(self):
         super().__init__()
-        self.processed_requests_count = 0
-        self.init_face_analysis()
         self.setup_ui()
-        self.setup_api_monitoring()
-        self.load_face_database()
-        self.load_camp_day_models()
-        
-        # Python API Server'ı başlat
-        self.api_server = PythonAPIServer(self)
-        self.api_server.start_server()
-        
-        # İlk yükleme
-        QTimer.singleShot(2000, self.initial_setup)  # 2 saniye sonra başlat
-    
-    def init_face_analysis(self):
-        """Face analysis modelini başlat"""
-        global face_app
-        try:
-            ctx_id = 0 if torch.cuda.is_available() else -1
-            providers = ['CUDAExecutionProvider', 'CPUExecutionProvider'] if ctx_id >= 0 else ['CPUExecutionProvider']
-            
-            face_app = FaceAnalysis(name='buffalo_l', providers=providers)
-            face_app.prepare(ctx_id=ctx_id, det_size=(640, 640))
-            
-            print(f"Face Analysis başlatıldı - Device: {'GPU' if ctx_id >= 0 else 'CPU'}")
-            
-        except Exception as e:
-            print(f"Face Analysis başlatma hatası: {str(e)}")
-            face_app = None
+        self.refresh_models()
     
     def setup_ui(self):
-        """Kullanıcı arayüzü kurulumu - AK Parti stili - Basitleştirilmiş"""
-        self.setWindowTitle("AK Parti Gençlik Kolları - Kamp Fotoğraf Sistemi")
-        self.setGeometry(100, 100, 1400, 900)
-        self.setWindowIcon(QIcon("./assets/akparti_icon.png"))
-        
-        # Ana widget
-        central_widget = QWidget()
-        central_widget.setStyleSheet(f"background-color: {AK_COLORS['LIGHT_GRAY']};")
-        self.setCentralWidget(central_widget)
-        
-        # Ana layout - Dikey
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setSpacing(0)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Başlık çubuğu
-        header = self.create_header()
-        main_layout.addWidget(header)
-        
-        # İçerik alanı - Yatay
-        content_widget = QWidget()
-        content_layout = QHBoxLayout(content_widget)
-        content_layout.setSpacing(16)
-        content_layout.setContentsMargins(16, 16, 16, 16)
-        
-        # Sol panel - Temizlenmiş kontroller
-        left_panel = self.create_simplified_control_panel()
-        content_layout.addWidget(left_panel, 1)
-        
-        # Sağ panel - Monitoring
-        right_panel = self.create_monitoring_panel()
-        content_layout.addWidget(right_panel, 2)
-        
-        main_layout.addWidget(content_widget)
-    
-    def create_header(self):
-        """AK Parti stili başlık çubuğu"""
-        header = QFrame()
-        header.setFixedHeight(80)
-        header.setStyleSheet(f"""
-            QFrame {{
-                background: linear-gradient(135deg, {AK_COLORS['YELLOW']} 0%, {AK_COLORS['BLUE']} 100%);
-                border: none;
-                border-bottom: 3px solid {AK_COLORS['YELLOW_DARK']};
-            }}
-        """)
-        
-        layout = QHBoxLayout(header)
-        layout.setContentsMargins(20, 10, 20, 10)
-        
-        # Logo ve başlık container'ı
-        title_container = QWidget()
-        title_container_layout = QVBoxLayout(title_container)
-        title_container_layout.setContentsMargins(0, 0, 0, 0)
-        title_container_layout.setSpacing(0)
-        
-        # Ana başlık
-        title = QLabel("🏛️ AK Parti Gençlik Kolları")
-        title.setFont(QFont("Arial", 18, QFont.Bold))
-        title.setStyleSheet("color: white; font-weight: bold;")
-        title_container_layout.addWidget(title)
-        
-        # Alt başlık
-        subtitle = QLabel("Kamp Fotoğraf Yüz Tanıma Sistemi")
-        subtitle.setFont(QFont("Arial", 12))
-        subtitle.setStyleSheet("color: white; margin-top: 5px;")
-        title_container_layout.addWidget(subtitle)
-        
-        layout.addWidget(title_container)
-        layout.addStretch()
-        
-        # Sağ taraf - API durum indikatörü
-        self.header_api_status = QLabel("🔄 Bağlantı kontrol ediliyor...")
-        self.header_api_status.setFont(QFont("Arial", 10))
-        self.header_api_status.setStyleSheet("color: white; padding: 5px;")
-        layout.addWidget(self.header_api_status)
-        
-        return header
-    
-    def create_simplified_control_panel(self):
-        """Basitleştirilmiş sol kontrol paneli"""
-        panel = StyledWidget.create_card_frame()
-        layout = QVBoxLayout(panel)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
         
         # Başlık
-        title = QLabel("🎯 Sistem Kontrol Paneli")
-        title.setFont(QFont("Arial", 16, QFont.Bold))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title = QLabel("Model Eğitimi")
+        title.setFont(QFont("Segoe UI", 18, QFont.Bold))
+        title.setStyleSheet(f"color: {AK_COLORS['BLUE']}; margin-bottom: 10px;")
         layout.addWidget(title)
         
-        # API Bağlantı Durumu - Üstte ve net
-        api_group = QGroupBox("🌐 Web API Bağlantı Durumu")
-        api_layout = QVBoxLayout(api_group)
-        
-        self.api_status_label = QLabel("🔄 Bağlantı kontrol ediliyor...")
-        self.api_status_label.setFont(QFont("Arial", 12, QFont.Bold))
-        api_layout.addWidget(self.api_status_label)
-        
-        # Bağlantı test butonu
-        test_connection_btn = QPushButton("🔄 Bağlantıyı Test Et")
-        StyledWidget.style_button(test_connection_btn, 'secondary')
-        test_connection_btn.clicked.connect(self.test_api_connection_ui)
-        api_layout.addWidget(test_connection_btn)
-        
-        layout.addWidget(api_group)
-        
-        # Kamp Günleri - Net gösterim
-        camp_days_group = QGroupBox("📅 Mevcut Kamp Günleri")
-        camp_days_layout = QVBoxLayout(camp_days_group)
-        
-        # Durum etiketi
-        self.camp_status_label = QLabel("📊 Kamp günleri yükleniyor...")
-        self.camp_status_label.setFont(QFont("Arial", 10))
-        camp_days_layout.addWidget(self.camp_status_label)
-        
-        # Kamp günleri listesi
-        self.camp_days_list = QListWidget()
-        self.camp_days_list.setMaximumHeight(150)
-        self.camp_days_list.setStyleSheet(f"""
-            QListWidget {{
-                border: 1px solid {AK_COLORS['GRAY']};
+        # Yeni model eğitimi grubu
+        train_group = QGroupBox("Yeni Model Eğit")
+        train_group.setStyleSheet(f"""
+            QGroupBox {{
+                font-weight: bold;
+                border: 2px solid {AK_COLORS['GRAY']};
                 border-radius: 8px;
-                background-color: white;
-                padding: 5px;
-                font-size: 12px;
+                margin-top: 10px;
+                padding-top: 10px;
             }}
-            QListWidget::item {{
-                padding: 8px;
-                margin: 2px;
-                border-radius: 6px;
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 10px 0 10px;
             }}
-            QListWidget::item:selected {{
+        """)
+        train_layout = QVBoxLayout(train_group)
+        
+        # Model adı
+        self.model_name_input = QTextEdit()
+        self.model_name_input.setMaximumHeight(60)
+        self.model_name_input.setPlaceholderText("Model adını girin (örn: 1. Gün - Açılış)")
+        self.model_name_input.setStyleSheet("border: 1px solid #ddd; border-radius: 4px; padding: 8px;")
+        train_layout.addWidget(QLabel("Model Adı:"))
+        train_layout.addWidget(self.model_name_input)
+        
+        # Fotoğraf klasörü seçimi
+        folder_layout = QHBoxLayout()
+        self.folder_path_label = QLabel("Fotoğraf klasörü seçilmedi")
+        self.folder_path_label.setStyleSheet("color: #666; font-style: italic;")
+        self.select_folder_btn = QPushButton("Klasör Seç")
+        self.select_folder_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {AK_COLORS['BLUE']};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #1565C0;
+            }}
+        """)
+        self.select_folder_btn.clicked.connect(self.select_folder)
+        
+        folder_layout.addWidget(self.folder_path_label, 1)
+        folder_layout.addWidget(self.select_folder_btn)
+        train_layout.addWidget(QLabel("Fotoğraf Klasörü:"))
+        train_layout.addLayout(folder_layout)
+        
+        # Eğitim butonu
+        self.train_btn = QPushButton("Model Eğit")
+        self.train_btn.setStyleSheet(f"""
+            QPushButton {{
                 background-color: {AK_COLORS['YELLOW']};
                 color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 12px;
+                font-size: 14px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #D97706;
+            }}
+            QPushButton:disabled {{
+                background-color: #ddd;
+                color: #999;
             }}
         """)
-        camp_days_layout.addWidget(self.camp_days_list)
+        self.train_btn.clicked.connect(self.start_training)
+        train_layout.addWidget(self.train_btn)
         
-        # Yenileme butonu
-        refresh_camp_days_btn = QPushButton("🔄 Kamp Günlerini Yenile")
-        StyledWidget.style_button(refresh_camp_days_btn, 'primary')
-        refresh_camp_days_btn.clicked.connect(self.fetch_camp_days_ui)
-        camp_days_layout.addWidget(refresh_camp_days_btn)
+        # İlerleme çubuğu
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                border: 1px solid {AK_COLORS['GRAY']};
+                border-radius: 4px;
+                text-align: center;
+            }}
+            QProgressBar::chunk {{
+                background-color: {AK_COLORS['SUCCESS']};
+                border-radius: 3px;
+            }}
+        """)
+        train_layout.addWidget(self.progress_bar)
         
-        layout.addWidget(camp_days_group)
+        layout.addWidget(train_group)
         
-        # Fotoğraf Veritabanı Yönetimi
-        db_group = QGroupBox("📁 Fotoğraf Veritabanı")
-        db_layout = QVBoxLayout(db_group)
+        # Eğitilmiş modeller listesi
+        models_group = QGroupBox("Eğitilmiş Modeller")
+        models_group.setStyleSheet(f"""
+            QGroupBox {{
+                font-weight: bold;
+                border: 2px solid {AK_COLORS['GRAY']};
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 10px 0 10px;
+            }}
+        """)
+        models_layout = QVBoxLayout(models_group)
         
-        self.db_path_label = QLabel("Klasör: Henüz seçilmedi")
-        self.db_path_label.setWordWrap(True)
-        self.db_path_label.setFont(QFont("Arial", 9))
-        db_layout.addWidget(self.db_path_label)
+        # Modeller tablosu
+        self.models_table = QTableWidget()
+        self.models_table.setColumnCount(4)
+        self.models_table.setHorizontalHeaderLabels(["Model Adı", "Eğitim Tarihi", "Yüz Sayısı", "İşlemler"])
+        header = self.models_table.horizontalHeader()
+        if header:
+            header.setStretchLastSection(True)
+        self.models_table.setAlternatingRowColors(True)
+        self.models_table.setStyleSheet("""
+            QTableWidget {
+                gridline-color: #ddd;
+                background-color: white;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+            QTableWidget::item {
+                padding: 8px;
+                border-bottom: 1px solid #eee;
+            }
+            QTableWidget::item:selected {
+                background-color: #e3f2fd;
+            }
+            QHeaderView::section {
+                background-color: #f5f5f5;
+                padding: 8px;
+                border: none;
+                border-bottom: 2px solid #ddd;
+                font-weight: bold;
+            }
+        """)
+        models_layout.addWidget(self.models_table)
         
-        select_folder_btn = QPushButton("📂 Fotoğraf Klasörü Seç")
-        StyledWidget.style_button(select_folder_btn, 'outline')
-        select_folder_btn.clicked.connect(self.select_photo_folder)
-        db_layout.addWidget(select_folder_btn)
+        # Senkronizasyon butonu
+        self.sync_btn = QPushButton("Modelleri Web'e Senkronize Et")
+        self.sync_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {AK_COLORS['BLUE']};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 10px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #1565C0;
+            }}
+        """)
+        self.sync_btn.clicked.connect(self.sync_models)
+        models_layout.addWidget(self.sync_btn)
         
-        self.analyze_btn = QPushButton("🔍 Analizi Başlat")
-        StyledWidget.style_button(self.analyze_btn, 'success')
-        self.analyze_btn.clicked.connect(self.start_analysis)
-        self.analyze_btn.setEnabled(False)
-        db_layout.addWidget(self.analyze_btn)
+        layout.addWidget(models_group)
         
-        self.analysis_progress = QProgressBar()
-        self.analysis_progress.setVisible(False)
-        db_layout.addWidget(self.analysis_progress)
-        
-        self.analysis_status = QLabel("")
-        self.analysis_status.setWordWrap(True)
-        self.analysis_status.setFont(QFont("Arial", 9))
-        db_layout.addWidget(self.analysis_status)
-        
-        layout.addWidget(db_group)
-        
-        # Sistem İstatistikleri - Kompakt
-        stats_group = QGroupBox("📊 Sistem İstatistikleri")
-        stats_layout = QVBoxLayout(stats_group)
-        
-        self.face_count_label = QLabel("👤 Tespit edilen yüz: 0")
-        self.face_count_label.setFont(QFont("Arial", 10))
-        stats_layout.addWidget(self.face_count_label)
-        
-        self.photo_count_label = QLabel("📷 Toplam fotoğraf: 0")
-        self.photo_count_label.setFont(QFont("Arial", 10))
-        stats_layout.addWidget(self.photo_count_label)
-        
-        self.processed_requests_label = QLabel("✅ İşlenen talep: 0")
-        self.processed_requests_label.setFont(QFont("Arial", 10))
-        stats_layout.addWidget(self.processed_requests_label)
-        
-        layout.addWidget(stats_group)
-        
+        # Alt kısma boşluk ekle
         layout.addStretch()
-        return panel
+        
+        self.selected_folder = None
     
-    def create_monitoring_panel(self):
-        """Sağ monitoring paneli"""
-        panel = StyledWidget.create_card_frame()
-        layout = QVBoxLayout(panel)
-        
-        # Başlık
-        title = QLabel("📈 İşlem Monitörü")
-        title.setFont(QFont("Arial", 16, QFont.Bold))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
-        
-        # Tab widget
-        self.tabs = QTabWidget()
-        
-        # Aktif talepler tab'ı
-        self.active_requests_tab = self.create_active_requests_tab()
-        self.tabs.addTab(self.active_requests_tab, "🔄 Aktif Talepler")
-        
-        # Geçmiş tab'ı
-        self.history_tab = self.create_history_tab()
-        self.tabs.addTab(self.history_tab, "📋 Geçmiş")
-        
-        # Log tab'ı
-        self.log_tab = self.create_log_tab()
-        self.tabs.addTab(self.log_tab, "📝 Sistem Logları")
-        
-        layout.addWidget(self.tabs)
-        
-        return panel
-    
-    def create_active_requests_tab(self):
-        """Aktif talepler tab'ı"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        
-        # Tablo
-        self.active_table = QTableWidget(0, 5)
-        self.active_table.setHorizontalHeaderLabels([
-            "TC No", "E-posta", "Durum", "İlerleme", "Başlama Saati"
-        ])
-        header = self.active_table.horizontalHeader()
-        if header:
-            header.setStretchLastSection(True)
-        layout.addWidget(self.active_table)
-        
-        return widget
-    
-    def create_history_tab(self):
-        """Geçmiş tab'ı"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        
-        # Tablo
-        self.history_table = QTableWidget(0, 6)
-        self.history_table.setHorizontalHeaderLabels([
-            "TC No", "E-posta", "Durum", "Eşleşme Sayısı", "Başlama", "Bitiş"
-        ])
-        header = self.history_table.horizontalHeader()
-        if header:
-            header.setStretchLastSection(True)
-        layout.addWidget(self.history_table)
-        
-        return widget
-    
-    def create_log_tab(self):
-        """Log tab'ı"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        
-        # Log text area
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        self.log_text.setFont(QFont("Consolas", 9))
-        layout.addWidget(self.log_text)
-        
-        # Clear butonu
-        clear_btn = QPushButton("🗑️ Logları Temizle")
-        StyledWidget.style_button(clear_btn, 'warning')
-        clear_btn.clicked.connect(self.log_text.clear)
-        layout.addWidget(clear_btn)
-        
-        return widget
-    
-    def setup_api_monitoring(self):
-        """API monitoring kurulumu - Basitleştirilmiş"""
-        # Sadece kamp günleri için timer
-        self.camp_days_timer = QTimer()
-        self.camp_days_timer.timeout.connect(self.fetch_camp_days_ui)
-        self.camp_days_timer.start(60000)  # 60 saniyede bir güncelle
-        
-        # API test için ayrı timer - daha seyrek
-        self.api_timer = QTimer()
-        self.api_timer.timeout.connect(self.test_api_connection_ui)
-        self.api_timer.start(30000)  # 30 saniyede bir test et
-    
-    def test_api_connection_ui(self):
-        """UI için API bağlantı testi - Basitleştirilmiş"""
-        try:
-            success = test_api_connection()
-            if success:
-                status_text = "🟢 Web API Bağlı ve Hazır"
-                self.header_api_status.setText(status_text)
-                self.api_status_label.setText(status_text)
-                self.log("Web API bağlantısı başarılı")
-            else:
-                status_text = "🔴 Web API Bağlantı Sorunu"
-                self.header_api_status.setText(status_text)
-                self.api_status_label.setText(status_text)
-                self.log("Web API bağlantısı başarısız")
-        except Exception as e:
-            error_text = f"🔴 Bağlantı Hatası"
-            self.header_api_status.setText(error_text)
-            self.api_status_label.setText(error_text)
-            self.log(f"API bağlantı hatası: {str(e)}")
-    
-    def fetch_camp_days_ui(self):
-        """UI için kamp günlerini çek"""
-        try:
-            success = fetch_camp_days_from_api()
-            if success:
-                self.update_camp_days_list()
-                self.log(f"Kamp günleri güncellendi: {len(available_camp_days)} gün")
-            else:
-                self.log("Kamp günleri yüklenemedi")
-                self.update_camp_days_list()  # Boş listeyi güncelle
-        except Exception as e:
-            self.log(f"Kamp günleri yükleme hatası: {str(e)}")
-            self.update_camp_days_list()  # Boş listeyi güncelle
-    
-    def update_camp_days_list(self):
-        """Kamp günleri listesini güncelle"""
-        try:
-            self.camp_days_list.clear()
-            
-            if not available_camp_days:
-                # Boş durum - Net mesaj
-                item = QListWidgetItem("📭 Henüz kamp günü eklenmemiş")
-                item.setData(Qt.ItemDataRole.UserRole, None)
-                item.setFont(QFont("Arial", 10, QFont.Italic))
-                self.camp_days_list.addItem(item)
-                self.camp_status_label.setText("⚠️ Web sunucusunda kamp günü bulunamadı")
-                return
-            
-            # Mevcut kamp günlerini listele
-            for camp_day in available_camp_days:
-                camp_id = camp_day.get('id', 'unknown')
-                camp_name = camp_day.get('name', f'Kamp Günü {camp_id[:8]}')
-                camp_date = camp_day.get('date', 'Tarih bilinmiyor')
-                
-                item_text = f"📅 {camp_name} ({camp_date})"
-                item = QListWidgetItem(item_text)
-                item.setData(Qt.ItemDataRole.UserRole, camp_id)
-                
-                # Model durumunu kontrol et
-                if camp_id in camp_day_models:
-                    item.setToolTip(f"✅ Model hazır: {len(camp_day_models[camp_id])} fotoğraf")
-                else:
-                    item.setToolTip("⚠️ Model yüklenmemiş")
-                
-                self.camp_days_list.addItem(item)
-            
-            # Durum güncelle
-            model_count = len(camp_day_models)
-            total_camps = len(available_camp_days)
-            self.camp_status_label.setText(f"✅ {len(available_camp_days)} kamp günü mevcut | {model_count}/{total_camps} model hazır")
-            
-        except Exception as e:
-            self.log(f"Kamp günleri liste güncelleme hatası: {str(e)}")
-            self.camp_status_label.setText("❌ Liste güncelleme hatası")
-    
-    def initial_setup(self):
-        """İlk kurulum işlemleri"""
-        self.test_api_connection_ui()
-        self.fetch_camp_days_ui()
-        self.log("🚀 AK Parti Fotoğraf Sistemi başlatıldı ve hazır!")
-    
-    def log(self, message):
-        """Log mesajı ekle"""
-        try:
-            if hasattr(self, 'log_text') and self.log_text:
-                timestamp = datetime.now().strftime("%H:%M:%S")
-                self.log_text.append(f"[{timestamp}] {message}")
-                # Scroll to bottom
-                cursor = self.log_text.textCursor()
-                cursor.movePosition(cursor.End)
-                self.log_text.setTextCursor(cursor)
-            else:
-                print(f"Log: {message}")
-        except Exception as e:
-            print(f"Log hatası: {e} - Mesaj: {message}")
-    
-    def select_photo_folder(self):
+    def select_folder(self):
         """Fotoğraf klasörü seç"""
         folder = QFileDialog.getExistingDirectory(self, "Fotoğraf Klasörü Seçin")
         if folder:
-            self.photo_folder = folder
-            self.db_path_label.setText(f"Klasör: {folder}")
-            self.analyze_btn.setEnabled(True)
-            self.log(f"📁 Fotoğraf klasörü seçildi: {folder}")
+            self.selected_folder = folder
+            self.folder_path_label.setText(f"Seçili: {folder}")
+            self.folder_path_label.setStyleSheet("color: #333;")
     
-    def start_analysis(self):
-        """Fotoğraf analizi başlat"""
-        if not hasattr(self, 'photo_folder'):
-            QMessageBox.warning(self, "Uyarı", "Önce bir fotoğraf klasörü seçin!")
+    def start_training(self):
+        """Model eğitimini başlat"""
+        model_name = self.model_name_input.toPlainText().strip()
+        if not model_name:
+            QMessageBox.warning(self, "Uyarı", "Lütfen model adını girin")
             return
         
-        self.log("🔍 Fotoğraf analizi başlatılıyor...")
-        self.analysis_progress.setVisible(True)
-        self.analyze_btn.setEnabled(False)
+        if not self.selected_folder:
+            QMessageBox.warning(self, "Uyarı", "Lütfen fotoğraf klasörünü seçin")
+            return
+        
+        # Model ID oluştur
+        model_id = f"model_{int(time.time())}"
+        
+        # UI'yi güncelle
+        self.train_btn.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
         
         # Worker thread başlat
-        self.analysis_worker = FaceAnalysisWorker(self.photo_folder)
-        self.analysis_worker.progress.connect(self.update_analysis_progress)
-        self.analysis_worker.finished.connect(self.analysis_finished)
-        self.analysis_worker.error.connect(self.analysis_error)
-        self.analysis_worker.start()
+        self.training_worker = ModelTrainingWorker(model_id, model_name, self.selected_folder)
+        self.training_worker.progress.connect(self.update_training_progress)
+        self.training_worker.finished.connect(self.training_finished)
+        self.training_worker.error.connect(self.training_error)
+        self.training_worker.start()
     
-    def update_analysis_progress(self, message, progress):
-        """Analiz ilerlemesini güncelle"""
-        self.analysis_status.setText(message)
-        self.analysis_progress.setValue(progress)
-        self.log(f"İlerleme: {progress}% - {message}")
+    def update_training_progress(self, message, percentage):
+        """Eğitim ilerlemesini güncelle"""
+        self.progress_bar.setValue(percentage)
+        self.progress_bar.setFormat(f"{message} ({percentage}%)")
     
-    def analysis_finished(self, result):
-        """Analiz tamamlandı"""
-        self.analysis_progress.setVisible(False)
-        self.analyze_btn.setEnabled(True)
+    def training_finished(self, model_id, model_info):
+        """Eğitim tamamlandı"""
+        global trained_models
+        trained_models[model_id] = model_info
         
-        face_count = sum(len(data.get('faces', [])) for data in result.values())
-        photo_count = len(result)
+        self.train_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        self.model_name_input.clear()
+        self.selected_folder = None
+        self.folder_path_label.setText("Fotoğraf klasörü seçilmedi")
+        self.folder_path_label.setStyleSheet("color: #666; font-style: italic;")
         
-        self.face_count_label.setText(f"👤 Tespit edilen yüz: {face_count}")
-        self.photo_count_label.setText(f"📷 Toplam fotoğraf: {photo_count}")
+        self.refresh_models()
+        QMessageBox.information(self, "Başarılı", f"Model başarıyla eğitildi!\n\nYüz sayısı: {model_info['face_count']}\nFotoğraf sayısı: {model_info['photo_count']}")
+    
+    def training_error(self, error_message):
+        """Eğitim hatası"""
+        self.train_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        QMessageBox.critical(self, "Hata", f"Model eğitimi başarısız:\n{error_message}")
+    
+    def refresh_models(self):
+        """Modeller tablosunu yenile"""
+        self.models_table.setRowCount(len(trained_models))
         
-        self.log(f"✅ Analiz tamamlandı! {photo_count} fotoğraf, {face_count} yüz tespit edildi")
-        
-        QMessageBox.information(self, "Başarılı", 
-                               f"Analiz tamamlandı!\n\n"
-                               f"📷 Fotoğraf: {photo_count}\n"
-                               f"👤 Yüz: {face_count}")
-    
-    def analysis_error(self, error):
-        """Analiz hatası"""
-        self.analysis_progress.setVisible(False)
-        self.analyze_btn.setEnabled(True)
-        self.log(f"❌ Analiz hatası: {error}")
-        QMessageBox.critical(self, "Hata", f"Analiz sırasında hata oluştu:\n{error}")
-    
-    def load_face_database(self):
-        """Yüz veritabanını yükle"""
-        try:
-            if os.path.exists(CONFIG['FACE_DATABASE_PATH']):
-                with open(CONFIG['FACE_DATABASE_PATH'], 'rb') as f:
-                    global face_database
-                    face_database = pickle.load(f)
-                self.log(f"📚 Yüz veritabanı yüklendi: {len(face_database)} kayıt")
-            else:
-                self.log("📂 Yüz veritabanı bulunamadı, yeni oluşturulacak")
-        except Exception as e:
-            self.log(f"❌ Yüz veritabanı yükleme hatası: {str(e)}")
-    
-    def load_camp_day_models(self):
-        """Kamp günü modellerini yükle"""
-        try:
-            models_dir = "./models"
-            if os.path.exists(models_dir):
-                for camp_day_dir in os.listdir(models_dir):
-                    model_path = os.path.join(models_dir, camp_day_dir, "face_database.pkl")
-                    if os.path.exists(model_path):
-                        with open(model_path, 'rb') as f:
-                            camp_day_models[camp_day_dir] = pickle.load(f)
-                self.log(f"🧠 Kamp günü modelleri yüklendi: {len(camp_day_models)} model")
-            else:
-                self.log("📁 Model dizini bulunamadı")
-        except Exception as e:
-            self.log(f"❌ Kamp günü modelleri yükleme hatası: {str(e)}")
-    
-    def add_active_request(self, tc_number, email, status):
-        """Aktif talep tablosuna ekle"""
-        try:
-            row = self.active_table.rowCount()
-            self.active_table.insertRow(row)
+        for row, (model_id, model_info) in enumerate(trained_models.items()):
+            # Model adı
+            self.models_table.setItem(row, 0, QTableWidgetItem(model_info['name']))
             
-            self.active_table.setItem(row, 0, QTableWidgetItem(tc_number))
-            self.active_table.setItem(row, 1, QTableWidgetItem(email))
-            self.active_table.setItem(row, 2, QTableWidgetItem(status))
-            self.active_table.setItem(row, 3, QTableWidgetItem("0%"))
-            self.active_table.setItem(row, 4, QTableWidgetItem(datetime.now().strftime("%H:%M:%S")))
-        except Exception as e:
-            self.log(f"❌ Aktif talep ekleme hatası: {str(e)}")
+            # Eğitim tarihi
+            date_obj = datetime.fromisoformat(model_info['date'])
+            date_str = date_obj.strftime("%d.%m.%Y %H:%M")
+            self.models_table.setItem(row, 1, QTableWidgetItem(date_str))
+            
+            # Yüz sayısı
+            self.models_table.setItem(row, 2, QTableWidgetItem(str(model_info['face_count'])))
+            
+            # İşlemler butonu
+            delete_btn = QPushButton("Sil")
+            delete_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {AK_COLORS['ERROR']};
+                    color: white;
+                    border: none;
+                    border-radius: 3px;
+                    padding: 4px 8px;
+                    font-size: 12px;
+                }}
+                QPushButton:hover {{
+                    background-color: #DC2626;
+                }}
+            """)
+            delete_btn.clicked.connect(lambda checked, mid=model_id: self.delete_model(mid))
+            self.models_table.setCellWidget(row, 3, delete_btn)
     
-    def queue_photo_request(self, request_data):
-        """Fotoğraf isteğini kuyruğa al"""
+    def delete_model(self, model_id):
+        """Model sil"""
+        reply = QMessageBox.question(self, "Model Sil", 
+                                   f"'{trained_models[model_id]['name']}' modelini silmek istediğinizden emin misiniz?",
+                                   QMessageBox.Yes | QMessageBox.No)
+        
+        if reply == QMessageBox.Yes:
+            try:
+                # Model klasörünü sil
+                model_dir = f"./models/{model_id}"
+                if os.path.exists(model_dir):
+                    shutil.rmtree(model_dir)
+                
+                # Global listeden sil
+                del trained_models[model_id]
+                
+                self.refresh_models()
+                QMessageBox.information(self, "Başarılı", "Model başarıyla silindi")
+            except Exception as e:
+                QMessageBox.critical(self, "Hata", f"Model silinirken hata oluştu:\n{str(e)}")
+    
+    def sync_models(self):
+        """Modelleri web'e senkronize et"""
+        if not trained_models:
+            QMessageBox.warning(self, "Uyarı", "Senkronize edilecek model bulunamadı")
+            return
+        
+        if sync_models_to_web():
+            QMessageBox.information(self, "Başarılı", f"{len(trained_models)} model web API'ye başarıyla senkronize edildi")
+        else:
+            QMessageBox.critical(self, "Hata", "Model senkronizasyonu başarısız. Web API bağlantısını kontrol edin.")
+
+class RequestProcessingSection(QWidget):
+    """İstek İşleme Bölümü"""
+    
+    def __init__(self):
+        super().__init__()
+        self.setup_ui()
+        self.active_workers = {}
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        # Başlık
+        title = QLabel("İstek İşleme")
+        title.setFont(QFont("Segoe UI", 18, QFont.Bold))
+        title.setStyleSheet(f"color: {AK_COLORS['BLUE']}; margin-bottom: 10px;")
+        layout.addWidget(title)
+        
+        # API durum bilgisi
+        status_frame = QFrame()
+        status_frame.setStyleSheet(f"""
+            QFrame {{
+                border: 1px solid {AK_COLORS['GRAY']};
+                border-radius: 8px;
+                background-color: {AK_COLORS['LIGHT_GRAY']};
+                padding: 10px;
+            }}
+        """)
+        status_layout = QHBoxLayout(status_frame)
+        
+        self.api_status_label = QLabel("API Durumu Kontrol Ediliyor...")
+        self.api_status_label.setFont(QFont("Segoe UI", 12))
+        status_layout.addWidget(self.api_status_label)
+        
+        self.refresh_btn = QPushButton("Yenile")
+        self.refresh_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {AK_COLORS['BLUE']};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #1565C0;
+            }}
+        """)
+        self.refresh_btn.clicked.connect(self.check_api_status)
+        status_layout.addWidget(self.refresh_btn)
+        
+        layout.addWidget(status_frame)
+        
+        # İşlem durumu
+        processing_group = QGroupBox("Aktif İşlemler")
+        processing_group.setStyleSheet(f"""
+            QGroupBox {{
+                font-weight: bold;
+                border: 2px solid {AK_COLORS['GRAY']};
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 10px 0 10px;
+            }}
+        """)
+        processing_layout = QVBoxLayout(processing_group)
+        
+        # İşlemler tablosu
+        self.requests_table = QTableWidget()
+        self.requests_table.setColumnCount(5)
+        self.requests_table.setHorizontalHeaderLabels(["TC No", "E-posta", "Durum", "İlerleme", "Tarih"])
+        header = self.requests_table.horizontalHeader()
+        if header:
+            header.setStretchLastSection(True)
+        self.requests_table.setAlternatingRowColors(True)
+        self.requests_table.setStyleSheet("""
+            QTableWidget {
+                gridline-color: #ddd;
+                background-color: white;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+            QTableWidget::item {
+                padding: 8px;
+                border-bottom: 1px solid #eee;
+            }
+            QTableWidget::item:selected {
+                background-color: #e3f2fd;
+            }
+            QHeaderView::section {
+                background-color: #f5f5f5;
+                padding: 8px;
+                border: none;
+                border-bottom: 2px solid #ddd;
+                font-weight: bold;
+            }
+        """)
+        processing_layout.addWidget(self.requests_table)
+        
+        layout.addWidget(processing_group)
+        
+        # İstatistikler
+        stats_group = QGroupBox("İstatistikler")
+        stats_group.setStyleSheet(f"""
+            QGroupBox {{
+                font-weight: bold;
+                border: 2px solid {AK_COLORS['GRAY']};
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 10px 0 10px;
+            }}
+        """)
+        stats_layout = QHBoxLayout(stats_group)
+        
+        self.total_requests_label = QLabel("Toplam İstek: 0")
+        self.completed_requests_label = QLabel("Tamamlanan: 0")
+        self.failed_requests_label = QLabel("Başarısız: 0")
+        
+        for label in [self.total_requests_label, self.completed_requests_label, self.failed_requests_label]:
+            label.setFont(QFont("Segoe UI", 12))
+            label.setStyleSheet("padding: 5px;")
+            stats_layout.addWidget(label)
+        
+        layout.addWidget(stats_group)
+        
+        # Alt kısma boşluk ekle
+        layout.addStretch()
+        
+        # API durumunu kontrol et
+        self.check_api_status()
+    
+    def check_api_status(self):
+        """API bağlantı durumunu kontrol et"""
+        if test_api_connection():
+            self.api_status_label.setText("✅ Web API Bağlantısı Aktif")
+            self.api_status_label.setStyleSheet(f"color: {AK_COLORS['SUCCESS']};")
+        else:
+            self.api_status_label.setText("❌ Web API Bağlantısı Yok")
+            self.api_status_label.setStyleSheet(f"color: {AK_COLORS['ERROR']};")
+    
+    def process_photo_request(self, request_data):
+        """Fotoğraf işleme isteğini başlat"""
         tc_number = request_data['tcNumber']
         
-        with request_lock:
-            if tc_number not in current_requests:
-                self.log(f"📥 Yeni fotoğraf talebi alındı: {tc_number}")
-                self.start_photo_matching(request_data)
-    
-    def start_photo_matching(self, request_data):
-        """Fotoğraf eşleştirmeyi başlat"""
-        tc_number = request_data['tcNumber']
-        email = request_data['email']
-        reference_photos = request_data.get('referencePhotos', [])
-        selected_camp_days = request_data.get('selectedCampDays', [])
+        # İsteği tabloya ekle
+        row = self.requests_table.rowCount()
+        self.requests_table.insertRow(row)
         
+        self.requests_table.setItem(row, 0, QTableWidgetItem(tc_number))
+        self.requests_table.setItem(row, 1, QTableWidgetItem(request_data['email']))
+        self.requests_table.setItem(row, 2, QTableWidgetItem("Başlıyor..."))
+        
+        progress_bar = QProgressBar()
+        progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                border: 1px solid {AK_COLORS['GRAY']};
+                border-radius: 4px;
+                text-align: center;
+            }}
+            QProgressBar::chunk {{
+                background-color: {AK_COLORS['YELLOW']};
+                border-radius: 3px;
+            }}
+        """)
+        self.requests_table.setCellWidget(row, 3, progress_bar)
+        
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.requests_table.setItem(row, 4, QTableWidgetItem(timestamp))
+        
+        # İşlemi başlat
+        self.start_photo_matching(tc_number, request_data, progress_bar, row)
+    
+    def start_photo_matching(self, tc_number, request_data, progress_bar, table_row):
+        """Fotoğraf eşleştirme işlemini başlat"""
         try:
-            # Referans fotoğrafları işle ve embedding'leri oluştur
+            # Referans fotoğrafları işle
             reference_embeddings = []
-            
-            self.log(f"📷 Referans fotoğrafları işleniyor: {len(reference_photos)} adet")
-            self.log(f"📅 Seçilen kamp günleri: {selected_camp_days}")
-            
-            for photo_data in reference_photos:
+            for photo_b64 in request_data['referencePhotos']:
                 try:
-                    # Base64 format: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ..."
-                    if photo_data.startswith('data:image'):
-                        # Base64'ü decode et
-                        header, encoded = photo_data.split(',', 1)
-                        image_data = base64.b64decode(encoded)
-                        nparr = np.frombuffer(image_data, np.uint8)
-                        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                        
-                        if img is not None and face_app is not None:
-                            # Yüzleri tespit et
-                            faces = face_app.get(img)
-                            if faces:
-                                # İlk yüzün embedding'ini al
-                                reference_embeddings.append(faces[0].embedding)
-                                self.log(f"✅ Embedding oluşturuldu: {len(faces)} yüz tespit edildi")
-                            else:
-                                self.log("⚠️ Referans fotoğrafında yüz tespit edilemedi")
-                        else:
-                            self.log("❌ Fotoğraf işlenemedi veya Face API hazır değil")
-                    else:
-                        self.log("❌ Geçersiz fotoğraf formatı")
+                    # Base64'ten resme çevir
+                    image_data = base64.b64decode(photo_b64.split(',')[1])  # data:image/jpeg;base64,... formatından
+                    nparr = np.frombuffer(image_data, np.uint8)
+                    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    
+                    # Yüz tespiti
+                    faces = face_app.get(img) if face_app else None
+                    if faces:
+                        for face in faces:
+                            reference_embeddings.append(face.embedding)
                 except Exception as e:
-                    self.log(f"❌ Referans fotoğraf işleme hatası: {str(e)}")
-                    continue
+                    print(f"Referans fotoğraf işleme hatası: {str(e)}")
             
             if not reference_embeddings:
-                self.log("❌ Hiç geçerli referans embedding'i oluşturulamadı")
+                self.requests_table.setItem(table_row, 2, QTableWidgetItem("Hata: Yüz tespit edilemedi"))
                 return
             
-            # Worker thread'i başlat
-            worker = PhotoMatchingWorker(tc_number, reference_embeddings, email, selected_camp_days)
-            worker.progress.connect(self.update_matching_progress)
-            worker.finished.connect(self.on_matching_finished)
-            worker.error.connect(self.on_matching_error)
-            worker.start()
+            # Eşleştirme worker'ını başlat
+            matching_worker = PhotoMatchingWorker(
+                tc_number, 
+                reference_embeddings, 
+                request_data['email'], 
+                request_data['selectedModels']
+            )
             
-            # Tabloya ekle
-            self.add_active_request(tc_number, email, "Eşleştirme başlıyor...")
+            matching_worker.progress.connect(
+                lambda msg, pct, tc: self.update_matching_progress(tc, msg, pct, progress_bar, table_row)
+            )
+            matching_worker.finished.connect(
+                lambda tc, photos: self.matching_finished(tc, photos, table_row)
+            )
+            matching_worker.error.connect(
+                lambda tc, error: self.matching_error(tc, error, table_row)
+            )
             
-            with request_lock:
-                current_requests[tc_number] = {
-                    'worker': worker,
-                    'start_time': datetime.now(),
-                    'status': 'matching',
-                    'progress': 0,
-                    'message': 'Eşleştirme başlıyor...',
-                    'email': email
-                }
-                
+            self.active_workers[tc_number] = matching_worker
+            matching_worker.start()
+            
         except Exception as e:
-            self.log(f"❌ Eşleştirme başlatma hatası - {tc_number}: {str(e)}")
+            self.requests_table.setItem(table_row, 2, QTableWidgetItem(f"Hata: {str(e)}"))
     
-    def update_matching_progress(self, message, progress, tc_number):
+    def update_matching_progress(self, tc_number, message, percentage, progress_bar, table_row):
         """Eşleştirme ilerlemesini güncelle"""
-        self.log(f"📊 {tc_number}: {message} ({progress}%)")
-        
-        with request_lock:
-            if tc_number in current_requests:
-                current_requests[tc_number]['progress'] = progress
-                current_requests[tc_number]['message'] = message
+        progress_bar.setValue(percentage)
+        self.requests_table.setItem(table_row, 2, QTableWidgetItem(message))
     
-    def on_matching_finished(self, tc_number, matched_photos):
-        """Eşleştirme tamamlandı - E-posta gönder"""
-        self.log(f"✅ {tc_number}: Eşleştirme tamamlandı - {len(matched_photos)} fotoğraf bulundu")
+    def matching_finished(self, tc_number, matched_photos, table_row):
+        """Eşleştirme tamamlandı - E-posta göndermeye başla"""
+        if not matched_photos:
+            self.requests_table.setItem(table_row, 2, QTableWidgetItem("Eşleşme bulunamadı"))
+            return
         
-        with request_lock:
-            if tc_number in current_requests:
-                request_data = current_requests[tc_number]
-                email = request_data['email']
-                
-                # E-posta gönderme worker'ı başlat
-                email_worker = EmailSender(tc_number, email, matched_photos)
-                email_worker.progress.connect(self.update_email_progress)
-                email_worker.finished.connect(self.on_email_finished)
-                email_worker.start()
-                
-                # Durumu güncelle
-                current_requests[tc_number]['status'] = 'sending_email'
-                current_requests[tc_number]['message'] = 'E-posta hazırlanıyor...'
-                current_requests[tc_number]['matched_count'] = len(matched_photos)
-    
-    def on_matching_error(self, tc_number, error_message):
-        """Eşleştirme hatası"""
-        self.log(f"❌ {tc_number}: Eşleştirme hatası - {error_message}")
+        self.requests_table.setItem(table_row, 2, QTableWidgetItem(f"{len(matched_photos)} fotoğraf bulundu - E-posta gönderiliyor"))
         
-        with request_lock:
-            if tc_number in current_requests:
-                current_requests[tc_number]['status'] = 'error'
-                current_requests[tc_number]['message'] = error_message
+        # E-posta worker'ını başlat
+        email = None
+        # Worker'dan email'i al
+        for tc, worker in self.active_workers.items():
+            if tc == tc_number:
+                email = worker.email
+                break
+        
+        if not email:
+            self.requests_table.setItem(table_row, 2, QTableWidgetItem("❌ E-posta adresi bulunamadı"))
+            return
+        
+        email_worker = EmailSender(tc_number, email, matched_photos)
+        email_worker.progress.connect(
+            lambda tc, msg: self.update_email_progress(tc, msg, table_row)
+        )
+        email_worker.finished.connect(
+            lambda tc, success: self.email_finished(tc, success, table_row)
+        )
+        
+        email_worker.start()
     
-    def update_email_progress(self, tc_number, message):
+    def update_email_progress(self, tc_number, message, table_row):
         """E-posta gönderme ilerlemesini güncelle"""
-        self.log(f"📧 {tc_number}: {message}")
-        
-        with request_lock:
-            if tc_number in current_requests:
-                current_requests[tc_number]['message'] = message
+        self.requests_table.setItem(table_row, 2, QTableWidgetItem(message))
     
-    def on_email_finished(self, tc_number, success):
-        """E-posta gönderme tamamlandı"""
+    def email_finished(self, tc_number, success, table_row):
+        """E-posta gönderimi tamamlandı"""
         if success:
-            self.log(f"✅ {tc_number}: E-posta başarıyla gönderildi")
-            status = 'completed'
-            message = 'E-posta gönderildi'
+            self.requests_table.setItem(table_row, 2, QTableWidgetItem("✅ Tamamlandı"))
+            progress_bar = self.requests_table.cellWidget(table_row, 3)
+            if progress_bar:
+                progress_bar.setValue(100)
         else:
-            self.log(f"❌ {tc_number}: E-posta gönderme hatası")
-            status = 'email_error'
-            message = 'E-posta gönderme hatası'
+            self.requests_table.setItem(table_row, 2, QTableWidgetItem("❌ E-posta hatası"))
         
-        with request_lock:
-            if tc_number in current_requests:
-                request_data = current_requests[tc_number]
-                
-                # Geçmiş tablosuna ekle
-                self.add_to_history(
-                    tc_number,
-                    request_data.get('email', ''),
-                    status,
-                    request_data.get('matched_count', 0),
-                    request_data.get('start_time'),
-                    datetime.now()
-                )
-                
-                # Aktif isteklerden kaldır
-                del current_requests[tc_number]
-                
-                # İstatistikleri güncelle
-                if success:
-                    self.processed_requests_count += 1
-                    self.processed_requests_label.setText(f"✅ İşlenen talep: {self.processed_requests_count}")
+        # Worker'ı temizle
+        if tc_number in self.active_workers:
+            del self.active_workers[tc_number]
     
-    def add_to_history(self, tc_number, email, status, match_count, start_time, end_time):
-        """Geçmiş tablosuna ekle"""
-        try:
-            row = self.history_table.rowCount()
-            self.history_table.insertRow(row)
-            
-            self.history_table.setItem(row, 0, QTableWidgetItem(tc_number))
-            self.history_table.setItem(row, 1, QTableWidgetItem(email))
-            self.history_table.setItem(row, 2, QTableWidgetItem(status))
-            self.history_table.setItem(row, 3, QTableWidgetItem(str(match_count)))
-            self.history_table.setItem(row, 4, QTableWidgetItem(start_time.strftime("%H:%M:%S") if start_time else "-"))
-            self.history_table.setItem(row, 5, QTableWidgetItem(end_time.strftime("%H:%M:%S") if end_time else "-"))
-        except Exception as e:
-            self.log(f"❌ Geçmiş ekleme hatası: {str(e)}")
+    def matching_error(self, tc_number, error_message, table_row):
+        """Eşleştirme hatası"""
+        self.requests_table.setItem(table_row, 2, QTableWidgetItem(f"❌ Hata: {error_message}"))
+        
+        # Worker'ı temizle
+        if tc_number in self.active_workers:
+            del self.active_workers[tc_number]
+
+class MainWindow(QMainWindow):
+    """Ana pencere - İki bölümlü tasarım"""
+    
+    def __init__(self):
+        super().__init__()
+        self.setup_ui()
+        self.setup_api_server()
+        
+        # Otomatik API kontrol timer'ı
+        self.api_timer = QTimer()
+        self.api_timer.timeout.connect(self.periodic_api_check)
+        self.api_timer.start(30000)  # 30 saniyede bir kontrol
+    
+    def setup_ui(self):
+        """Ana arayüzü kur"""
+        self.setWindowTitle("AK Parti Gençlik Kolları - Kamp Fotoğraf Sistemi")
+        self.setMinimumSize(1400, 800)
+        
+        # Merkezi widget
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        # Ana layout - yatay bölünmüş
+        main_layout = QHBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(1)
+        
+        # Splitter - iki bölüm
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #ddd;
+                width: 2px;
+            }
+            QSplitter::handle:hover {
+                background-color: #bbb;
+            }
+        """)
+        
+        # Sol bölüm - Model Eğitimi
+        self.training_section = ModelTrainingSection()
+        training_frame = QFrame()
+        training_frame.setStyleSheet(f"""
+            QFrame {{
+                background-color: {AK_COLORS['WHITE']};
+                border-right: 1px solid #ddd;
+            }}
+        """)
+        training_layout = QVBoxLayout(training_frame)
+        training_layout.setContentsMargins(0, 0, 0, 0)
+        training_layout.addWidget(self.training_section)
+        
+        # Sağ bölüm - İstek İşleme
+        self.processing_section = RequestProcessingSection()
+        processing_frame = QFrame()
+        processing_frame.setStyleSheet(f"""
+            QFrame {{
+                background-color: {AK_COLORS['WHITE']};
+            }}
+        """)
+        processing_layout = QVBoxLayout(processing_frame)
+        processing_layout.setContentsMargins(0, 0, 0, 0)
+        processing_layout.addWidget(self.processing_section)
+        
+        # Splitter'a ekle
+        splitter.addWidget(training_frame)
+        splitter.addWidget(processing_frame)
+        splitter.setSizes([700, 700])  # Eşit boyutlarda başlat
+        
+        main_layout.addWidget(splitter)
+        
+        # Pencereyi maksimize et
+        self.showMaximized()
+    
+    def setup_api_server(self):
+        """Python API server'ını kur"""
+        self.api_server = PythonAPIServer(self)
+        self.api_server.start_server()
+    
+    def process_photo_request(self, request_data):
+        """Web'den gelen fotoğraf işleme isteğini karşıla"""
+        self.processing_section.process_photo_request(request_data)
+    
+    def periodic_api_check(self):
+        """Periyodik API durumu kontrolü"""
+        self.processing_section.check_api_status()
 
 def main():
     """Ana fonksiyon"""
     app = QApplication(sys.argv)
     
-    # AK Parti tema uygula
-    StyledWidget.apply_ak_theme(app)
+    # AK Parti temasını uygula
+    app.setStyle('Fusion')
+    palette = QPalette()
+    palette.setColor(QPalette.Window, QColor(255, 255, 255))
+    palette.setColor(QPalette.WindowText, QColor(31, 41, 55))
+    palette.setColor(QPalette.Base, QColor(255, 255, 255))
+    palette.setColor(QPalette.AlternateBase, QColor(249, 250, 251))
+    palette.setColor(QPalette.ToolTipBase, QColor(255, 255, 255))
+    palette.setColor(QPalette.ToolTipText, QColor(31, 41, 55))
+    palette.setColor(QPalette.Text, QColor(31, 41, 55))
+    palette.setColor(QPalette.Button, QColor(255, 255, 255))
+    palette.setColor(QPalette.ButtonText, QColor(31, 41, 55))
+    palette.setColor(QPalette.BrightText, QColor(239, 68, 68))
+    palette.setColor(QPalette.Link, QColor(30, 136, 229))
+    palette.setColor(QPalette.Highlight, QColor(245, 158, 11))
+    palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+    app.setPalette(palette)
     
-    # Ana pencereyi oluştur
+    # Font ayarla
+    font = QFont("Segoe UI", 10)
+    app.setFont(font)
+    
+    # Yüz analizi sistemini başlat
+    if not init_face_analysis():
+        QMessageBox.critical(None, "Hata", "Yüz analizi sistemi başlatılamadı!")
+        sys.exit(1)
+    
+    # Eğitilmiş modelleri yükle
+    load_trained_models()
+    
+    # Ana pencereyi göster
     window = MainWindow()
     window.show()
     
-    # Uygulamayı başlat
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
