@@ -43,18 +43,19 @@ from insightface.app import FaceAnalysis
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-# Konfigürasyon
+# Konfigürasyon - Çevre değişkenlerinden alınabilir
 CONFIG = {
-    'WEB_API_URL': 'http://localhost:5000',  # Replit web API URL
+    'WEB_API_URL': os.getenv('WEB_API_URL', 'https://your-replit-app.replit.app'),  # Replit web API URL
+    'PYTHON_API_PORT': int(os.getenv('PYTHON_API_PORT', 8080)),  # Python API portu
     'PHOTO_DATABASE_PATH': './kamp_fotograflari',
     'USER_UPLOADS_PATH': './kullanici_yukleme',
     'FACE_DATABASE_PATH': './yuz_veritabani.pkl',
-    'EMAIL_FROM': 'kamp@akparti.org.tr',
-    'EMAIL_PASSWORD': 'your_email_password',
-    'SMTP_SERVER': 'smtp.gmail.com',
-    'SMTP_PORT': 587,
-    'SIMILARITY_THRESHOLD': 0.6,
-    'MAX_CONCURRENT_REQUESTS': 3
+    'EMAIL_FROM': os.getenv('EMAIL_FROM', 'kamp@akparti.org.tr'),
+    'EMAIL_PASSWORD': os.getenv('EMAIL_PASSWORD', 'your_email_password'),
+    'SMTP_SERVER': os.getenv('SMTP_SERVER', 'smtp.gmail.com'),
+    'SMTP_PORT': int(os.getenv('SMTP_PORT', 587)),
+    'SIMILARITY_THRESHOLD': float(os.getenv('SIMILARITY_THRESHOLD', '0.6')),
+    'MAX_CONCURRENT_REQUESTS': int(os.getenv('MAX_CONCURRENT_REQUESTS', '3'))
 }
 
 # Global değişkenler
@@ -340,6 +341,86 @@ class EmailSender(QThread):
             self.finished.emit(self.tc_number, False)
             print(f"E-posta gönderme hatası: {str(e)}")
 
+class PythonAPIServer:
+    """Python API Server - Web'den gelen istekleri karşılar"""
+    
+    def __init__(self, main_window):
+        self.main_window = main_window
+        self.app = Flask(__name__)
+        self.setup_routes()
+    
+    def setup_routes(self):
+        """API rotalarını kur"""
+        
+        @self.app.route('/api/health', methods=['GET'])
+        def health_check():
+            return jsonify({
+                'status': 'healthy',
+                'timestamp': datetime.now().isoformat(),
+                'face_database_ready': len(face_database) > 0
+            })
+        
+        @self.app.route('/api/process-photo-request', methods=['POST'])
+        def process_photo_request():
+            try:
+                data = request.get_json()
+                tc_number = data.get('tcNumber')
+                email = data.get('email')
+                reference_photos = data.get('referencePhotos', [])
+                
+                if not tc_number or not email:
+                    return jsonify({'error': 'TC number and email required'}), 400
+                
+                # İsteği kuyruğa al
+                self.main_window.queue_photo_request({
+                    'tcNumber': tc_number,
+                    'email': email,
+                    'referencePhotos': reference_photos,
+                    'timestamp': datetime.now().isoformat()
+                })
+                
+                return jsonify({
+                    'message': 'Request queued successfully',
+                    'tcNumber': tc_number
+                })
+                
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        
+        @self.app.route('/api/request-status/<tc_number>', methods=['GET'])
+        def get_request_status(tc_number):
+            try:
+                with request_lock:
+                    if tc_number in current_requests:
+                        request_data = current_requests[tc_number]
+                        return jsonify({
+                            'status': request_data.get('status', 'unknown'),
+                            'progress': request_data.get('progress', 0),
+                            'startTime': request_data.get('start_time', '').isoformat() if request_data.get('start_time') else None,
+                            'message': request_data.get('message', '')
+                        })
+                    else:
+                        return jsonify({'status': 'not_found'}), 404
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+    
+    def start_server(self):
+        """API server'ı başlat"""
+        try:
+            # Thread'de çalıştır ki GUI bloklanmasın
+            server_thread = Thread(
+                target=lambda: self.app.run(
+                    host='0.0.0.0', 
+                    port=CONFIG['PYTHON_API_PORT'], 
+                    debug=False
+                ),
+                daemon=True
+            )
+            server_thread.start()
+            print(f"Python API Server başlatıldı - Port: {CONFIG['PYTHON_API_PORT']}")
+        except Exception as e:
+            print(f"API Server başlatma hatası: {str(e)}")
+
 class MainWindow(QMainWindow):
     """Ana pencere sınıfı"""
     
@@ -349,6 +430,10 @@ class MainWindow(QMainWindow):
         self.setup_ui()
         self.setup_api_monitoring()
         self.load_face_database()
+        
+        # Python API Server'ı başlat
+        self.api_server = PythonAPIServer(self)
+        self.api_server.start_server()
     
     def init_face_analysis(self):
         """Face analysis modelini başlat"""
@@ -551,16 +636,18 @@ class MainWindow(QMainWindow):
         while True:
             try:
                 # Web API'ye ping at
-                response = requests.get(f"{CONFIG['WEB_API_URL']}/api/photo-requests/queue", timeout=3)
+                response = requests.get(f"{CONFIG['WEB_API_URL']}/api/photo-requests/queue", 
+                                      timeout=10,
+                                      headers={'Content-Type': 'application/json'})
                 if response.status_code == 200:
                     self.api_status_label.setText("🟢 Web API bağlı")
                     
                     # Bekleyen talepleri kontrol et
                     queue_data = response.json()
-                    if queue_data:
+                    if queue_data and len(queue_data) > 0:
                         self.process_api_requests(queue_data)
                 else:
-                    self.api_status_label.setText("🟡 API erişim sorunu")
+                    self.api_status_label.setText(f"🟡 API erişim sorunu (HTTP {response.status_code})")
                     
             except Exception as e:
                 self.api_status_label.setText("🔴 API bağlantı yok")
@@ -582,13 +669,20 @@ class MainWindow(QMainWindow):
         """Fotoğraf eşleştirmeyi başlat"""
         tc_number = request_data['tcNumber']
         email = request_data['email']
+        reference_photos = request_data.get('referencePhotos', [])
         
         try:
-            # Kullanıcının referans fotoğraflarını indir ve işle
-            # Bu kısım web API'den referans fotoğrafların embedding'lerini alacak
-            # Şimdilik mock data kullanıyoruz
+            # Referans fotoğrafları işle ve embedding'leri oluştur
+            reference_embeddings = []
             
-            reference_embeddings = []  # API'den gelecek
+            self.log(f"Referans fotoğrafları işleniyor: {len(reference_photos)} adet")
+            
+            for photo_data in reference_photos:
+                # Base64 veya URL'den fotoğrafı işle
+                # Bu kısımda gerçek embedding oluşturulacak
+                # Şimdilik mock embedding
+                mock_embedding = np.random.rand(512).astype(np.float32)
+                reference_embeddings.append(mock_embedding)
             
             # Worker thread'i başlat
             worker = PhotoMatchingWorker(tc_number, reference_embeddings, email)
@@ -604,11 +698,28 @@ class MainWindow(QMainWindow):
                 current_requests[tc_number] = {
                     'worker': worker,
                     'start_time': datetime.now(),
-                    'status': 'matching'
+                    'status': 'matching',
+                    'progress': 0,
+                    'message': 'Eşleştirme başlıyor...'
                 }
                 
         except Exception as e:
             self.log(f"Eşleştirme başlatma hatası - {tc_number}: {str(e)}")
+    
+    def queue_photo_request(self, request_data):
+        """Fotoğraf isteğini kuyruğa al"""
+        tc_number = request_data['tcNumber']
+        
+        # Zaten işlenmekte olan istek var mı?
+        with request_lock:
+            if tc_number in current_requests:
+                self.log(f"Zaten işlenmekte olan istek: {tc_number}")
+                return
+        
+        self.log(f"Yeni istek kuyruğa alındı: {tc_number}")
+        
+        # İsteği işleme al
+        self.start_photo_matching(request_data)
     
     def update_matching_progress(self, message, percentage, tc_number):
         """Eşleştirme ilerlemesini güncelle"""
