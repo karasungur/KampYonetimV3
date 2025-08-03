@@ -636,6 +636,54 @@ class MainWindow(QMainWindow):
         main_container_layout.addWidget(header)
         main_container_layout.addWidget(content_widget)
     
+    def create_header(self):
+        """AK Parti stili başlık çubuğu"""
+        header = QFrame()
+        header.setFixedHeight(80)
+        header.setStyleSheet(f"""
+            QFrame {{
+                background: linear-gradient(135deg, {AK_COLORS['YELLOW']} 0%, {AK_COLORS['BLUE']} 100%);
+                border: none;
+                border-bottom: 3px solid {AK_COLORS['YELLOW_DARK']};
+            }}
+        """)
+        
+        layout = QHBoxLayout(header)
+        layout.setContentsMargins(20, 10, 20, 10)
+        
+        # Logo ve başlık
+        title_layout = QHBoxLayout()
+        
+        # Ana başlık
+        title = QLabel("🏛️ AK Parti Gençlik Kolları")
+        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title.setStyleSheet(f"color: white; font-weight: bold;")
+        title_layout.addWidget(title)
+        
+        # Alt başlık
+        subtitle = QLabel("Kamp Fotoğraf Yüz Tanıma Sistemi")
+        subtitle.setFont(QFont("Arial", 12))
+        subtitle.setStyleSheet(f"color: white; margin-top: 5px;")
+        
+        # Başlık container'ı
+        title_container = QWidget()
+        title_container_layout = QVBoxLayout(title_container)
+        title_container_layout.setContentsMargins(0, 0, 0, 0)
+        title_container_layout.setSpacing(0)
+        title_container_layout.addWidget(title)
+        title_container_layout.addWidget(subtitle)
+        
+        layout.addWidget(title_container)
+        layout.addStretch()
+        
+        # Sağ taraf - API durum indikatörü
+        self.header_api_status = QLabel("🔴 Bağlantı kontrol ediliyor...")
+        self.header_api_status.setFont(QFont("Arial", 10))
+        self.header_api_status.setStyleSheet("color: white; padding: 5px;")
+        layout.addWidget(self.header_api_status)
+        
+        return header
+    
     def create_control_panel(self):
         """Sol kontrol paneli"""
         panel = StyledWidget.create_card_frame()
@@ -702,6 +750,44 @@ class MainWindow(QMainWindow):
         stats_layout.addWidget(self.processed_requests_label)
         
         layout.addWidget(stats_group)
+        
+        # Kamp günleri bölümü
+        camp_days_group = QGroupBox("📅 Kamp Günleri")
+        camp_days_layout = QVBoxLayout(camp_days_group)
+        
+        # Kamp günleri listesi
+        self.camp_days_list = QListWidget()
+        self.camp_days_list.setMaximumHeight(200)
+        self.camp_days_list.setStyleSheet(f"""
+            QListWidget {{
+                border: 1px solid {AK_COLORS['GRAY']};
+                border-radius: 8px;
+                background-color: white;
+                padding: 5px;
+            }}
+            QListWidget::item {{
+                padding: 8px;
+                margin: 2px;
+                border-radius: 6px;
+            }}
+            QListWidget::item:selected {{
+                background-color: {AK_COLORS['YELLOW']};
+                color: white;
+            }}
+        """)
+        camp_days_layout.addWidget(self.camp_days_list)
+        
+        # Model durumu
+        self.model_status_label = QLabel("🧠 Model durumu yükleniyor...")
+        camp_days_layout.addWidget(self.model_status_label)
+        
+        # Kamp günleri güncelleme butonu
+        refresh_camp_days_btn = QPushButton("🔄 Kamp Günlerini Yenile")
+        StyledWidget.style_button(refresh_camp_days_btn, 'secondary')
+        refresh_camp_days_btn.clicked.connect(self.fetch_camp_days_ui)
+        camp_days_layout.addWidget(refresh_camp_days_btn)
+        
+        layout.addWidget(camp_days_group)
         
         layout.addStretch()
         return panel
@@ -817,6 +903,157 @@ class MainWindow(QMainWindow):
                 self.api_status_label.setText("🔴 API bağlantı yok")
             
             time.sleep(10)  # 10 saniye bekle
+    
+    def test_api_connection_ui(self):
+        """UI için API bağlantı testi"""
+        try:
+            success = test_api_connection()
+            if success:
+                status_text = "🟢 Web API Bağlı"
+                if hasattr(self, 'header_api_status'):
+                    self.header_api_status.setText(status_text)
+                if hasattr(self, 'api_status_label'):
+                    self.api_status_label.setText(status_text)
+            else:
+                status_text = "🔴 Web API Bağlantı Yok"
+                if hasattr(self, 'header_api_status'):
+                    self.header_api_status.setText(status_text)
+                if hasattr(self, 'api_status_label'):
+                    self.api_status_label.setText(status_text)
+        except Exception as e:
+            error_text = f"🔴 Bağlantı Hatası: {str(e)[:30]}..."
+            if hasattr(self, 'header_api_status'):
+                self.header_api_status.setText(error_text)
+            if hasattr(self, 'api_status_label'):
+                self.api_status_label.setText(error_text)
+    
+    def fetch_camp_days_ui(self):
+        """UI için kamp günlerini çek"""
+        try:
+            success = fetch_camp_days_from_api()
+            if success:
+                self.update_camp_days_list()
+                self.log(f"Kamp günleri güncellendi: {len(available_camp_days)} gün")
+            else:
+                self.log("Kamp günleri yüklenemedi")
+        except Exception as e:
+            self.log(f"Kamp günleri yükleme hatası: {str(e)}")
+    
+    def initial_setup(self):
+        """İlk kurulum işlemleri"""
+        self.test_api_connection_ui()
+        self.fetch_camp_days_ui()
+        self.log("AK Parti Fotoğraf Sistemi başlatıldı ✅")
+    
+    def log(self, message):
+        """Log mesajı ekle"""
+        if hasattr(self, 'log_text'):
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            self.log_text.append(f"[{timestamp}] {message}")
+            # Scroll to bottom
+            cursor = self.log_text.textCursor()
+            cursor.movePosition(cursor.End)
+            self.log_text.setTextCursor(cursor)
+        else:
+            print(f"Log: {message}")
+    
+    def select_photo_folder(self):
+        """Fotoğraf klasörü seç"""
+        folder = QFileDialog.getExistingDirectory(self, "Fotoğraf Klasörü Seçin")
+        if folder:
+            self.photo_folder = folder
+            self.db_path_label.setText(f"Klasör: {folder}")
+            self.analyze_btn.setEnabled(True)
+            self.log(f"Fotoğraf klasörü seçildi: {folder}")
+    
+    def start_analysis(self):
+        """Fotoğraf analizi başlat"""
+        if not hasattr(self, 'photo_folder'):
+            QMessageBox.warning(self, "Uyarı", "Önce bir fotoğraf klasörü seçin!")
+            return
+        
+        self.log("Fotoğraf analizi başlatılıyor...")
+        self.analysis_progress.setVisible(True)
+        self.analyze_btn.setEnabled(False)
+        
+        # Worker thread başlat
+        self.analysis_worker = FaceAnalysisWorker(self.photo_folder)
+        self.analysis_worker.progress.connect(self.update_analysis_progress)
+        self.analysis_worker.finished.connect(self.analysis_finished)
+        self.analysis_worker.error.connect(self.analysis_error)
+        self.analysis_worker.start()
+    
+    def update_analysis_progress(self, message, progress):
+        """Analiz ilerlemesini güncelle"""
+        self.analysis_status.setText(message)
+        self.analysis_progress.setValue(progress)
+        self.log(f"İlerleme: {progress}% - {message}")
+    
+    def analysis_finished(self, result):
+        """Analiz tamamlandı"""
+        self.analysis_progress.setVisible(False)
+        self.analyze_btn.setEnabled(True)
+        
+        face_count = sum(len(data.get('faces', [])) for data in result.values())
+        photo_count = len(result)
+        
+        self.face_count_label.setText(f"Tespit edilen yüz: {face_count}")
+        self.photo_count_label.setText(f"Toplam fotoğraf: {photo_count}")
+        
+        self.log(f"Analiz tamamlandı! {photo_count} fotoğraf, {face_count} yüz tespit edildi")
+        
+        QMessageBox.information(self, "Başarılı", 
+                               f"Analiz tamamlandı!\n\n"
+                               f"📷 Fotoğraf: {photo_count}\n"
+                               f"👤 Yüz: {face_count}")
+    
+    def analysis_error(self, error):
+        """Analiz hatası"""
+        self.analysis_progress.setVisible(False)
+        self.analyze_btn.setEnabled(True)
+        self.log(f"Analiz hatası: {error}")
+        QMessageBox.critical(self, "Hata", f"Analiz sırasında hata oluştu:\n{error}")
+    
+    def check_api_status(self):
+        """API durum kontrolü (timer için)"""
+        pass  # Bu metod api_checker_worker tarafından hallediliyor
+    
+    def process_api_requests(self, queue_data):
+        """API'den gelen talepleri işle"""
+        try:
+            self.log(f"API'den {len(queue_data)} talep alındı")
+            # Burada talepleri işleyebilirsiniz
+        except Exception as e:
+            self.log(f"API talep işleme hatası: {str(e)}")
+    
+    def load_face_database(self):
+        """Yüz veritabanını yükle"""
+        try:
+            if os.path.exists(CONFIG['FACE_DATABASE_PATH']):
+                with open(CONFIG['FACE_DATABASE_PATH'], 'rb') as f:
+                    global face_database
+                    face_database = pickle.load(f)
+                self.log(f"Yüz veritabanı yüklendi: {len(face_database)} kayıt")
+            else:
+                self.log("Yüz veritabanı bulunamadı, yeni oluşturulacak")
+        except Exception as e:
+            self.log(f"Yüz veritabanı yükleme hatası: {str(e)}")
+    
+    def load_camp_day_models(self):
+        """Kamp günü modellerini yükle"""
+        try:
+            models_dir = "./models"
+            if os.path.exists(models_dir):
+                for camp_day_dir in os.listdir(models_dir):
+                    model_path = os.path.join(models_dir, camp_day_dir, "face_database.pkl")
+                    if os.path.exists(model_path):
+                        with open(model_path, 'rb') as f:
+                            camp_day_models[camp_day_dir] = pickle.load(f)
+                self.log(f"Kamp günü modelleri yüklendi: {len(camp_day_models)} model")
+            else:
+                self.log("Model dizini bulunamadı")
+        except Exception as e:
+            self.log(f"Kamp günü modelleri yükleme hatası: {str(e)}")
     
     def process_api_requests(self, queue_data):
         """API'den gelen talepleri işle"""
