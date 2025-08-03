@@ -762,6 +762,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Python GUI için photo request endpoint
+  app.get('/api/python/photo-requests', async (req, res) => {
+    try {
+      // Basit güvenlik kontrolü - sadece localhost'tan
+      const clientIP = req.ip || req.connection?.remoteAddress || 'unknown';
+      if (clientIP !== '127.0.0.1' && clientIP !== '::1' && !clientIP.includes('127.0.0.1')) {
+        // localhost olmayan IP'ler için temel auth kontrol
+        const authHeader = req.headers.authorization;
+        if (!authHeader || authHeader !== 'Bearer python-gui-token') {
+          return res.status(401).json({ message: 'Unauthorized' });
+        }
+      }
+      
+      const photoRequests = await storage.getAllPhotoRequests();
+      res.json(photoRequests);
+    } catch (error) {
+      console.error('Python photo requests error:', error);
+      res.status(500).json({ message: 'Photo requests alınamadı' });
+    }
+  });
+
   // Table management routes (genelsekreterlik only)
   app.post('/api/tables', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
     try {

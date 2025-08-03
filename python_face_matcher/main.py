@@ -19,6 +19,7 @@ import requests
 from datetime import datetime
 from threading import Thread, Lock
 import queue
+import urllib.parse
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -1325,12 +1326,14 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setup_ui()
-        self.setup_api_server()
+        self.setup_database_connection()
         
-        # Otomatik API kontrol timer'ı
-        self.api_timer = QTimer()
-        self.api_timer.timeout.connect(self.periodic_api_check)
-        self.api_timer.start(30000)  # 30 saniyede bir kontrol
+        # Otomatik istek kontrol timer'ı
+        self.request_timer = QTimer()
+        self.request_timer.timeout.connect(self.check_new_requests)
+        self.request_timer.start(10000)  # 10 saniyede bir kontrol
+        
+        self.processed_requests = set()  # İşlenmiş istekleri takip et
     
     def setup_ui(self):
         """Ana arayüzü kur"""
@@ -1393,18 +1396,48 @@ class MainWindow(QMainWindow):
         # Pencereyi maksimize et
         self.showMaximized()
     
-    def setup_api_server(self):
-        """Python API server'ını kur"""
-        self.api_server = PythonAPIServer(self)
-        self.api_server.start_server()
+    def setup_database_connection(self):
+        """Veritabanı bağlantısını kur"""
+        # Web API'den veritabanı bilgilerini al
+        self.db_config = {
+            'web_api_url': CONFIG.get('WEB_API_URL', 'http://localhost:5000')
+        }
+        print(f"📊 Veritabanı bağlantısı kuruldu: {self.db_config['web_api_url']}")
     
     def process_photo_request(self, request_data):
-        """Web'den gelen fotoğraf işleme isteğini karşıla"""
+        """Fotoğraf işleme isteğini işle"""
         self.processing_section.process_photo_request(request_data)
     
-    def periodic_api_check(self):
-        """Periyodik API durumu kontrolü"""
-        self.processing_section.check_api_status()
+    def check_new_requests(self):
+        """Yeni fotoğraf isteklerini kontrol et"""
+        try:
+            # Web API'den yeni istekleri al (Python GUI endpoint'i)
+            response = requests.get(f"{self.db_config['web_api_url']}/api/python/photo-requests", timeout=5)
+            if response.status_code == 200:
+                requests_data = response.json()
+                
+                for request_item in requests_data:
+                    request_id = request_item['id']
+                    
+                    # Bu istek daha önce işlenmiş mi?
+                    if request_id not in self.processed_requests:
+                        self.processed_requests.add(request_id)
+                        
+                        # İsteği işleme kuyruğuna ekle
+                        photo_request = {
+                            'tcNumber': request_item['tcNumber'],
+                            'email': request_item['email'],
+                            'selectedModels': [],  # Kamp günlerinden çevirece
+                            'selectedCampDays': [],  # Kamp günleri bilgisini al
+                            'timestamp': request_item['createdAt'],
+                            'source': 'web_database'
+                        }
+                        
+                        print(f"✨ Yeni istek web veritabanından alındı: {request_item['tcNumber']}")
+                        self.process_photo_request(photo_request)
+                        
+        except Exception as e:
+            print(f"⚠️ Veritabanı kontrolü hatası: {str(e)}")
 
 # API server sınıfları kaldırıldı - sadece GUI kullanılacak
 
