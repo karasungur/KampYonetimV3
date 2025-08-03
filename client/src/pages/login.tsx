@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { LogIn } from "lucide-react";
+import { LogIn, ArrowLeft } from "lucide-react";
 import { useLocation } from "wouter";
 import akPartiLogo from "@assets/akpartilogo_1753719301210.png";
 import backgroundImage from "@assets/GK-KAMP LOGOTYPE -BACKROUND - Düzenlendi_1754227727579.png";
@@ -14,6 +14,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const { user, login, isLoggingIn } = useAuth();
   const [, navigate] = useLocation();
+  
+  const handleBack = () => {
+    navigate("/");
+  };
 
   // Giriş başarılı olduğunda ana sayfaya yönlendir
   useEffect(() => {
@@ -29,17 +33,29 @@ export default function LoginPage() {
 
   return (
     <div 
-      className="min-h-screen flex flex-col items-center justify-center bg-cover bg-center bg-no-repeat"
+      className="min-h-screen bg-cover bg-center bg-no-repeat flex flex-col"
       style={{ backgroundImage: `url(${backgroundImage})` }}
     >
-      {/* Logo doğrudan mavi arka plan üzerinde */}
-      <div className="mb-8">
-        <img 
-          src={akPartiLogo} 
-          alt="AK Parti" 
-          className="w-72 h-72 object-contain mx-auto"
-        />
+      {/* Geri Butonu */}
+      <div className="p-4">
+        <button
+          onClick={handleBack}
+          className="flex items-center gap-2 text-white hover:text-white/80 transition-colors bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg backdrop-blur-sm"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Geri
+        </button>
       </div>
+      
+      <div className="flex-1 flex flex-col items-center justify-center">
+        {/* Logo doğrudan mavi arka plan üzerinde */}
+        <div className="mb-8">
+          <img 
+            src={akPartiLogo} 
+            alt="AK Parti" 
+            className="w-72 h-72 object-contain mx-auto"
+          />
+        </div>
       
       <div className="max-w-md w-full mx-4">
         <Card className="shadow-2xl">
@@ -92,6 +108,7 @@ export default function LoginPage() {
             </form>
           </CardContent>
         </Card>
+        </div>
       </div>
     </div>
   );

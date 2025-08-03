@@ -13,7 +13,8 @@ import {
   Phone,
   ExternalLink,
   Construction,
-  ArrowLeft
+  ArrowLeft,
+  LogIn
 } from "lucide-react";
 import { 
   SiX, 
@@ -30,6 +31,7 @@ import { tr } from "date-fns/locale";
 import { useLocation } from "wouter";
 import backgroundImage from "@assets/GK-KAMP LOGOTYPE -BACKROUND - Düzenlendi_1754227727579.png";
 import akPartiLogo from "@assets/akpartilogo_1753719301210.png";
+import metinResmi from "@assets/metin_1754239817975.png";
 
 interface MenuSettings {
   moderatorLoginEnabled: boolean;
@@ -74,7 +76,7 @@ interface TeamMember {
   displayOrder: number;
 }
 
-type ActiveSection = 'program' | 'social' | 'team' | null;
+type ActiveSection = 'program' | 'social' | 'team' | 'login' | null;
 
 export default function MainMenuPage() {
   const [, navigate] = useLocation();
@@ -107,9 +109,6 @@ export default function MainMenuPage() {
     return null;
   }
 
-  const handleModeratorLogin = () => {
-    navigate("/login");
-  };
 
   const handlePhoneCall = (phoneNumber: string) => {
     window.location.href = `tel:${phoneNumber}`;
@@ -179,31 +178,25 @@ export default function MainMenuPage() {
         <img 
           src={akPartiLogo} 
           alt="AK Parti" 
-          className="w-48 h-48 md:w-56 md:h-56 mx-auto mb-6 object-contain"
+          className="w-72 h-72 mx-auto mb-6 object-contain"
         />
         
-        <h1 className="text-2xl md:text-3xl font-bold text-white mb-3">
-          {menuSettings?.mainTitle || "AK Parti Gençlik Kolları"}
-        </h1>
-        <h2 className="text-lg md:text-xl text-white/95 mb-4 font-semibold">
-          {menuSettings?.mainSlogan || "Milletin Gücüyle SINIRLARI AŞAN LİDERLİK"}
-        </h2>
-        <div className="text-sm text-white/80 mb-2">
-          {menuSettings?.campTitle || "İrade, İstikamet ve İstişare Kampı"}
-        </div>
-        <div className="text-xs text-white/70">
-          {menuSettings?.systemTitle || "Yönetim Sistemi"}
-        </div>
+        {/* Metin Resmi */}
+        <img 
+          src={metinResmi} 
+          alt="AK Parti Gençlik Kolları Genel Sekreterlik - Strateji ve İstişare Kampı" 
+          className="w-80 md:w-96 mx-auto mb-6 object-contain"
+        />
       </div>
 
       {/* Mobile Optimized Menu Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-w-sm md:max-w-md mx-auto mb-8 md:mb-0">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-w-xs md:max-w-sm mx-auto mb-4 md:mb-0">
         {/* Moderatör Girişi */}
         {menuSettings.moderatorLoginEnabled && (
-          <div className="aspect-square cursor-pointer" onClick={handleModeratorLogin}>
-            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-3 md:p-4">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-full flex items-center justify-center mb-2 md:mb-3">
-                <UserCheck className="w-5 h-5 md:w-6 md:h-6 text-white" />
+          <div className="aspect-square" onClick={() => handleSectionClick('login')}>
+            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-2 md:p-3 cursor-pointer group">
+              <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-500 rounded-full flex items-center justify-center mb-1 md:mb-2 group-hover:bg-orange-600 transition-colors">
+                <UserCheck className="w-4 h-4 md:w-5 md:h-5 text-white" />
               </div>
               <div className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {menuSettings.moderatorLoginTitle}
@@ -215,9 +208,9 @@ export default function MainMenuPage() {
         {/* Program Akışı */}
         {menuSettings.programFlowEnabled && (
           <div className="aspect-square" onClick={() => handleSectionClick('program')}>
-            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-3 md:p-4 cursor-pointer group">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-full flex items-center justify-center mb-2 md:mb-3 group-hover:bg-orange-600 transition-colors">
-                <Calendar className="w-5 h-5 md:w-6 md:h-6 text-white" />
+            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-2 md:p-3 cursor-pointer group">
+              <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-500 rounded-full flex items-center justify-center mb-1 md:mb-2 group-hover:bg-orange-600 transition-colors">
+                <Calendar className="w-4 h-4 md:w-5 md:h-5 text-white" />
               </div>
               <div className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {menuSettings.programFlowTitle}
@@ -229,9 +222,9 @@ export default function MainMenuPage() {
         {/* Fotoğraflar */}
         {menuSettings.photosEnabled && (
           <div className="aspect-square">
-            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-3 md:p-4 cursor-pointer group">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-full flex items-center justify-center mb-2 md:mb-3 group-hover:bg-orange-600 transition-colors">
-                <Camera className="w-5 h-5 md:w-6 md:h-6 text-white" />
+            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-2 md:p-3 cursor-pointer group">
+              <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-500 rounded-full flex items-center justify-center mb-1 md:mb-2 group-hover:bg-orange-600 transition-colors">
+                <Camera className="w-4 h-4 md:w-5 md:h-5 text-white" />
               </div>
               <div className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {menuSettings.photosTitle}
@@ -246,9 +239,9 @@ export default function MainMenuPage() {
         {/* Sosyal Medya */}
         {menuSettings.socialMediaEnabled && (
           <div className="aspect-square" onClick={() => handleSectionClick('social')}>
-            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-3 md:p-4 cursor-pointer group">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-full flex items-center justify-center mb-2 md:mb-3 group-hover:bg-orange-600 transition-colors">
-                <Share2 className="w-5 h-5 md:w-6 md:h-6 text-white" />
+            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-2 md:p-3 cursor-pointer group">
+              <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-500 rounded-full flex items-center justify-center mb-1 md:mb-2 group-hover:bg-orange-600 transition-colors">
+                <Share2 className="w-4 h-4 md:w-5 md:h-5 text-white" />
               </div>
               <div className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {menuSettings.socialMediaTitle}
@@ -260,9 +253,9 @@ export default function MainMenuPage() {
         {/* Ekibimiz */}
         {menuSettings.teamEnabled && (
           <div className="aspect-square" onClick={() => handleSectionClick('team')}>
-            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-3 md:p-4 cursor-pointer group">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-full flex items-center justify-center mb-2 md:mb-3 group-hover:bg-orange-600 transition-colors">
-                <Users className="w-5 h-5 md:w-6 md:h-6 text-white" />
+            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-2 md:p-3 cursor-pointer group">
+              <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-500 rounded-full flex items-center justify-center mb-1 md:mb-2 group-hover:bg-orange-600 transition-colors">
+                <Users className="w-4 h-4 md:w-5 md:h-5 text-white" />
               </div>
               <div className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {menuSettings.teamTitle}
@@ -288,10 +281,10 @@ export default function MainMenuPage() {
 
   return (
     <div 
-      className="min-h-screen p-4 bg-cover bg-center bg-no-repeat flex flex-col"
+      className="min-h-screen bg-cover bg-center bg-no-repeat flex flex-col"
       style={{ backgroundImage: `url(${backgroundImage})` }}
     >
-      <div className="max-w-4xl mx-auto py-4 md:py-8 flex-1 flex flex-col justify-center md:justify-start">
+      <div className="max-w-4xl mx-auto p-2 md:p-4 flex-1 flex flex-col justify-center">
         {!activeSection ? renderMainMenu() : (
           <div className="animate-in slide-in-from-right-4 duration-300">
             {/* Back Button */}
@@ -446,6 +439,45 @@ export default function MainMenuPage() {
                           </p>
                         </div>
                       )}
+                    </div>
+                  </CardContent>
+                </>
+              )}
+
+              {/* Login Content */}
+              {activeSection === 'login' && menuSettings.moderatorLoginEnabled && (
+                <>
+                  <CardHeader className="bg-gradient-to-r from-orange-500 to-yellow-500 text-white py-4">
+                    <CardTitle className="text-xl flex items-center gap-3">
+                      <UserCheck className="w-6 h-6" />
+                      Moderatör Girişi
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <div className="max-w-md mx-auto">
+                      <div className="text-center mb-6">
+                        <img 
+                          src={akPartiLogo} 
+                          alt="AK Parti" 
+                          className="w-24 h-24 mx-auto mb-4 object-contain"
+                        />
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">Moderatör Giriş Portalı</h3>
+                        <p className="text-gray-600 text-sm">Sistem erişimi için TC kimlik numaranız ve şifrenizi giriniz</p>
+                      </div>
+                      
+                      <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-center">
+                        <UserCheck className="w-12 h-12 mx-auto text-orange-500 mb-3" />
+                        <p className="text-sm text-orange-700 mb-4">
+                          Güvenli giriş için lütfen ayrı giriş sayfasını kullanın
+                        </p>
+                        <button
+                          onClick={() => navigate('/login')}
+                          className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
+                        >
+                          <LogIn className="w-4 h-4" />
+                          Giriş Sayfasına Git
+                        </button>
+                      </div>
                     </div>
                   </CardContent>
                 </>
