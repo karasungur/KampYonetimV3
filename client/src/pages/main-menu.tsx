@@ -1247,6 +1247,14 @@ export default function MainMenuPage() {
                                     quality: face.quality
                                   }));
 
+                                  // Debug: Embedding çıkarıldı mı kontrol et
+                                  console.log('🔬 Face embedding debug:');
+                                  console.log('- Seçilen yüz sayısı:', selectedFaces.length);
+                                  console.log('- Face data sayısı:', faceData.length);
+                                  faceData.forEach((face, idx) => {
+                                    console.log(`- Face ${idx + 1}: embedding boyutu=${face.embedding.length}, confidence=${face.confidence}`);
+                                  });
+
                                   // API'ye fotoğraf isteği gönder
                                   await apiRequest('POST', '/api/photo-requests', {
                                     tcNumber: photoTcNumber,
