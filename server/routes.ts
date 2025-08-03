@@ -1363,19 +1363,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Aktivite logu
-      await storage.logActivity({
-        userId: 'system',
-        action: 'create_question', // En yakın action type
-        details: `Fotoğraf talebi oluşturuldu: ${requestData.tcNumber} (${selectedCampDays?.length || 0} kamp günü seçildi)`,
-        metadata: { 
-          tcNumber: requestData.tcNumber, 
-          email: requestData.email,
-          selectedCampDays: selectedCampDays?.length || 0,
-          uploadedFilesCount: uploadedFilesCount || 0
-        },
-        ipAddress: req.ip
-      });
+      // Python API'ye fotoğraf işleme talebi gönder
+      try {
+        const pythonResponse = await fetch('http://localhost:8080/api/process-photos', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            tcNumber: requestData.tcNumber,
+            email: requestData.email,
+            photoRequestId: photoRequest.id,
+            selectedCampDays: selectedCampDays || [],
+            uploadedFilesCount: uploadedFilesCount || 0
+          })
+        });
+        
+        if (!pythonResponse.ok) {
+          console.warn('Python API yanıt vermedi, istek veritabanına kaydedildi:', pythonResponse.status);
+        } else {
+          console.log('Python API\'ye başarıyla gönderildi');
+        }
+      } catch (error) {
+        console.warn('Python API\'ye bağlanılamadı, istek veritabanına kaydedildi:', (error as Error).message);
+      }
       
       res.status(201).json({
         ...photoRequest,
