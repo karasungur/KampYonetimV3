@@ -34,7 +34,7 @@ export default function LoginPage() {
             <img 
               src={akPartiLogo} 
               alt="AK Parti" 
-              className="w-24 h-24 mx-auto mb-4 object-contain"
+              className="w-32 h-32 mx-auto mb-6 object-contain"
             />
             <h2 className="text-2xl font-bold ak-text">İrade, İstikamet ve İstişare Kampı</h2>
             <p className="ak-gray mt-2">AK Parti Gençlik Kolları Genel Sekreterlik</p>

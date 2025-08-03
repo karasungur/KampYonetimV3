@@ -29,6 +29,7 @@ import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { useLocation } from "wouter";
 import backgroundImage from "@assets/GK-KAMP LOGOTYPE -BACKROUND - Düzenlendi_1754227727579.png";
+import akPartiLogo from "@assets/akpartilogo_1753719301210.png";
 
 interface MenuSettings {
   moderatorLoginEnabled: boolean;
@@ -160,8 +161,11 @@ export default function MainMenuPage() {
 
   if (!menuSettings) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 to-yellow-500">
-        <div className="animate-pulse text-white text-xl">Menü yükleniyor...</div>
+      <div 
+        className="min-h-screen flex items-center justify-center bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${backgroundImage})` }}
+      >
+        <div className="animate-pulse text-white text-xl bg-black/30 backdrop-blur-sm px-6 py-3 rounded-2xl">Menü yükleniyor...</div>
       </div>
     );
   }
@@ -171,9 +175,13 @@ export default function MainMenuPage() {
     <>
       {/* Header with Logo Space */}
       <div className="text-center mb-8">
-        {/* Logo space - kullanıcı arka plan resmini ekleyecek */}
-        <div className="w-24 h-24 mx-auto mb-6 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
-          <div className="text-white font-bold text-2xl">AK</div>
+        {/* Logo */}
+        <div className="w-20 h-20 mx-auto mb-6 bg-white/90 rounded-full flex items-center justify-center backdrop-blur-sm p-2">
+          <img 
+            src={akPartiLogo} 
+            alt="AK Parti" 
+            className="w-full h-full object-contain"
+          />
         </div>
         
         <h1 className="text-2xl md:text-3xl font-bold text-white mb-3">
@@ -190,14 +198,14 @@ export default function MainMenuPage() {
         </div>
       </div>
 
-      {/* iOS Style Menu Grid - 3x3 Layout */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-md mx-auto">
+      {/* Mobile Optimized Menu Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-w-sm md:max-w-md mx-auto mb-8 md:mb-0">
         {/* Moderatör Girişi */}
         {menuSettings.moderatorLoginEnabled && (
           <div className="aspect-square cursor-pointer" onClick={handleModeratorLogin}>
-            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-4">
-              <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center mb-3">
-                <UserCheck className="w-6 h-6 text-white" />
+            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-3 md:p-4">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-full flex items-center justify-center mb-2 md:mb-3">
+                <UserCheck className="w-5 h-5 md:w-6 md:h-6 text-white" />
               </div>
               <div className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {menuSettings.moderatorLoginTitle}
@@ -209,9 +217,9 @@ export default function MainMenuPage() {
         {/* Program Akışı */}
         {menuSettings.programFlowEnabled && (
           <div className="aspect-square" onClick={() => handleSectionClick('program')}>
-            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-4 cursor-pointer group">
-              <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center mb-3 group-hover:bg-orange-600 transition-colors">
-                <Calendar className="w-6 h-6 text-white" />
+            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-3 md:p-4 cursor-pointer group">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-full flex items-center justify-center mb-2 md:mb-3 group-hover:bg-orange-600 transition-colors">
+                <Calendar className="w-5 h-5 md:w-6 md:h-6 text-white" />
               </div>
               <div className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {menuSettings.programFlowTitle}
@@ -223,9 +231,9 @@ export default function MainMenuPage() {
         {/* Fotoğraflar */}
         {menuSettings.photosEnabled && (
           <div className="aspect-square">
-            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-4 cursor-pointer group">
-              <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center mb-3 group-hover:bg-orange-600 transition-colors">
-                <Camera className="w-6 h-6 text-white" />
+            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-3 md:p-4 cursor-pointer group">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-full flex items-center justify-center mb-2 md:mb-3 group-hover:bg-orange-600 transition-colors">
+                <Camera className="w-5 h-5 md:w-6 md:h-6 text-white" />
               </div>
               <div className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {menuSettings.photosTitle}
@@ -240,9 +248,9 @@ export default function MainMenuPage() {
         {/* Sosyal Medya */}
         {menuSettings.socialMediaEnabled && (
           <div className="aspect-square" onClick={() => handleSectionClick('social')}>
-            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-4 cursor-pointer group">
-              <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center mb-3 group-hover:bg-orange-600 transition-colors">
-                <Share2 className="w-6 h-6 text-white" />
+            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-3 md:p-4 cursor-pointer group">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-full flex items-center justify-center mb-2 md:mb-3 group-hover:bg-orange-600 transition-colors">
+                <Share2 className="w-5 h-5 md:w-6 md:h-6 text-white" />
               </div>
               <div className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {menuSettings.socialMediaTitle}
@@ -254,9 +262,9 @@ export default function MainMenuPage() {
         {/* Ekibimiz */}
         {menuSettings.teamEnabled && (
           <div className="aspect-square" onClick={() => handleSectionClick('team')}>
-            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-4 cursor-pointer group">
-              <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center mb-3 group-hover:bg-orange-600 transition-colors">
-                <Users className="w-6 h-6 text-white" />
+            <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-3 md:p-4 cursor-pointer group">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-full flex items-center justify-center mb-2 md:mb-3 group-hover:bg-orange-600 transition-colors">
+                <Users className="w-5 h-5 md:w-6 md:h-6 text-white" />
               </div>
               <div className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {menuSettings.teamTitle}
@@ -282,10 +290,10 @@ export default function MainMenuPage() {
 
   return (
     <div 
-      className="min-h-screen p-4 bg-cover bg-center bg-no-repeat"
+      className="min-h-screen p-4 bg-cover bg-center bg-no-repeat flex flex-col"
       style={{ backgroundImage: `url(${backgroundImage})` }}
     >
-      <div className="max-w-4xl mx-auto py-8">
+      <div className="max-w-4xl mx-auto py-4 md:py-8 flex-1 flex flex-col justify-center md:justify-start">
         {!activeSection ? renderMainMenu() : (
           <div className="animate-in slide-in-from-right-4 duration-300">
             {/* Back Button */}
