@@ -488,7 +488,7 @@ export default function MainMenuPage() {
                   <CardContent className="p-6">
                     <div className="max-w-md mx-auto">
                       <div className="text-center mb-6">
-                        <div className="w-32 h-32 bg-cyan-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <div className="w-32 h-32 rounded-full flex items-center justify-center mx-auto mb-4 bg-[#33c2ee]">
                           <img 
                             src={akPartiLogo} 
                             alt="AK Parti" 
