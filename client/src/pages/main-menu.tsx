@@ -191,7 +191,7 @@ export default function MainMenuPage() {
         <img 
           src={akPartiLogo} 
           alt="AK Parti" 
-          className="w-56 h-56 sm:w-52 sm:h-52 mx-auto mb-0 object-contain"
+          className="w-60 h-60 sm:w-56 sm:h-56 mx-auto mb-0 object-contain"
         />
         
         {/* Metin Resmi */}
