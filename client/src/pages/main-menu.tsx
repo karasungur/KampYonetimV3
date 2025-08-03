@@ -191,14 +191,14 @@ export default function MainMenuPage() {
         <img 
           src={akPartiLogo} 
           alt="AK Parti" 
-          className="w-32 h-32 mx-auto mb-0 object-contain"
+          className="w-40 h-40 sm:w-32 sm:h-32 mx-auto mb-0 object-contain"
         />
         
         {/* Metin Resmi */}
         <img 
           src={metinResmi} 
           alt="AK Parti Gençlik Kolları Genel Sekreterlik - Strateji ve İstişare Kampı" 
-          className="w-56 md:w-64 mx-auto mb-0 object-contain -mt-1"
+          className="w-72 sm:w-56 md:w-64 mx-auto mb-0 object-contain -mt-1"
         />
       </div>
 
@@ -287,7 +287,7 @@ export default function MainMenuPage() {
     >
       <div className="max-w-4xl mx-auto p-2 md:p-4 h-screen flex flex-col justify-center">
         {!activeSection ? renderMainMenu() : (
-          <div className="animate-in slide-in-from-right-4 duration-300">
+          <div className="animate-in slide-in-from-right-4 duration-150">
             {/* Back Button */}
             <div className="mb-6">
               <Button
