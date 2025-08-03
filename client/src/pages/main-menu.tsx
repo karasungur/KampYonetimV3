@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import * as faceapi from '@vladmandic/face-api';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -123,7 +124,58 @@ export default function MainMenuPage() {
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [tcError, setTcError] = useState("");
   const [selectedCampDays, setSelectedCampDays] = useState<string[]>([]);
+  
+  // Face detection states
+  const [detectedFaces, setDetectedFaces] = useState<DetectedFace[]>([]);
+  const [faceDetectionProgress, setFaceDetectionProgress] = useState(0);
+  const [isFaceDetectionReady, setIsFaceDetectionReady] = useState(false);
+  const [isDetectingFaces, setIsDetectingFaces] = useState(false);
+  const [selectedFaceIds, setSelectedFaceIds] = useState<string[]>([]);
+  const [faceQualityScores, setFaceQualityScores] = useState<{[key: string]: number}>({});
+  
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  interface DetectedFace {
+    id: string;
+    imageData: string; // Base64 cropped face
+    confidence: number;
+    quality: 'good' | 'poor' | 'blurry' | 'profile';
+    boundingBox: { x: number; y: number; width: number; height: number };
+    landmarks: any;
+    originalFile: File;
+    isSelected: boolean;
+  }
 
+  // Initialize face-api
+  useEffect(() => {
+    const initializeFaceAPI = async () => {
+      try {
+        // Load models from CDN first as test
+        const modelPath = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js-models@master';
+        
+        console.log('Loading face-api models...');
+        await faceapi.nets.tinyFaceDetector.loadFromUri(`${modelPath}/tiny_face_detector`);
+        console.log('Tiny face detector loaded');
+        
+        await faceapi.nets.faceLandmark68Net.loadFromUri(`${modelPath}/face_landmark_68`);
+        console.log('Face landmarks loaded');
+        
+        await faceapi.nets.faceRecognitionNet.loadFromUri(`${modelPath}/face_recognition`);
+        console.log('Face recognition loaded');
+        
+        setIsFaceDetectionReady(true);
+        console.log('Face-API initialized successfully');
+      } catch (error) {
+        console.error('Face-API initialization error:', error);
+        console.error('Error details:', error.message, error.stack);
+        // Fallback to basic functionality
+        setIsFaceDetectionReady(false);
+      }
+    };
+    
+    initializeFaceAPI();
+  }, []);
+  
   // Preload images
   useEffect(() => {
     const preloadImages = () => {
@@ -146,6 +198,143 @@ export default function MainMenuPage() {
     
     preloadImages();
   }, []);
+
+  // Face detection functions
+  const detectFacesInFiles = async (files: File[]) => {
+    if (!isFaceDetectionReady) {
+      toast({
+        title: "Uyarı", 
+        description: "Yüz tanıma sistemi henüz hazır değil. Fotoğraflar yüklendi ancak yüz tespiti yapılamadı.",
+        variant: "destructive",
+      });
+      return [];
+    }
+
+    setIsDetectingFaces(true);
+    setFaceDetectionProgress(0);
+    const allFaces: DetectedFace[] = [];
+
+    for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+      const file = files[fileIndex];
+      
+      try {
+        setFaceDetectionProgress(Math.round((fileIndex / files.length) * 100));
+        
+        const img = await loadImageFromFile(file);
+        const detections = await faceapi
+          .detectAllFaces(img, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks();
+
+        for (let faceIndex = 0; faceIndex < detections.length; faceIndex++) {
+          const detection = detections[faceIndex];
+          const croppedFace = await cropFaceFromImage(img, detection.detection.box);
+          const quality = assessFaceQuality(detection);
+          
+          const face: DetectedFace = {
+            id: `${fileIndex}-${faceIndex}-${Date.now()}`,
+            imageData: croppedFace,
+            confidence: detection.detection.score * 100,
+            quality,
+            boundingBox: {
+              x: detection.detection.box.x,
+              y: detection.detection.box.y, 
+              width: detection.detection.box.width,
+              height: detection.detection.box.height,
+            },
+            landmarks: detection.landmarks,
+            originalFile: file,
+            isSelected: false,
+          };
+          
+          allFaces.push(face);
+        }
+        
+      } catch (error) {
+        console.error(`Face detection error for file ${file.name}:`, error);
+      }
+    }
+
+    setFaceDetectionProgress(100);
+    setIsDetectingFaces(false);
+    return allFaces;
+  };
+
+  const loadImageFromFile = (file: File): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  const cropFaceFromImage = async (img: HTMLImageElement, box: any): Promise<string> => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    
+    const padding = 20;
+    const width = box.width + (padding * 2);
+    const height = box.height + (padding * 2);
+    
+    canvas.width = width;
+    canvas.height = height;
+    
+    ctx.drawImage(img, box.x - padding, box.y - padding, width, height, 0, 0, width, height);
+    return canvas.toDataURL('image/jpeg', 0.8);
+  };
+
+  const assessFaceQuality = (detection: any): 'good' | 'poor' | 'blurry' | 'profile' => {
+    const confidence = detection.detection.score;
+    const box = detection.detection.box;
+    
+    if (confidence < 0.5) return 'poor';
+    if (box.width < 50 || box.height < 50) return 'blurry';
+    
+    if (detection.landmarks) {
+      const landmarks = detection.landmarks.positions;
+      const nose = landmarks[30];
+      const leftEye = landmarks[36];
+      const rightEye = landmarks[45];
+      
+      if (nose && leftEye && rightEye) {
+        const faceWidth = rightEye.x - leftEye.x;
+        const noseOffset = Math.abs(nose.x - (leftEye.x + rightEye.x) / 2);
+        if (noseOffset > faceWidth * 0.3) return 'profile';
+      }
+    }
+    
+    return 'good';
+  };
+
+  const handleFileUpload = async (files: File[]) => {
+    setUploadedFiles(files);
+    const faces = await detectFacesInFiles(files);
+    setDetectedFaces(faces);
+    
+    const scores: {[key: string]: number} = {};
+    faces.forEach(face => { scores[face.id] = face.confidence; });
+    setFaceQualityScores(scores);
+    
+    if (faces.length > 0) {
+      toast({
+        title: "Yüz Tespiti Tamamlandı",
+        description: `${faces.length} yüz tespit edildi. Lütfen size ait yüzleri seçin.`,
+      });
+    }
+  };
+
+  const toggleFaceSelection = (faceId: string) => {
+    setSelectedFaceIds(prev => 
+      prev.includes(faceId) ? prev.filter(id => id !== faceId) : [...prev, faceId]
+    );
+    
+    setDetectedFaces(prev => 
+      prev.map(face => ({
+        ...face,
+        isSelected: face.id === faceId ? !face.isSelected : face.isSelected
+      }))
+    );
+  };
 
   const { data: menuSettings } = useQuery<MenuSettings>({
     queryKey: ["/api/menu-settings"],
@@ -892,10 +1081,12 @@ export default function MainMenuPage() {
                           </Label>
                           <div 
                             className="border-2 border-dashed border-orange-300 rounded-lg p-8 text-center bg-orange-50/50 hover:bg-orange-50 transition-colors"
-                            onDrop={(e) => {
+                            onDrop={async (e) => {
                               e.preventDefault();
                               const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-                              setUploadedFiles(prev => [...prev, ...files]);
+                              if (files.length > 0) {
+                                await handleFileUpload([...uploadedFiles, ...files]);
+                              }
                             }}
                             onDragOver={(e) => e.preventDefault()}
                           >
@@ -909,9 +1100,11 @@ export default function MainMenuPage() {
                                 input.type = 'file';
                                 input.multiple = true;
                                 input.accept = 'image/*';
-                                input.onchange = (e) => {
+                                input.onchange = async (e) => {
                                   const files = Array.from((e.target as HTMLInputElement).files || []);
-                                  setUploadedFiles(prev => [...prev, ...files]);
+                                  if (files.length > 0) {
+                                    await handleFileUpload([...uploadedFiles, ...files]);
+                                  }
                                 };
                                 input.click();
                               }}
@@ -921,6 +1114,22 @@ export default function MainMenuPage() {
                             <p className="text-xs text-gray-500 mt-2">PNG, JPG, JPEG dosyaları kabul edilir</p>
                           </div>
                         </div>
+
+                        {/* Face Detection Progress */}
+                        {isDetectingFaces && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600">Yüzler tespit ediliyor...</span>
+                              <span className="font-medium">{faceDetectionProgress}%</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-orange-600 h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${faceDetectionProgress}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        )}
 
                         {uploadedFiles.length > 0 && (
                           <div>
@@ -937,7 +1146,12 @@ export default function MainMenuPage() {
                                     variant="destructive"
                                     size="sm"
                                     className="absolute -top-2 -right-2 w-6 h-6 rounded-full p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    onClick={() => setUploadedFiles(prev => prev.filter((_, i) => i !== index))}
+                                    onClick={() => {
+                                      const newFiles = uploadedFiles.filter((_, i) => i !== index);
+                                      setUploadedFiles(newFiles);
+                                      setDetectedFaces([]);
+                                      setSelectedFaceIds([]);
+                                    }}
                                   >
                                     ×
                                   </Button>
@@ -945,6 +1159,66 @@ export default function MainMenuPage() {
                                 </div>
                               ))}
                             </div>
+                          </div>
+                        )}
+
+                        {/* Detected Faces Display */}
+                        {detectedFaces.length > 0 && (
+                          <div>
+                            <h4 className="font-medium text-gray-700 mb-3">
+                              Tespit Edilen Yüzler ({detectedFaces.length})
+                              {selectedFaceIds.length > 0 && (
+                                <span className="ml-2 text-sm text-orange-600">({selectedFaceIds.length} seçili)</span>
+                              )}
+                            </h4>
+                            <Alert className="mb-4">
+                              <Camera className="h-4 w-4" />
+                              <AlertDescription>
+                                Size ait olan yüzleri seçin. Seçilen yüzler kamp fotoğraflarında aranacak.
+                              </AlertDescription>
+                            </Alert>
+                            <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
+                              {detectedFaces.map((face) => (
+                                <div
+                                  key={face.id}
+                                  className={`relative border-2 rounded-lg p-2 cursor-pointer transition-all ${
+                                    face.isSelected 
+                                      ? 'border-orange-500 bg-orange-50' 
+                                      : 'border-gray-200 hover:border-orange-300'
+                                  }`}
+                                  onClick={() => toggleFaceSelection(face.id)}
+                                >
+                                  <img
+                                    src={face.imageData}
+                                    alt="Tespit edilen yüz"
+                                    className="w-full h-20 object-cover rounded"
+                                  />
+                                  <div className="mt-1 space-y-1">
+                                    <div className={`text-xs px-1 py-0.5 rounded text-center font-medium ${
+                                      face.quality === 'good' ? 'bg-green-100 text-green-800' :
+                                      face.quality === 'poor' ? 'bg-red-100 text-red-800' :
+                                      face.quality === 'blurry' ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-purple-100 text-purple-800'
+                                    }`}>
+                                      {face.quality === 'good' ? 'İyi' :
+                                       face.quality === 'poor' ? 'Zayıf' :
+                                       face.quality === 'blurry' ? 'Bulanık' : 'Profil'}
+                                    </div>
+                                    <div className="text-xs text-gray-500 text-center">
+                                      %{Math.round(face.confidence)}
+                                    </div>
+                                  </div>
+                                  {face.isSelected && (
+                                    <CheckCircle className="absolute top-1 right-1 w-4 h-4 text-orange-600" />
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                            {detectedFaces.length > 0 && (
+                              <div className="mt-3 text-sm text-gray-600">
+                                Ortalama Kalite: %{Math.round(detectedFaces.reduce((acc, face) => acc + face.confidence, 0) / detectedFaces.length)}
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -957,7 +1231,7 @@ export default function MainMenuPage() {
 
                             <Button 
                               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
-                              disabled={!photoEmail || uploadedFiles.length === 0 || selectedCampDays.length === 0 || isProcessing}
+                              disabled={!photoEmail || uploadedFiles.length === 0 || selectedCampDays.length === 0 || isProcessing || (detectedFaces.length > 0 && selectedFaceIds.length === 0)}
                               onClick={async () => {
                                 setIsProcessing(true);
                                 try {

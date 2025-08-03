@@ -1,5 +1,4 @@
 import { ReactNode } from "react";
-import Sidebar from "@/components/sidebar";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -7,13 +6,10 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
-    <div className="flex h-screen bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto">
-        <div className="p-6">
-          {children}
-        </div>
-      </main>
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto py-8 px-4">
+        {children}
+      </div>
     </div>
   );
 }
