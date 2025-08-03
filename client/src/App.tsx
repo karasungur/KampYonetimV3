@@ -17,7 +17,6 @@ import ModeratorQuestionsPage from "@/pages/moderator-questions";
 import ResponsesPage from "@/pages/responses";
 import TablesPage from "@/pages/tables";
 import MenuSettingsPage from "@/pages/menu-settings";
-import PageLayoutPage from "@/pages/page-layout";
 import ProgramEventsPage from "@/pages/program-events";
 import SocialMediaPage from "@/pages/social-media";
 import TeamMembersPage from "@/pages/team-members";
@@ -50,7 +49,6 @@ function Router() {
       <Route path="/responses" component={ResponsesPage} />
       <Route path="/tables" component={TablesPage} />
       <Route path="/menu-settings" component={MenuSettingsPage} />
-      <Route path="/page-layout" component={PageLayoutPage} />
       <Route path="/program-events" component={ProgramEventsPage} />
       <Route path="/social-media" component={SocialMediaPage} />
       <Route path="/team-members" component={TeamMembersPage} />
