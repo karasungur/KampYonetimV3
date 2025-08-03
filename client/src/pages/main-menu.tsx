@@ -186,7 +186,7 @@ export default function MainMenuPage() {
   const renderMainMenu = () => (
     <>
       {/* Header with Logo Space */}
-      <div className="text-center mb-8">
+      <div className="text-center mb-2">
         {/* Logo */}
         <img 
           src={akPartiLogo} 
@@ -198,7 +198,7 @@ export default function MainMenuPage() {
         <img 
           src={metinResmi} 
           alt="AK Parti Gençlik Kolları Genel Sekreterlik - Strateji ve İstişare Kampı" 
-          className="w-80 md:w-96 mx-auto mb-0 object-contain"
+          className="w-80 md:w-96 mx-auto mb-0 object-contain -mt-4"
         />
       </div>
 
