@@ -64,10 +64,11 @@ CONFIG = {
 
 # Global değişkenler
 face_app = None
-face_database = {}
+camp_day_models = {}  # Her kamp günü için ayrı model: {camp_day_id: face_database}
 processing_queue = queue.Queue()
 current_requests = {}
 request_lock = Lock()
+available_camp_days = []  # Web'den çekilecek kamp günleri listesi
 
 class StyledWidget:
     """Modern görünüm için stil tanımları"""
@@ -140,15 +141,16 @@ class FaceAnalysisWorker(QThread):
     finished = pyqtSignal(dict)
     error = pyqtSignal(str)
     
-    def __init__(self, folder_path, recursive=True):
+    def __init__(self, folder_path, recursive=True, camp_day_id=None):
         super().__init__()
         self.folder_path = folder_path
         self.recursive = recursive
+        self.camp_day_id = camp_day_id
     
     def run(self):
-        global face_database
+        global camp_day_models
         try:
-            self.progress.emit("Fotoğraflar taranıyor...", 0)
+            self.progress.emit(f"Fotoğraflar taranıyor... {self.camp_day_id or 'Genel'}", 0)
             
             # Fotoğraf dosyalarını bul
             image_files = []
@@ -163,7 +165,7 @@ class FaceAnalysisWorker(QThread):
                         image_files.append(os.path.join(self.folder_path, file))
             
             total_files = len(image_files)
-            face_database = {}
+            current_database = {}
             
             for idx, image_path in enumerate(image_files):
                 try:
@@ -179,9 +181,10 @@ class FaceAnalysisWorker(QThread):
                     faces = face_app.get(img)
                     
                     if faces:
-                        face_database[image_path] = {
+                        current_database[image_path] = {
                             'faces': [],
-                            'timestamp': datetime.now().isoformat()
+                            'timestamp': datetime.now().isoformat(),
+                            'camp_day_id': self.camp_day_id
                         }
                         
                         for face in faces:
@@ -192,17 +195,26 @@ class FaceAnalysisWorker(QThread):
                                 'age': getattr(face, 'age', None),
                                 'gender': getattr(face, 'gender', None)
                             }
-                            face_database[image_path]['faces'].append(face_data)
+                            current_database[image_path]['faces'].append(face_data)
                 
                 except Exception as e:
                     print(f"Hata - {image_path}: {str(e)}")
                     continue
             
             # Veritabanını kaydet
-            with open(CONFIG['FACE_DATABASE_PATH'], 'wb') as f:
-                pickle.dump(face_database, f)
+            if self.camp_day_id:
+                db_path = f"./models/{self.camp_day_id}/face_database.pkl"
+                os.makedirs(f"./models/{self.camp_day_id}", exist_ok=True)
+                with open(db_path, 'wb') as f:
+                    pickle.dump(current_database, f)
+                # Global model'e de ekle
+                camp_day_models[self.camp_day_id] = current_database
+            else:
+                # Eski sistem için uyumluluk
+                with open(CONFIG['FACE_DATABASE_PATH'], 'wb') as f:
+                    pickle.dump(current_database, f)
             
-            self.finished.emit(face_database)
+            self.finished.emit(current_database)
             
         except Exception as e:
             self.error.emit(f"Analiz hatası: {str(e)}")
@@ -213,21 +225,36 @@ class PhotoMatchingWorker(QThread):
     finished = pyqtSignal(str, list)  # tc_number, matched_photos
     error = pyqtSignal(str, str)  # tc_number, error_message
     
-    def __init__(self, tc_number, reference_embeddings, email):
+    def __init__(self, tc_number, reference_embeddings, email, selected_camp_days=None):
         super().__init__()
         self.tc_number = tc_number
         self.reference_embeddings = reference_embeddings
         self.email = email
+        self.selected_camp_days = selected_camp_days or []
     
     def run(self):
         try:
             self.progress.emit(f"Eşleştirme başlıyor - {self.tc_number}", 0, self.tc_number)
             
             matched_photos = []
-            total_photos = len(face_database)
+            total_photos = 0
             processed = 0
             
-            for photo_path, photo_data in face_database.items():
+            # Seçilen kamp günlerindeki tüm fotoğrafları birleştir
+            all_photos = {}
+            if self.selected_camp_days:
+                for camp_day_id in self.selected_camp_days:
+                    if camp_day_id in camp_day_models:
+                        for photo_path, photo_data in camp_day_models[camp_day_id].items():
+                            all_photos[photo_path] = photo_data
+                        self.progress.emit(f"Kamp günü yüklendi: {camp_day_id}", 0, self.tc_number)
+            
+            total_photos = len(all_photos)
+            if total_photos == 0:
+                self.error.emit(self.tc_number, "Seçilen kamp günlerinde fotoğraf bulunamadı")
+                return
+            
+            for photo_path, photo_data in all_photos.items():
                 try:
                     for face_data in photo_data['faces']:
                         photo_embedding = np.array(face_data['embedding'])
@@ -371,15 +398,20 @@ class PythonAPIServer:
                 tc_number = data.get('tcNumber')
                 email = data.get('email')
                 reference_photos = data.get('referencePhotos', [])
+                selected_camp_days = data.get('selectedCampDays', [])
                 
                 if not tc_number or not email:
                     return jsonify({'error': 'TC number and email required'}), 400
+                
+                if not selected_camp_days:
+                    return jsonify({'error': 'En az bir kamp günü seçmelisiniz'}), 400
                 
                 # İsteği kuyruğa al
                 self.main_window.queue_photo_request({
                     'tcNumber': tc_number,
                     'email': email,
                     'referencePhotos': reference_photos,
+                    'selectedCampDays': selected_camp_days,
                     'timestamp': datetime.now().isoformat()
                 })
                 
@@ -907,23 +939,35 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "Hata", f"Analiz hatası:\n{error_message}")
     
     def load_face_database(self):
-        """Yüz veritabanını yükle"""
-        global face_database
+        """Yüz veritabanlarını yükle (günlük modeller)"""
+        global camp_day_models
+        
+        # Günlük modelleri yükle
+        models_dir = "./models"
+        if os.path.exists(models_dir):
+            for camp_day_folder in os.listdir(models_dir):
+                if os.path.isdir(os.path.join(models_dir, camp_day_folder)):
+                    db_path = os.path.join(models_dir, camp_day_folder, "face_database.pkl")
+                    if os.path.exists(db_path):
+                        try:
+                            with open(db_path, 'rb') as f:
+                                camp_day_models[camp_day_folder] = pickle.load(f)
+                            self.log(f"Kamp günü modeli yüklendi: {camp_day_folder}")
+                        except Exception as e:
+                            self.log(f"Model yükleme hatası ({camp_day_folder}): {str(e)}")
+        
+        # Eski sistem uyumluluğu
         if os.path.exists(CONFIG['FACE_DATABASE_PATH']):
             try:
                 with open(CONFIG['FACE_DATABASE_PATH'], 'rb') as f:
-                    face_database = pickle.load(f)
-                
-                total_photos = len(face_database)
-                total_faces = sum(len(photo_data['faces']) for photo_data in face_database.values())
-                
-                self.photo_count_label.setText(f"Toplam fotoğraf: {total_photos}")
-                self.face_count_label.setText(f"Tespit edilen yüz: {total_faces}")
-                
-                self.log(f"Yüz veritabanı yüklendi - {total_photos} fotoğraf, {total_faces} yüz")
-                
+                    general_database = pickle.load(f)
+                    camp_day_models['general'] = general_database
+                    self.log("Genel veritabanı yüklendi")
             except Exception as e:
-                self.log(f"Veritabanı yükleme hatası: {str(e)}")
+                self.log(f"Genel veritabanı yükleme hatası: {str(e)}")
+        
+        self.update_statistics()
+        self.sync_with_web_api()
     
     def check_api_status(self):
         """API durumunu kontrol et"""
@@ -936,6 +980,35 @@ class MainWindow(QMainWindow):
         log_entry = f"[{timestamp}] {message}"
         self.log_text.append(log_entry)
         print(log_entry)
+    
+    def update_statistics(self):
+        """Sonuç istatistiklerini güncelle"""
+        total_photos = 0
+        total_faces = 0
+        
+        for camp_day_id, database in camp_day_models.items():
+            camp_photos = len(database)
+            camp_faces = sum(len(photo_data.get('faces', [])) for photo_data in database.values())
+            total_photos += camp_photos
+            total_faces += camp_faces
+            self.log(f"{camp_day_id}: {camp_photos} fotoğraf, {camp_faces} yüz")
+        
+        self.photo_count_label.setText(f"Toplam fotoğraf: {total_photos}")
+        self.face_count_label.setText(f"Tespit edilen yüz: {total_faces}")
+    
+    def sync_with_web_api(self):
+        """Web API'den kamp günlerini çek ve senkronize et"""
+        try:
+            import requests
+            response = requests.get(f"{CONFIG['WEB_API_URL']}/api/camp-days", timeout=10)
+            if response.status_code == 200:
+                global available_camp_days
+                available_camp_days = response.json()
+                self.log(f"Web API'den {len(available_camp_days)} kamp günü alındı")
+            else:
+                self.log(f"Web API bağlantı hatası: {response.status_code}")
+        except Exception as e:
+            self.log(f"Web API senkronizasyon hatası: {str(e)}")
 
 def main():
     """Ana fonksiyon"""
