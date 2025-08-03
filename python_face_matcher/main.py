@@ -393,6 +393,170 @@ class PhotoMatchingWorker(QThread):
         )
         return cos_sim
 
+class EmailSender(QThread):
+    """E-posta gönderme worker thread'i"""
+    progress = pyqtSignal(str, str)  # tc_number, message
+    finished = pyqtSignal(str, bool)  # tc_number, success
+    
+    def __init__(self, tc_number, email, matched_photos):
+        super().__init__()
+        self.tc_number = tc_number
+        self.email = email
+        self.matched_photos = matched_photos
+    
+    def run(self):
+        try:
+            self.progress.emit(self.tc_number, "E-posta hazırlanıyor...")
+            
+            # ZIP dosyası oluştur
+            zip_path = f"./temp/{self.tc_number}_photos.zip"
+            os.makedirs("./temp", exist_ok=True)
+            
+            with zipfile.ZipFile(zip_path, 'w') as zip_file:
+                for idx, match in enumerate(self.matched_photos[:20]):  # İlk 20 fotoğraf
+                    photo_path = match['photo_path']
+                    if os.path.exists(photo_path):
+                        filename = f"{idx+1:02d}_{os.path.basename(photo_path)}"
+                        zip_file.write(photo_path, filename)
+            
+            # E-posta gönder
+            self.progress.emit(self.tc_number, "E-posta gönderiliyor...")
+            
+            msg = MIMEMultipart()
+            msg['From'] = CONFIG['EMAIL_FROM']
+            msg['To'] = self.email
+            msg['Subject'] = f"AK Parti Gençlik Kolları Kamp Fotoğraflarınız - {self.tc_number}"
+            
+            body = f"""
+            Sayın Katılımcımız,
+            
+            AK Parti Gençlik Kolları İrade, İstikamet ve İstişare Kampı fotoğraflarınız hazır!
+            
+            Tespit edilen fotoğraf sayısı: {len(self.matched_photos)}
+            TC Kimlik No: {self.tc_number}
+            
+            Fotoğraflarınız ekte ZIP dosyası olarak gönderilmiştir.
+            
+            Saygılarımızla,
+            AK Parti Gençlik Kolları Genel Sekreterliği
+            """
+            
+            msg.attach(MIMEText(body, 'plain', 'utf-8'))
+            
+            # ZIP dosyasını ekle
+            with open(zip_path, "rb") as attachment:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(attachment.read())
+                encoders.encode_base64(part)
+                part.add_header(
+                    'Content-Disposition',
+                    f'attachment; filename= {self.tc_number}_photos.zip'
+                )
+                msg.attach(part)
+            
+            # SMTP ile gönder
+            server = smtplib.SMTP(CONFIG['SMTP_SERVER'], CONFIG['SMTP_PORT'])
+            server.starttls()
+            server.login(CONFIG['EMAIL_FROM'], CONFIG['EMAIL_PASSWORD'])
+            server.send_message(msg)
+            server.quit()
+            
+            # Geçici dosyayı sil
+            os.remove(zip_path)
+            
+            self.finished.emit(self.tc_number, True)
+            
+        except Exception as e:
+            self.finished.emit(self.tc_number, False)
+            print(f"E-posta gönderme hatası: {str(e)}")
+
+class PythonAPIServer:
+    """Python API Server - Web'den gelen istekleri karşılar"""
+    
+    def __init__(self, main_window):
+        self.main_window = main_window
+        self.app = Flask(__name__)
+        self.setup_routes()
+    
+    def setup_routes(self):
+        """API rotalarını kur"""
+        
+        @self.app.route('/api/health', methods=['GET'])
+        def health_check():
+            return jsonify({
+                'status': 'healthy',
+                'timestamp': datetime.now().isoformat(),
+                'face_database_ready': len(camp_day_models) > 0,
+                'available_camp_days': len(available_camp_days),
+                'api_connection': api_connection_status['connected']
+            })
+        
+        @self.app.route('/api/process-photo-request', methods=['POST'])
+        def process_photo_request():
+            try:
+                data = request.get_json()
+                tc_number = data.get('tcNumber')
+                email = data.get('email')
+                reference_photos = data.get('referencePhotos', [])
+                selected_camp_days = data.get('selectedCampDays', [])
+                
+                if not tc_number or not email:
+                    return jsonify({'error': 'TC number and email required'}), 400
+                
+                if not selected_camp_days:
+                    return jsonify({'error': 'En az bir kamp günü seçmelisiniz'}), 400
+                
+                # İsteği kuyruğa al
+                self.main_window.queue_photo_request({
+                    'tcNumber': tc_number,
+                    'email': email,
+                    'referencePhotos': reference_photos,
+                    'selectedCampDays': selected_camp_days,
+                    'timestamp': datetime.now().isoformat()
+                })
+                
+                return jsonify({
+                    'message': 'Request queued successfully',
+                    'tcNumber': tc_number
+                })
+                
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        
+        @self.app.route('/api/request-status/<tc_number>', methods=['GET'])
+        def get_request_status(tc_number):
+            try:
+                with request_lock:
+                    if tc_number in current_requests:
+                        request_data = current_requests[tc_number]
+                        return jsonify({
+                            'status': request_data.get('status', 'unknown'),
+                            'progress': request_data.get('progress', 0),
+                            'startTime': request_data.get('start_time', '').isoformat() if request_data.get('start_time') else None,
+                            'message': request_data.get('message', '')
+                        })
+                    else:
+                        return jsonify({'status': 'not_found'}), 404
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+    
+    def start_server(self):
+        """API server'ı başlat"""
+        try:
+            # Thread'de çalıştır ki GUI bloklanmasın
+            server_thread = Thread(
+                target=lambda: self.app.run(
+                    host='0.0.0.0', 
+                    port=CONFIG['PYTHON_API_PORT'], 
+                    debug=False
+                ),
+                daemon=True
+            )
+            server_thread.start()
+            print(f"Python API Server başlatıldı - Port: {CONFIG['PYTHON_API_PORT']}")
+        except Exception as e:
+            print(f"API Server başlatma hatası: {str(e)}")
+
 class MainWindow(QMainWindow):
     """Ana pencere sınıfı - AK Parti stili arayüz"""
     
@@ -404,6 +568,10 @@ class MainWindow(QMainWindow):
         self.setup_api_monitoring()
         self.load_face_database()
         self.load_camp_day_models()
+        
+        # Python API Server'ı başlat
+        self.api_server = PythonAPIServer(self)
+        self.api_server.start_server()
         
         # İlk yükleme
         QTimer.singleShot(2000, self.initial_setup)  # 2 saniye sonra başlat
@@ -913,6 +1081,177 @@ class MainWindow(QMainWindow):
             self.active_table.setItem(row, 4, QTableWidgetItem(datetime.now().strftime("%H:%M:%S")))
         except Exception as e:
             self.log(f"❌ Aktif talep ekleme hatası: {str(e)}")
+    
+    def queue_photo_request(self, request_data):
+        """Fotoğraf isteğini kuyruğa al"""
+        tc_number = request_data['tcNumber']
+        
+        with request_lock:
+            if tc_number not in current_requests:
+                self.log(f"📥 Yeni fotoğraf talebi alındı: {tc_number}")
+                self.start_photo_matching(request_data)
+    
+    def start_photo_matching(self, request_data):
+        """Fotoğraf eşleştirmeyi başlat"""
+        tc_number = request_data['tcNumber']
+        email = request_data['email']
+        reference_photos = request_data.get('referencePhotos', [])
+        selected_camp_days = request_data.get('selectedCampDays', [])
+        
+        try:
+            # Referans fotoğrafları işle ve embedding'leri oluştur
+            reference_embeddings = []
+            
+            self.log(f"📷 Referans fotoğrafları işleniyor: {len(reference_photos)} adet")
+            self.log(f"📅 Seçilen kamp günleri: {selected_camp_days}")
+            
+            for photo_data in reference_photos:
+                try:
+                    # Base64 format: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ..."
+                    if photo_data.startswith('data:image'):
+                        # Base64'ü decode et
+                        header, encoded = photo_data.split(',', 1)
+                        image_data = base64.b64decode(encoded)
+                        nparr = np.frombuffer(image_data, np.uint8)
+                        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                        
+                        if img is not None and face_app is not None:
+                            # Yüzleri tespit et
+                            faces = face_app.get(img)
+                            if faces:
+                                # İlk yüzün embedding'ini al
+                                reference_embeddings.append(faces[0].embedding)
+                                self.log(f"✅ Embedding oluşturuldu: {len(faces)} yüz tespit edildi")
+                            else:
+                                self.log("⚠️ Referans fotoğrafında yüz tespit edilemedi")
+                        else:
+                            self.log("❌ Fotoğraf işlenemedi veya Face API hazır değil")
+                    else:
+                        self.log("❌ Geçersiz fotoğraf formatı")
+                except Exception as e:
+                    self.log(f"❌ Referans fotoğraf işleme hatası: {str(e)}")
+                    continue
+            
+            if not reference_embeddings:
+                self.log("❌ Hiç geçerli referans embedding'i oluşturulamadı")
+                return
+            
+            # Worker thread'i başlat
+            worker = PhotoMatchingWorker(tc_number, reference_embeddings, email, selected_camp_days)
+            worker.progress.connect(self.update_matching_progress)
+            worker.finished.connect(self.on_matching_finished)
+            worker.error.connect(self.on_matching_error)
+            worker.start()
+            
+            # Tabloya ekle
+            self.add_active_request(tc_number, email, "Eşleştirme başlıyor...")
+            
+            with request_lock:
+                current_requests[tc_number] = {
+                    'worker': worker,
+                    'start_time': datetime.now(),
+                    'status': 'matching',
+                    'progress': 0,
+                    'message': 'Eşleştirme başlıyor...',
+                    'email': email
+                }
+                
+        except Exception as e:
+            self.log(f"❌ Eşleştirme başlatma hatası - {tc_number}: {str(e)}")
+    
+    def update_matching_progress(self, message, progress, tc_number):
+        """Eşleştirme ilerlemesini güncelle"""
+        self.log(f"📊 {tc_number}: {message} ({progress}%)")
+        
+        with request_lock:
+            if tc_number in current_requests:
+                current_requests[tc_number]['progress'] = progress
+                current_requests[tc_number]['message'] = message
+    
+    def on_matching_finished(self, tc_number, matched_photos):
+        """Eşleştirme tamamlandı - E-posta gönder"""
+        self.log(f"✅ {tc_number}: Eşleştirme tamamlandı - {len(matched_photos)} fotoğraf bulundu")
+        
+        with request_lock:
+            if tc_number in current_requests:
+                request_data = current_requests[tc_number]
+                email = request_data['email']
+                
+                # E-posta gönderme worker'ı başlat
+                email_worker = EmailSender(tc_number, email, matched_photos)
+                email_worker.progress.connect(self.update_email_progress)
+                email_worker.finished.connect(self.on_email_finished)
+                email_worker.start()
+                
+                # Durumu güncelle
+                current_requests[tc_number]['status'] = 'sending_email'
+                current_requests[tc_number]['message'] = 'E-posta hazırlanıyor...'
+                current_requests[tc_number]['matched_count'] = len(matched_photos)
+    
+    def on_matching_error(self, tc_number, error_message):
+        """Eşleştirme hatası"""
+        self.log(f"❌ {tc_number}: Eşleştirme hatası - {error_message}")
+        
+        with request_lock:
+            if tc_number in current_requests:
+                current_requests[tc_number]['status'] = 'error'
+                current_requests[tc_number]['message'] = error_message
+    
+    def update_email_progress(self, tc_number, message):
+        """E-posta gönderme ilerlemesini güncelle"""
+        self.log(f"📧 {tc_number}: {message}")
+        
+        with request_lock:
+            if tc_number in current_requests:
+                current_requests[tc_number]['message'] = message
+    
+    def on_email_finished(self, tc_number, success):
+        """E-posta gönderme tamamlandı"""
+        if success:
+            self.log(f"✅ {tc_number}: E-posta başarıyla gönderildi")
+            status = 'completed'
+            message = 'E-posta gönderildi'
+        else:
+            self.log(f"❌ {tc_number}: E-posta gönderme hatası")
+            status = 'email_error'
+            message = 'E-posta gönderme hatası'
+        
+        with request_lock:
+            if tc_number in current_requests:
+                request_data = current_requests[tc_number]
+                
+                # Geçmiş tablosuna ekle
+                self.add_to_history(
+                    tc_number,
+                    request_data.get('email', ''),
+                    status,
+                    request_data.get('matched_count', 0),
+                    request_data.get('start_time'),
+                    datetime.now()
+                )
+                
+                # Aktif isteklerden kaldır
+                del current_requests[tc_number]
+                
+                # İstatistikleri güncelle
+                if success:
+                    self.processed_requests_count += 1
+                    self.processed_requests_label.setText(f"✅ İşlenen talep: {self.processed_requests_count}")
+    
+    def add_to_history(self, tc_number, email, status, match_count, start_time, end_time):
+        """Geçmiş tablosuna ekle"""
+        try:
+            row = self.history_table.rowCount()
+            self.history_table.insertRow(row)
+            
+            self.history_table.setItem(row, 0, QTableWidgetItem(tc_number))
+            self.history_table.setItem(row, 1, QTableWidgetItem(email))
+            self.history_table.setItem(row, 2, QTableWidgetItem(status))
+            self.history_table.setItem(row, 3, QTableWidgetItem(str(match_count)))
+            self.history_table.setItem(row, 4, QTableWidgetItem(start_time.strftime("%H:%M:%S") if start_time else "-"))
+            self.history_table.setItem(row, 5, QTableWidgetItem(end_time.strftime("%H:%M:%S") if end_time else "-"))
+        except Exception as e:
+            self.log(f"❌ Geçmiş ekleme hatası: {str(e)}")
 
 def main():
     """Ana fonksiyon"""
