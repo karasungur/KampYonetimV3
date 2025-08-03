@@ -1412,7 +1412,11 @@ class MainWindow(QMainWindow):
         """Yeni fotoğraf isteklerini kontrol et"""
         try:
             # Web API'den yeni istekleri al (Python GUI endpoint'i)
-            response = requests.get(f"{self.db_config['web_api_url']}/api/python/photo-requests", timeout=5)
+            response = requests.get(
+                f"{self.db_config['web_api_url']}/api/python/photo-requests", 
+                headers={'Authorization': 'Bearer python-gui-token'}, 
+                timeout=5
+            )
             if response.status_code == 200:
                 requests_data = response.json()
                 
