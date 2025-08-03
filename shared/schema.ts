@@ -17,6 +17,7 @@ import { z } from "zod";
 export const userRoleEnum = pgEnum('user_role', ['genelbaskan', 'genelsekreterlik', 'moderator']);
 export const questionTypeEnum = pgEnum('question_type', ['general', 'specific']);
 export const logActionEnum = pgEnum('log_action', ['login', 'logout', 'create_question', 'edit_question', 'delete_question', 'create_answer', 'edit_answer', 'delete_answer', 'create_user', 'edit_user', 'delete_user', 'send_feedback', 'import_users']);
+export const elementTypeEnum = pgEnum('element_type', ['text', 'button', 'logo', 'slogan']);
 
 // Users table
 export const users = pgTable("users", {
@@ -146,6 +147,55 @@ export const teamMembers = pgTable("team_members", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// Uploaded files - Yüklenen arkaplan görselleri ve diğer dosyalar
+export const uploadedFiles = pgTable("uploaded_files", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fileName: varchar("file_name").notNull(),
+  originalName: varchar("original_name").notNull(),
+  mimeType: varchar("mime_type").notNull(),
+  fileSize: integer("file_size").notNull(), // bytes
+  filePath: varchar("file_path").notNull(), // relative path from public folder
+  uploadedBy: varchar("uploaded_by").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Page layouts - Ana sayfa düzeni ve arkaplan ayarları
+export const pageLayouts = pgTable("page_layouts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull().default("default"), // "default", "desktop", "mobile"
+  backgroundImageDesktop: varchar("background_image_desktop").references(() => uploadedFiles.id),
+  backgroundImageMobile: varchar("background_image_mobile").references(() => uploadedFiles.id),
+  backgroundPosition: varchar("background_position").default("center center"),
+  backgroundSize: varchar("background_size").default("cover"),
+  backgroundColor: varchar("background_color").default("#f8f9fa"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Page elements - Sayfa öğeleri (metinler, butonlar) ve pozisyonları
+export const pageElements = pgTable("page_elements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  layoutId: varchar("layout_id").notNull().references(() => pageLayouts.id, { onDelete: 'cascade' }),
+  type: elementTypeEnum("type").notNull(),
+  content: text("content").notNull(), // Text content or button label
+  elementKey: varchar("element_key").notNull(), // "main_title", "slogan", "team_button", etc.
+  positionX: integer("position_x").notNull().default(0), // X coordinate in pixels
+  positionY: integer("position_y").notNull().default(0), // Y coordinate in pixels
+  width: integer("width").default(200), // Element width in pixels
+  height: integer("height").default(50), // Element height in pixels
+  fontSize: varchar("font_size").default("16px"),
+  fontWeight: varchar("font_weight").default("normal"),
+  color: varchar("color").default("#000000"),
+  backgroundColor: varchar("background_color"),
+  borderRadius: varchar("border_radius").default("8px"),
+  displayOrder: integer("display_order").notNull().default(1),
+  isVisible: boolean("is_visible").notNull().default(true),
+  deviceType: varchar("device_type").default("both"), // "desktop", "mobile", "both"
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   questions: many(questions),
@@ -189,6 +239,32 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
   user: one(users, {
     fields: [activityLogs.userId],
     references: [users.id],
+  }),
+}));
+
+export const uploadedFilesRelations = relations(uploadedFiles, ({ one }) => ({
+  uploadedBy: one(users, {
+    fields: [uploadedFiles.uploadedBy],
+    references: [users.id],
+  }),
+}));
+
+export const pageLayoutsRelations = relations(pageLayouts, ({ one, many }) => ({
+  backgroundImageDesktop: one(uploadedFiles, {
+    fields: [pageLayouts.backgroundImageDesktop],
+    references: [uploadedFiles.id],
+  }),
+  backgroundImageMobile: one(uploadedFiles, {
+    fields: [pageLayouts.backgroundImageMobile],
+    references: [uploadedFiles.id],
+  }),
+  elements: many(pageElements),
+}));
+
+export const pageElementsRelations = relations(pageElements, ({ one }) => ({
+  layout: one(pageLayouts, {
+    fields: [pageElements.layoutId],
+    references: [pageLayouts.id],
   }),
 }));
 
@@ -253,6 +329,23 @@ export const insertTeamMemberSchema = createInsertSchema(teamMembers).omit({
   updatedAt: true,
 });
 
+export const insertUploadedFileSchema = createInsertSchema(uploadedFiles).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPageLayoutSchema = createInsertSchema(pageLayouts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPageElementSchema = createInsertSchema(pageElements).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -274,6 +367,12 @@ export type SocialMediaAccount = typeof socialMediaAccounts.$inferSelect;
 export type InsertSocialMediaAccount = z.infer<typeof insertSocialMediaAccountSchema>;
 export type TeamMember = typeof teamMembers.$inferSelect;
 export type InsertTeamMember = z.infer<typeof insertTeamMemberSchema>;
+export type UploadedFile = typeof uploadedFiles.$inferSelect;
+export type InsertUploadedFile = z.infer<typeof insertUploadedFileSchema>;
+export type PageLayout = typeof pageLayouts.$inferSelect;
+export type InsertPageLayout = z.infer<typeof insertPageLayoutSchema>;
+export type PageElement = typeof pageElements.$inferSelect;
+export type InsertPageElement = z.infer<typeof insertPageElementSchema>;
 
 // Additional types for API responses
 export type UserWithStats = User & {
@@ -303,4 +402,14 @@ export type ActivityLogWithUser = ActivityLog & {
   userFirstName?: string | null;
   userLastName?: string | null;
   userTcNumber?: string | null;
+};
+
+export type PageLayoutWithFiles = PageLayout & {
+  backgroundImageDesktopFile?: UploadedFile | null;
+  backgroundImageMobileFile?: UploadedFile | null;
+  elements?: PageElement[];
+};
+
+export type PageElementWithLayout = PageElement & {
+  layout?: PageLayout | null;
 };

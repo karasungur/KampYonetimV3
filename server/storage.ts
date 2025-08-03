@@ -9,6 +9,9 @@ import {
   programEvents,
   socialMediaAccounts,
   teamMembers,
+  uploadedFiles,
+  pageLayouts,
+  pageElements,
   type User,
   type InsertUser,
   type Table,
@@ -29,11 +32,18 @@ import {
   type InsertSocialMediaAccount,
   type TeamMember,
   type InsertTeamMember,
+  type UploadedFile,
+  type InsertUploadedFile,
+  type PageLayout,
+  type InsertPageLayout,
+  type PageElement,
+  type InsertPageElement,
   type UserWithStats,
   type QuestionWithStats,
   type AnswerWithDetails,
   type FeedbackWithDetails,
   type ActivityLogWithUser,
+  type PageLayoutWithFiles,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, desc, asc, sql, count, inArray } from "drizzle-orm";
@@ -119,6 +129,28 @@ export interface IStorage {
   getAllTeamMembers(): Promise<TeamMember[]>;
   updateTeamMember(id: string, updates: Partial<InsertTeamMember>): Promise<TeamMember>;
   deleteTeamMember(id: string): Promise<void>;
+  
+  // File upload operations
+  createUploadedFile(file: InsertUploadedFile): Promise<UploadedFile>;
+  getUploadedFile(id: string): Promise<UploadedFile | undefined>;
+  getAllUploadedFiles(): Promise<UploadedFile[]>;
+  deleteUploadedFile(id: string): Promise<void>;
+  
+  // Page layout operations
+  createPageLayout(layout: InsertPageLayout): Promise<PageLayout>;
+  getPageLayout(id: string): Promise<PageLayoutWithFiles | undefined>;
+  getActivePageLayout(): Promise<PageLayoutWithFiles | undefined>;
+  getAllPageLayouts(): Promise<PageLayoutWithFiles[]>;
+  updatePageLayout(id: string, updates: Partial<InsertPageLayout>): Promise<PageLayout>;
+  deletePageLayout(id: string): Promise<void>;
+  
+  // Page element operations
+  createPageElement(element: InsertPageElement): Promise<PageElement>;
+  getPageElement(id: string): Promise<PageElement | undefined>;
+  getPageElementsByLayout(layoutId: string): Promise<PageElement[]>;
+  updatePageElement(id: string, updates: Partial<InsertPageElement>): Promise<PageElement>;
+  deletePageElement(id: string): Promise<void>;
+  updateElementPosition(id: string, positionX: number, positionY: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -822,6 +854,165 @@ export class DatabaseStorage implements IStorage {
       .update(teamMembers)
       .set({ isActive: false })
       .where(eq(teamMembers.id, id));
+  }
+
+  // File upload operations
+  async createUploadedFile(file: InsertUploadedFile): Promise<UploadedFile> {
+    const [newFile] = await db
+      .insert(uploadedFiles)
+      .values(file)
+      .returning();
+    return newFile;
+  }
+
+  async getUploadedFile(id: string): Promise<UploadedFile | undefined> {
+    const [file] = await db
+      .select()
+      .from(uploadedFiles)
+      .where(eq(uploadedFiles.id, id));
+    return file;
+  }
+
+  async getAllUploadedFiles(): Promise<UploadedFile[]> {
+    return db
+      .select()
+      .from(uploadedFiles)
+      .orderBy(desc(uploadedFiles.createdAt));
+  }
+
+  async deleteUploadedFile(id: string): Promise<void> {
+    await db
+      .delete(uploadedFiles)
+      .where(eq(uploadedFiles.id, id));
+  }
+
+  // Page layout operations
+  async createPageLayout(layout: InsertPageLayout): Promise<PageLayout> {
+    const [newLayout] = await db
+      .insert(pageLayouts)
+      .values(layout)
+      .returning();
+    return newLayout;
+  }
+
+  async getPageLayout(id: string): Promise<PageLayoutWithFiles | undefined> {
+    const [layout] = await db
+      .select({
+        id: pageLayouts.id,
+        name: pageLayouts.name,
+        backgroundImageDesktop: pageLayouts.backgroundImageDesktop,
+        backgroundImageMobile: pageLayouts.backgroundImageMobile,
+        backgroundPosition: pageLayouts.backgroundPosition,
+        backgroundSize: pageLayouts.backgroundSize,
+        backgroundColor: pageLayouts.backgroundColor,
+        isActive: pageLayouts.isActive,
+        createdAt: pageLayouts.createdAt,
+        updatedAt: pageLayouts.updatedAt,
+        backgroundImageDesktopFile: uploadedFiles,
+      })
+      .from(pageLayouts)
+      .leftJoin(uploadedFiles, eq(pageLayouts.backgroundImageDesktop, uploadedFiles.id))
+      .where(eq(pageLayouts.id, id));
+
+    if (layout) {
+      const elements = await this.getPageElementsByLayout(id);
+      return { ...layout, elements };
+    }
+    return undefined;
+  }
+
+  async getActivePageLayout(): Promise<PageLayoutWithFiles | undefined> {
+    const [layout] = await db
+      .select()
+      .from(pageLayouts)
+      .where(eq(pageLayouts.isActive, true))
+      .limit(1);
+
+    if (layout) {
+      return this.getPageLayout(layout.id);
+    }
+    return undefined;
+  }
+
+  async getAllPageLayouts(): Promise<PageLayoutWithFiles[]> {
+    const layouts = await db
+      .select()
+      .from(pageLayouts)
+      .orderBy(desc(pageLayouts.createdAt));
+
+    const layoutsWithFiles = await Promise.all(
+      layouts.map(async (layout) => {
+        const elements = await this.getPageElementsByLayout(layout.id);
+        return { ...layout, elements };
+      })
+    );
+
+    return layoutsWithFiles;
+  }
+
+  async updatePageLayout(id: string, updates: Partial<InsertPageLayout>): Promise<PageLayout> {
+    const [updated] = await db
+      .update(pageLayouts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(pageLayouts.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deletePageLayout(id: string): Promise<void> {
+    await db
+      .delete(pageElements)
+      .where(eq(pageElements.layoutId, id));
+    await db
+      .delete(pageLayouts)
+      .where(eq(pageLayouts.id, id));
+  }
+
+  // Page element operations
+  async createPageElement(element: InsertPageElement): Promise<PageElement> {
+    const [newElement] = await db
+      .insert(pageElements)
+      .values(element)
+      .returning();
+    return newElement;
+  }
+
+  async getPageElement(id: string): Promise<PageElement | undefined> {
+    const [element] = await db
+      .select()
+      .from(pageElements)
+      .where(eq(pageElements.id, id));
+    return element;
+  }
+
+  async getPageElementsByLayout(layoutId: string): Promise<PageElement[]> {
+    return db
+      .select()
+      .from(pageElements)
+      .where(and(eq(pageElements.layoutId, layoutId), eq(pageElements.isVisible, true)))
+      .orderBy(asc(pageElements.displayOrder));
+  }
+
+  async updatePageElement(id: string, updates: Partial<InsertPageElement>): Promise<PageElement> {
+    const [updated] = await db
+      .update(pageElements)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(pageElements.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deletePageElement(id: string): Promise<void> {
+    await db
+      .delete(pageElements)
+      .where(eq(pageElements.id, id));
+  }
+
+  async updateElementPosition(id: string, positionX: number, positionY: number): Promise<void> {
+    await db
+      .update(pageElements)
+      .set({ positionX, positionY, updatedAt: new Date() })
+      .where(eq(pageElements.id, id));
   }
 }
 

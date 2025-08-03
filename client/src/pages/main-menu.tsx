@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -66,8 +67,11 @@ interface TeamMember {
   displayOrder: number;
 }
 
+type ActiveSection = 'program' | 'social' | 'team' | null;
+
 export default function MainMenuPage() {
   const [, navigate] = useLocation();
+  const [activeSection, setActiveSection] = useState<ActiveSection>(null);
 
   const { data: menuSettings } = useQuery<MenuSettings>({
     queryKey: ["/api/menu-settings"],
@@ -106,6 +110,10 @@ export default function MainMenuPage() {
 
   const handleSocialMediaClick = (url: string) => {
     window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleSectionClick = (section: ActiveSection) => {
+    setActiveSection(activeSection === section ? null : section);
   };
 
   const getSocialMediaIcon = (platform: string) => {
@@ -190,9 +198,13 @@ export default function MainMenuPage() {
 
           {/* Program Akışı */}
           {menuSettings.programFlowEnabled && (
-            <div className="aspect-square">
-              <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-4 cursor-pointer group">
-                <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center mb-3 group-hover:bg-orange-600 transition-colors">
+            <div className="aspect-square" onClick={() => handleSectionClick('program')}>
+              <div className={`bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-4 cursor-pointer group ${
+                activeSection === 'program' ? 'ring-2 ring-orange-400 bg-white' : ''
+              }`}>
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-colors ${
+                  activeSection === 'program' ? 'bg-orange-600' : 'bg-orange-500 group-hover:bg-orange-600'
+                }`}>
                   <Calendar className="w-6 h-6 text-white" />
                 </div>
                 <div className="text-xs font-medium text-gray-700 text-center leading-tight">
@@ -226,9 +238,13 @@ export default function MainMenuPage() {
 
           {/* Sosyal Medya */}
           {menuSettings.socialMediaEnabled && (
-            <div className="aspect-square">
-              <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-4 cursor-pointer group">
-                <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center mb-3 group-hover:bg-orange-600 transition-colors">
+            <div className="aspect-square" onClick={() => handleSectionClick('social')}>
+              <div className={`bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-4 cursor-pointer group ${
+                activeSection === 'social' ? 'ring-2 ring-orange-400 bg-white' : ''
+              }`}>
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-colors ${
+                  activeSection === 'social' ? 'bg-orange-600' : 'bg-orange-500 group-hover:bg-orange-600'
+                }`}>
                   <Share2 className="w-6 h-6 text-white" />
                 </div>
                 <div className="text-xs font-medium text-gray-700 text-center leading-tight">
@@ -245,9 +261,13 @@ export default function MainMenuPage() {
 
           {/* Ekibimiz */}
           {menuSettings.teamEnabled && (
-            <div className="aspect-square">
-              <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-4 cursor-pointer group">
-                <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center mb-3 group-hover:bg-orange-600 transition-colors">
+            <div className="aspect-square" onClick={() => handleSectionClick('team')}>
+              <div className={`bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-4 cursor-pointer group ${
+                activeSection === 'team' ? 'ring-2 ring-orange-400 bg-white' : ''
+              }`}>
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-colors ${
+                  activeSection === 'team' ? 'bg-orange-600' : 'bg-orange-500 group-hover:bg-orange-600'
+                }`}>
                   <Users className="w-6 h-6 text-white" />
                 </div>
                 <div className="text-xs font-medium text-gray-700 text-center leading-tight">
@@ -263,14 +283,24 @@ export default function MainMenuPage() {
           )}
         </div>
 
-        {/* Detay Modal veya Açılır Pencere için boş alanlar */}
-        {menuSettings.programFlowEnabled && (
-          <div className="mt-8">
+        {/* Dynamic Content Area - Only show active section */}
+        {activeSection === 'program' && menuSettings.programFlowEnabled && (
+          <div className="mt-8 animate-in slide-in-from-bottom-4 duration-300">
             <Card className="bg-white/95 backdrop-blur-sm border-0 rounded-2xl overflow-hidden">
               <CardHeader className="bg-gradient-to-r from-orange-500 to-yellow-500 text-white py-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Calendar className="w-5 h-5" />
-                  Program Detayları
+                <CardTitle className="text-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5" />
+                    Program Detayları
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/20 h-8 w-8 p-0"
+                    onClick={() => setActiveSection(null)}
+                  >
+                    ×
+                  </Button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4">
@@ -313,75 +343,107 @@ export default function MainMenuPage() {
           </div>
         )}
 
-        {menuSettings.socialMediaEnabled && socialMediaAccounts && socialMediaAccounts.length > 0 && (
-          <div className="mt-6">
+        {activeSection === 'social' && menuSettings.socialMediaEnabled && (
+          <div className="mt-8 animate-in slide-in-from-bottom-4 duration-300">
             <Card className="bg-white/95 backdrop-blur-sm border-0 rounded-2xl overflow-hidden">
               <CardHeader className="bg-gradient-to-r from-orange-500 to-yellow-500 text-white py-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Share2 className="w-5 h-5" />
-                  Sosyal Medya Hesapları
+                <CardTitle className="text-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Share2 className="w-5 h-5" />
+                    Sosyal Medya Hesapları
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/20 h-8 w-8 p-0"
+                    onClick={() => setActiveSection(null)}
+                  >
+                    ×
+                  </Button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4">
                 <div className="grid grid-cols-1 gap-2">
-                  {socialMediaAccounts
-                    .sort((a, b) => a.displayOrder - b.displayOrder)
-                    .map((account) => (
-                      <Button
-                        key={account.id}
-                        variant="outline"
-                        className="justify-between hover:bg-orange-500 hover:text-white transition-all duration-200 rounded-xl border-orange-200"
-                        onClick={() => handleSocialMediaClick(account.accountUrl)}
-                      >
-                        <div className="flex items-center gap-3">
-                          {getSocialMediaIcon(account.platform)}
-                          <span className="text-sm">
-                            <strong>{account.platform}:</strong> {account.accountName}
-                          </span>
-                        </div>
-                        <ExternalLink className="w-4 h-4" />
-                      </Button>
-                    ))}
+                  {socialMediaAccounts && socialMediaAccounts.length > 0 ? (
+                    socialMediaAccounts
+                      .sort((a, b) => a.displayOrder - b.displayOrder)
+                      .map((account) => (
+                        <Button
+                          key={account.id}
+                          variant="outline"
+                          className="justify-between hover:bg-orange-500 hover:text-white transition-all duration-200 rounded-xl border-orange-200"
+                          onClick={() => handleSocialMediaClick(account.accountUrl)}
+                        >
+                          <div className="flex items-center gap-3">
+                            {getSocialMediaIcon(account.platform)}
+                            <span className="text-sm">
+                              <strong>{account.platform}:</strong> {account.accountName}
+                            </span>
+                          </div>
+                          <ExternalLink className="w-4 h-4" />
+                        </Button>
+                      ))
+                  ) : (
+                    <p className="text-gray-500 text-center py-4 text-sm">
+                      Henüz sosyal medya hesabı eklenmemiş
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
           </div>
         )}
 
-        {menuSettings.teamEnabled && teamMembers && teamMembers.length > 0 && (
-          <div className="mt-6">
+        {activeSection === 'team' && menuSettings.teamEnabled && (
+          <div className="mt-8 animate-in slide-in-from-bottom-4 duration-300">
             <Card className="bg-white/95 backdrop-blur-sm border-0 rounded-2xl overflow-hidden">
               <CardHeader className="bg-gradient-to-r from-orange-500 to-yellow-500 text-white py-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Users className="w-5 h-5" />
-                  Ekip Üyeleri
+                <CardTitle className="text-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    Ekip Üyeleri
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/20 h-8 w-8 p-0"
+                    onClick={() => setActiveSection(null)}
+                  >
+                    ×
+                  </Button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {teamMembers
-                    .sort((a, b) => a.displayOrder - b.displayOrder)
-                    .map((member) => (
-                      <div key={member.id} className="bg-gradient-to-r from-orange-50 to-yellow-50 p-3 rounded-xl border border-orange-100">
-                        <h4 className="font-semibold text-gray-900 text-sm mb-1">
-                          {member.firstName} {member.lastName}
-                        </h4>
-                        <p className="text-xs text-orange-600 font-medium mb-2">
-                          {member.position}
-                        </p>
-                        {member.phoneNumber && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-xs h-7 px-2 flex items-center gap-1 hover:bg-green-50 hover:border-green-500 rounded-lg"
-                            onClick={() => handlePhoneCall(member.phoneNumber!)}
-                          >
-                            <Phone className="w-3 h-3" />
-                            {member.phoneNumber}
-                          </Button>
-                        )}
-                      </div>
-                    ))}
+                  {teamMembers && teamMembers.length > 0 ? (
+                    teamMembers
+                      .sort((a, b) => a.displayOrder - b.displayOrder)
+                      .map((member) => (
+                        <div key={member.id} className="bg-gradient-to-r from-orange-50 to-yellow-50 p-3 rounded-xl border border-orange-100">
+                          <h4 className="font-semibold text-gray-900 text-sm mb-1">
+                            {member.firstName} {member.lastName}
+                          </h4>
+                          <p className="text-xs text-orange-600 font-medium mb-2">
+                            {member.position}
+                          </p>
+                          {member.phoneNumber && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-xs h-7 px-2 flex items-center gap-1 hover:bg-green-50 hover:border-green-500 rounded-lg"
+                              onClick={() => handlePhoneCall(member.phoneNumber!)}
+                            >
+                              <Phone className="w-3 h-3" />
+                              {member.phoneNumber}
+                            </Button>
+                          )}
+                        </div>
+                      ))
+                  ) : (
+                    <p className="text-gray-500 text-center py-4 text-sm">
+                      Henüz ekip üyesi eklenmemiş
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>

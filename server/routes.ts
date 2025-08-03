@@ -2,11 +2,14 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { requireAuth, requireRole, generateToken, comparePassword, hashPassword, type AuthenticatedRequest } from "./auth";
-import { insertUserSchema, insertQuestionSchema, insertAnswerSchema, insertFeedbackSchema, insertProgramEventSchema } from "@shared/schema";
+import { insertUserSchema, insertQuestionSchema, insertAnswerSchema, insertFeedbackSchema, insertProgramEventSchema, insertUploadedFileSchema, insertPageLayoutSchema, insertPageElementSchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import rateLimit from "express-rate-limit";
+import path from "path";
+import fs from "fs";
+import { nanoid } from "nanoid";
 
 // TC Kimlik doğrulama fonksiyonu
 function validateTCNumber(tc: string): boolean {
@@ -46,6 +49,36 @@ const createAccountLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 saat
   max: 10, // Maksimum 10 kullanıcı oluşturma
   message: 'Çok fazla kullanıcı oluşturma denemesi. Lütfen daha sonra tekrar deneyin.',
+});
+
+// File upload configuration
+const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const imageUpload = multer({
+  storage: multer.diskStorage({
+    destination: uploadDir,
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      const filename = `${nanoid()}_${Date.now()}${ext}`;
+      cb(null, filename);
+    },
+  }),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      const error = new Error('Sadece resim dosyaları yüklenebilir') as any;
+      error.code = 'INVALID_FILE_TYPE';
+      cb(error, false);
+    }
+  },
 });
 
 const apiLimiter = rateLimit({
@@ -1069,6 +1102,184 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: 'Ekip üyesi silindi' });
     } catch (error) {
       res.status(400).json({ message: 'Ekip üyesi silinemedi' });
+    }
+  });
+
+  // File upload endpoints
+  app.post('/api/upload', requireAuth, requireRole(['genelsekreterlik']), imageUpload.single('file'), async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: 'Dosya yüklenemedi' });
+      }
+
+      const fileData = {
+        fileName: req.file.filename,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        fileSize: req.file.size,
+        filePath: `/uploads/${req.file.filename}`,
+        uploadedBy: req.user!.id,
+      };
+
+      const uploadedFile = await storage.createUploadedFile(fileData);
+      res.status(201).json(uploadedFile);
+    } catch (error) {
+      console.error('File upload error:', error);
+      res.status(400).json({ message: 'Dosya yüklenemedi' });
+    }
+  });
+
+  app.get('/api/uploaded-files', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const files = await storage.getAllUploadedFiles();
+      res.json(files);
+    } catch (error) {
+      res.status(500).json({ message: 'Dosyalar getirilemedi' });
+    }
+  });
+
+  app.delete('/api/uploaded-files/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const file = await storage.getUploadedFile(id);
+      
+      if (file) {
+        // Delete physical file
+        const filePath = path.join(process.cwd(), 'public', file.filePath);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+
+      await storage.deleteUploadedFile(id);
+      res.json({ message: 'Dosya silindi' });
+    } catch (error) {
+      res.status(400).json({ message: 'Dosya silinemedi' });
+    }
+  });
+
+  // Page layout endpoints
+  app.get('/api/page-layouts', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const layouts = await storage.getAllPageLayouts();
+      res.json(layouts);
+    } catch (error) {
+      res.status(500).json({ message: 'Sayfa düzenleri getirilemedi' });
+    }
+  });
+
+  app.get('/api/page-layouts/active', async (req, res) => {
+    try {
+      const layout = await storage.getActivePageLayout();
+      res.json(layout || null);
+    } catch (error) {
+      res.status(500).json({ message: 'Aktif sayfa düzeni getirilemedi' });
+    }
+  });
+
+  app.get('/api/page-layouts/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const layout = await storage.getPageLayout(id);
+      
+      if (!layout) {
+        return res.status(404).json({ message: 'Sayfa düzeni bulunamadı' });
+      }
+      
+      res.json(layout);
+    } catch (error) {
+      res.status(500).json({ message: 'Sayfa düzeni getirilemedi' });
+    }
+  });
+
+  app.post('/api/page-layouts', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const layoutData = insertPageLayoutSchema.parse(req.body);
+      const layout = await storage.createPageLayout(layoutData);
+      res.status(201).json(layout);
+    } catch (error) {
+      console.error('Create page layout error:', error);
+      res.status(400).json({ message: 'Sayfa düzeni oluşturulamadı' });
+    }
+  });
+
+  app.put('/api/page-layouts/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const updates = insertPageLayoutSchema.partial().parse(req.body);
+      const layout = await storage.updatePageLayout(id, updates);
+      res.json(layout);
+    } catch (error) {
+      res.status(400).json({ message: 'Sayfa düzeni güncellenemedi' });
+    }
+  });
+
+  app.delete('/api/page-layouts/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deletePageLayout(id);
+      res.json({ message: 'Sayfa düzeni silindi' });
+    } catch (error) {
+      res.status(400).json({ message: 'Sayfa düzeni silinemedi' });
+    }
+  });
+
+  // Page element endpoints
+  app.get('/api/page-elements/:layoutId', async (req, res) => {
+    try {
+      const { layoutId } = req.params;
+      const elements = await storage.getPageElementsByLayout(layoutId);
+      res.json(elements);
+    } catch (error) {
+      res.status(500).json({ message: 'Sayfa öğeleri getirilemedi' });
+    }
+  });
+
+  app.post('/api/page-elements', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const elementData = insertPageElementSchema.parse(req.body);
+      const element = await storage.createPageElement(elementData);
+      res.status(201).json(element);
+    } catch (error) {
+      console.error('Create page element error:', error);
+      res.status(400).json({ message: 'Sayfa öğesi oluşturulamadı' });
+    }
+  });
+
+  app.put('/api/page-elements/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const updates = insertPageElementSchema.partial().parse(req.body);
+      const element = await storage.updatePageElement(id, updates);
+      res.json(element);
+    } catch (error) {
+      res.status(400).json({ message: 'Sayfa öğesi güncellenemedi' });
+    }
+  });
+
+  app.put('/api/page-elements/:id/position', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { positionX, positionY } = req.body;
+      
+      if (typeof positionX !== 'number' || typeof positionY !== 'number') {
+        return res.status(400).json({ message: 'Geçersiz pozisyon değerleri' });
+      }
+      
+      await storage.updateElementPosition(id, positionX, positionY);
+      res.json({ message: 'Pozisyon güncellendi' });
+    } catch (error) {
+      res.status(400).json({ message: 'Pozisyon güncellenemedi' });
+    }
+  });
+
+  app.delete('/api/page-elements/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deletePageElement(id);
+      res.json({ message: 'Sayfa öğesi silindi' });
+    } catch (error) {
+      res.status(400).json({ message: 'Sayfa öğesi silinemedi' });
     }
   });
 
