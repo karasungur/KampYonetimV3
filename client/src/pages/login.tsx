@@ -27,17 +27,19 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-ak-yellow/10 to-ak-blue/10">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-ak-yellow/10 to-ak-blue/10">
+      {/* Logo doğrudan mavi arka plan üzerinde */}
+      <div className="mb-8">
+        <img 
+          src={akPartiLogo} 
+          alt="AK Parti" 
+          className="w-72 h-72 object-contain mx-auto"
+        />
+      </div>
+      
       <div className="max-w-md w-full mx-4">
         <Card className="shadow-2xl">
           <CardHeader className="text-center pb-6">
-            <div className="w-56 h-56 mx-auto mb-6 bg-gradient-to-br from-orange-200 to-yellow-200 rounded-full flex items-center justify-center p-6 shadow-xl border-4 border-white">
-              <img 
-                src={akPartiLogo} 
-                alt="AK Parti" 
-                className="w-full h-full object-contain"
-              />
-            </div>
             <h2 className="text-2xl font-bold ak-text">İrade, İstikamet ve İstişare Kampı</h2>
             <p className="ak-gray mt-2">AK Parti Gençlik Kolları Genel Sekreterlik</p>
           </CardHeader>
