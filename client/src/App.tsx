@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 import SplashScreen from "@/pages/splash";
+import MainMenuPage from "@/pages/main-menu";
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
 import QuestionsPage from "@/pages/questions";
@@ -32,14 +33,11 @@ function Router() {
     );
   }
 
-  if (!user) {
-    return <LoginPage />;
-  }
-
   return (
     <Switch>
-      <Route path="/" component={DashboardPage} />
-      <Route path="/questions" component={user.role === 'moderator' ? ModeratorQuestionsPage : QuestionsPage} />
+      <Route path="/" component={!user ? MainMenuPage : DashboardPage} />
+      <Route path="/login" component={LoginPage} />
+      <Route path="/questions" component={user?.role === 'moderator' ? ModeratorQuestionsPage : QuestionsPage} />
       <Route path="/users" component={UsersPage} />
       <Route path="/reports" component={ReportsPage} />
       <Route path="/feedback" component={FeedbackPage} />

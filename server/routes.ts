@@ -915,6 +915,159 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Menu Settings Routes
+  app.get('/api/menu-settings', async (req, res) => {
+    try {
+      const settings = await storage.getMenuSettings();
+      if (!settings) {
+        // Varsayılan ayarları döndür
+        const defaultSettings = {
+          moderatorLoginEnabled: true,
+          programFlowEnabled: false,
+          photosEnabled: false,
+          socialMediaEnabled: false,
+          teamEnabled: false,
+          moderatorLoginTitle: "Moderatör Girişi",
+          programFlowTitle: "Program Akışı",
+          photosTitle: "Fotoğraflar",
+          socialMediaTitle: "Sosyal Medya",
+          teamTitle: "Ekibimiz",
+        };
+        res.json(defaultSettings);
+      } else {
+        res.json(settings);
+      }
+    } catch (error) {
+      res.status(500).json({ message: 'Menü ayarları alınamadı' });
+    }
+  });
+
+  app.put('/api/menu-settings', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const settings = await storage.updateMenuSettings(req.body);
+      res.json(settings);
+    } catch (error) {
+      res.status(400).json({ message: 'Menü ayarları güncellenemedi' });
+    }
+  });
+
+  // Program Events Routes
+  app.get('/api/program-events', async (req, res) => {
+    try {
+      const events = await storage.getAllProgramEvents();
+      res.json(events);
+    } catch (error) {
+      res.status(500).json({ message: 'Program etkinlikleri alınamadı' });
+    }
+  });
+
+  app.post('/api/program-events', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const event = await storage.createProgramEvent(req.body);
+      res.status(201).json(event);
+    } catch (error) {
+      res.status(400).json({ message: 'Etkinlik oluşturulamadı' });
+    }
+  });
+
+  app.put('/api/program-events/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const event = await storage.updateProgramEvent(id, req.body);
+      res.json(event);
+    } catch (error) {
+      res.status(400).json({ message: 'Etkinlik güncellenemedi' });
+    }
+  });
+
+  app.delete('/api/program-events/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteProgramEvent(id);
+      res.json({ message: 'Etkinlik silindi' });
+    } catch (error) {
+      res.status(400).json({ message: 'Etkinlik silinemedi' });
+    }
+  });
+
+  // Social Media Accounts Routes
+  app.get('/api/social-media-accounts', async (req, res) => {
+    try {
+      const accounts = await storage.getAllSocialMediaAccounts();
+      res.json(accounts);
+    } catch (error) {
+      res.status(500).json({ message: 'Sosyal medya hesapları alınamadı' });
+    }
+  });
+
+  app.post('/api/social-media-accounts', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const account = await storage.createSocialMediaAccount(req.body);
+      res.status(201).json(account);
+    } catch (error) {
+      res.status(400).json({ message: 'Sosyal medya hesabı oluşturulamadı' });
+    }
+  });
+
+  app.put('/api/social-media-accounts/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const account = await storage.updateSocialMediaAccount(id, req.body);
+      res.json(account);
+    } catch (error) {
+      res.status(400).json({ message: 'Sosyal medya hesabı güncellenemedi' });
+    }
+  });
+
+  app.delete('/api/social-media-accounts/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteSocialMediaAccount(id);
+      res.json({ message: 'Sosyal medya hesabı silindi' });
+    } catch (error) {
+      res.status(400).json({ message: 'Sosyal medya hesabı silinemedi' });
+    }
+  });
+
+  // Team Members Routes
+  app.get('/api/team-members', async (req, res) => {
+    try {
+      const members = await storage.getAllTeamMembers();
+      res.json(members);
+    } catch (error) {
+      res.status(500).json({ message: 'Ekip üyeleri alınamadı' });
+    }
+  });
+
+  app.post('/api/team-members', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const member = await storage.createTeamMember(req.body);
+      res.status(201).json(member);
+    } catch (error) {
+      res.status(400).json({ message: 'Ekip üyesi oluşturulamadı' });
+    }
+  });
+
+  app.put('/api/team-members/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const member = await storage.updateTeamMember(id, req.body);
+      res.json(member);
+    } catch (error) {
+      res.status(400).json({ message: 'Ekip üyesi güncellenemedi' });
+    }
+  });
+
+  app.delete('/api/team-members/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteTeamMember(id);
+      res.json({ message: 'Ekip üyesi silindi' });
+    } catch (error) {
+      res.status(400).json({ message: 'Ekip üyesi silinemedi' });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

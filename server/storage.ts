@@ -5,6 +5,10 @@ import {
   answers,
   feedback,
   activityLogs,
+  menuSettings,
+  programEvents,
+  socialMediaAccounts,
+  teamMembers,
   type User,
   type InsertUser,
   type Table,
@@ -17,6 +21,14 @@ import {
   type InsertFeedback,
   type ActivityLog,
   type InsertActivityLog,
+  type MenuSettings,
+  type InsertMenuSettings,
+  type ProgramEvent,
+  type InsertProgramEvent,
+  type SocialMediaAccount,
+  type InsertSocialMediaAccount,
+  type TeamMember,
+  type InsertTeamMember,
   type UserWithStats,
   type QuestionWithStats,
   type AnswerWithDetails,
@@ -85,6 +97,28 @@ export interface IStorage {
     totalAnswers: number;
     pendingAnswers: number;
   }>;
+  
+  // Menu settings operations
+  getMenuSettings(): Promise<MenuSettings | undefined>;
+  updateMenuSettings(settings: InsertMenuSettings): Promise<MenuSettings>;
+  
+  // Program events operations
+  createProgramEvent(event: InsertProgramEvent): Promise<ProgramEvent>;
+  getAllProgramEvents(): Promise<ProgramEvent[]>;
+  updateProgramEvent(id: string, updates: Partial<InsertProgramEvent>): Promise<ProgramEvent>;
+  deleteProgramEvent(id: string): Promise<void>;
+  
+  // Social media accounts operations
+  createSocialMediaAccount(account: InsertSocialMediaAccount): Promise<SocialMediaAccount>;
+  getAllSocialMediaAccounts(): Promise<SocialMediaAccount[]>;
+  updateSocialMediaAccount(id: string, updates: Partial<InsertSocialMediaAccount>): Promise<SocialMediaAccount>;
+  deleteSocialMediaAccount(id: string): Promise<void>;
+  
+  // Team members operations
+  createTeamMember(member: InsertTeamMember): Promise<TeamMember>;
+  getAllTeamMembers(): Promise<TeamMember[]>;
+  updateTeamMember(id: string, updates: Partial<InsertTeamMember>): Promise<TeamMember>;
+  deleteTeamMember(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -664,6 +698,130 @@ export class DatabaseStorage implements IStorage {
       totalAnswers: answersCount.count,
       pendingAnswers: pendingCount,
     };
+  }
+
+  // Menu settings operations
+  async getMenuSettings(): Promise<MenuSettings | undefined> {
+    const [settings] = await db.select().from(menuSettings).limit(1);
+    return settings || undefined;
+  }
+
+  async updateMenuSettings(settingsData: InsertMenuSettings): Promise<MenuSettings> {
+    const existingSettings = await this.getMenuSettings();
+    
+    if (existingSettings) {
+      const [updated] = await db
+        .update(menuSettings)
+        .set({ ...settingsData, updatedAt: new Date() })
+        .where(eq(menuSettings.id, existingSettings.id))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db
+        .insert(menuSettings)
+        .values(settingsData)
+        .returning();
+      return created;
+    }
+  }
+
+  // Program events operations
+  async createProgramEvent(event: InsertProgramEvent): Promise<ProgramEvent> {
+    const [newEvent] = await db
+      .insert(programEvents)
+      .values(event)
+      .returning();
+    return newEvent;
+  }
+
+  async getAllProgramEvents(): Promise<ProgramEvent[]> {
+    return db
+      .select()
+      .from(programEvents)
+      .where(eq(programEvents.isActive, true))
+      .orderBy(asc(programEvents.eventDate));
+  }
+
+  async updateProgramEvent(id: string, updates: Partial<InsertProgramEvent>): Promise<ProgramEvent> {
+    const [updated] = await db
+      .update(programEvents)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(programEvents.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteProgramEvent(id: string): Promise<void> {
+    await db
+      .update(programEvents)
+      .set({ isActive: false })
+      .where(eq(programEvents.id, id));
+  }
+
+  // Social media accounts operations
+  async createSocialMediaAccount(account: InsertSocialMediaAccount): Promise<SocialMediaAccount> {
+    const [newAccount] = await db
+      .insert(socialMediaAccounts)
+      .values(account)
+      .returning();
+    return newAccount;
+  }
+
+  async getAllSocialMediaAccounts(): Promise<SocialMediaAccount[]> {
+    return db
+      .select()
+      .from(socialMediaAccounts)
+      .where(eq(socialMediaAccounts.isActive, true))
+      .orderBy(asc(socialMediaAccounts.displayOrder));
+  }
+
+  async updateSocialMediaAccount(id: string, updates: Partial<InsertSocialMediaAccount>): Promise<SocialMediaAccount> {
+    const [updated] = await db
+      .update(socialMediaAccounts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(socialMediaAccounts.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteSocialMediaAccount(id: string): Promise<void> {
+    await db
+      .update(socialMediaAccounts)
+      .set({ isActive: false })
+      .where(eq(socialMediaAccounts.id, id));
+  }
+
+  // Team members operations
+  async createTeamMember(member: InsertTeamMember): Promise<TeamMember> {
+    const [newMember] = await db
+      .insert(teamMembers)
+      .values(member)
+      .returning();
+    return newMember;
+  }
+
+  async getAllTeamMembers(): Promise<TeamMember[]> {
+    return db
+      .select()
+      .from(teamMembers)
+      .where(eq(teamMembers.isActive, true))
+      .orderBy(asc(teamMembers.displayOrder));
+  }
+
+  async updateTeamMember(id: string, updates: Partial<InsertTeamMember>): Promise<TeamMember> {
+    const [updated] = await db
+      .update(teamMembers)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(teamMembers.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTeamMember(id: string): Promise<void> {
+    await db
+      .update(teamMembers)
+      .set({ isActive: false })
+      .where(eq(teamMembers.id, id));
   }
 }
 

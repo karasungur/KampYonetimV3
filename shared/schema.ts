@@ -92,6 +92,60 @@ export const activityLogs = pgTable("activity_logs", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Menu settings - Genel Sekreterlik tarafından yönetilen ana menü ayarları
+export const menuSettings = pgTable("menu_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  moderatorLoginEnabled: boolean("moderator_login_enabled").notNull().default(true),
+  programFlowEnabled: boolean("program_flow_enabled").notNull().default(false),
+  photosEnabled: boolean("photos_enabled").notNull().default(false),
+  socialMediaEnabled: boolean("social_media_enabled").notNull().default(false),
+  teamEnabled: boolean("team_enabled").notNull().default(false),
+  moderatorLoginTitle: varchar("moderator_login_title").default("Moderatör Girişi"),
+  programFlowTitle: varchar("program_flow_title").default("Program Akışı"),
+  photosTitle: varchar("photos_title").default("Fotoğraflar"),
+  socialMediaTitle: varchar("social_media_title").default("Sosyal Medya"),
+  teamTitle: varchar("team_title").default("Ekibimiz"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Program events - Program akışı için etkinlikler
+export const programEvents = pgTable("program_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: varchar("title").notNull(),
+  description: text("description"),
+  eventDate: timestamp("event_date").notNull(),
+  location: varchar("location"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Social media accounts
+export const socialMediaAccounts = pgTable("social_media_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  platform: varchar("platform").notNull(), // Twitter, Instagram, Facebook, etc.
+  accountName: varchar("account_name").notNull(),
+  accountUrl: text("account_url").notNull(),
+  displayOrder: integer("display_order").notNull().default(1),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Team members
+export const teamMembers = pgTable("team_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  firstName: varchar("first_name").notNull(),
+  lastName: varchar("last_name").notNull(),
+  position: varchar("position").notNull(), // Görev
+  phoneNumber: varchar("phone_number"),
+  email: varchar("email"),
+  displayOrder: integer("display_order").notNull().default(1),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   questions: many(questions),
@@ -176,6 +230,29 @@ export const insertActivityLogSchema = createInsertSchema(activityLogs).omit({
   createdAt: true,
 });
 
+export const insertMenuSettingsSchema = createInsertSchema(menuSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export const insertProgramEventSchema = createInsertSchema(programEvents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSocialMediaAccountSchema = createInsertSchema(socialMediaAccounts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTeamMemberSchema = createInsertSchema(teamMembers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -189,6 +266,14 @@ export type Feedback = typeof feedback.$inferSelect;
 export type InsertFeedback = z.infer<typeof insertFeedbackSchema>;
 export type ActivityLog = typeof activityLogs.$inferSelect;
 export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
+export type MenuSettings = typeof menuSettings.$inferSelect;
+export type InsertMenuSettings = z.infer<typeof insertMenuSettingsSchema>;
+export type ProgramEvent = typeof programEvents.$inferSelect;
+export type InsertProgramEvent = z.infer<typeof insertProgramEventSchema>;
+export type SocialMediaAccount = typeof socialMediaAccounts.$inferSelect;
+export type InsertSocialMediaAccount = z.infer<typeof insertSocialMediaAccountSchema>;
+export type TeamMember = typeof teamMembers.$inferSelect;
+export type InsertTeamMember = z.infer<typeof insertTeamMemberSchema>;
 
 // Additional types for API responses
 export type UserWithStats = User & {
