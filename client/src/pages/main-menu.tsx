@@ -186,7 +186,7 @@ export default function MainMenuPage() {
   const renderMainMenu = () => (
     <>
       {/* Header with Logo Space */}
-      <div className="text-center mb-1">
+      <div className="text-center mb-0">
         {/* Logo */}
         <img 
           src={akPartiLogo} 
@@ -198,12 +198,12 @@ export default function MainMenuPage() {
         <img 
           src={metinResmi} 
           alt="AK Parti Gençlik Kolları Genel Sekreterlik - Strateji ve İstişare Kampı" 
-          className="w-72 sm:w-56 md:w-64 mx-auto mb-0 object-contain -mt-1"
+          className="w-72 sm:w-56 md:w-64 mx-auto mb-0 object-contain -mt-3"
         />
       </div>
 
       {/* Mobile Optimized Menu Grid */}
-      <div className="grid grid-cols-3 gap-2 max-w-sm mx-auto">
+      <div className="grid grid-cols-3 gap-2 max-w-sm mx-auto -mt-2">
         {/* Moderatör Girişi */}
         {menuSettings.moderatorLoginEnabled && (
           <div className="aspect-square" onClick={() => handleSectionClick('login')}>
