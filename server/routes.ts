@@ -1377,7 +1377,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('📥 Web\'den gelen fotoğraf isteği:');
       console.log('- TC:', requestData.tcNumber);
       console.log('- Email:', requestData.email);
-      console.log('- Face Data:', req.body.faceData ? `${req.body.faceData.length} adet` : 'YOK');
+      console.log('- Face Data (raw):', req.body.faceData ? `${Array.isArray(req.body.faceData) ? req.body.faceData.length : 'VAR'} adet` : 'YOK');
+      console.log('- Face Data (parsed):', requestData.faceData ? `${Array.isArray(requestData.faceData) ? requestData.faceData.length : 'VAR'} adet` : 'YOK (KAYBOLDU!)');
       console.log('- Selected Camp Days:', selectedCampDays);
       
       // İsteği veritabanına kaydet (Python GUI ayrı çalışacak)
