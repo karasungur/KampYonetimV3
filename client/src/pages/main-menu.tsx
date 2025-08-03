@@ -142,6 +142,7 @@ export default function MainMenuPage() {
     quality: 'good' | 'poor' | 'blurry' | 'profile';
     boundingBox: { x: number; y: number; width: number; height: number };
     landmarks: any;
+    descriptor?: Float32Array; // Face embedding for recognition
     originalFile: File;
     isSelected: boolean;
   }
@@ -223,7 +224,8 @@ export default function MainMenuPage() {
         const img = await loadImageFromFile(file);
         const detections = await faceapi
           .detectAllFaces(img, new faceapi.TinyFaceDetectorOptions())
-          .withFaceLandmarks();
+          .withFaceLandmarks()
+          .withFaceDescriptors();
 
         for (let faceIndex = 0; faceIndex < detections.length; faceIndex++) {
           const detection = detections[faceIndex];
@@ -242,6 +244,7 @@ export default function MainMenuPage() {
               height: detection.detection.box.height,
             },
             landmarks: detection.landmarks,
+            descriptor: detection.descriptor, // Face embedding
             originalFile: file,
             isSelected: false,
           };
@@ -1235,12 +1238,21 @@ export default function MainMenuPage() {
                               onClick={async () => {
                                 setIsProcessing(true);
                                 try {
+                                  // Seçilen yüzlerin embedding verilerini hazırla
+                                  const selectedFaces = detectedFaces.filter(face => selectedFaceIds.includes(face.id));
+                                  const faceData = selectedFaces.map(face => ({
+                                    id: face.id,
+                                    embedding: face.descriptor ? Array.from(face.descriptor) : [],
+                                    confidence: face.confidence,
+                                    quality: face.quality
+                                  }));
+
                                   // API'ye fotoğraf isteği gönder
                                   await apiRequest('POST', '/api/photo-requests', {
                                     tcNumber: photoTcNumber,
                                     email: photoEmail,
                                     selectedCampDays: selectedCampDays,
-                                    // Fotoğraflar daha sonra ayrı olarak yüklenecek
+                                    faceData: faceData,
                                     uploadedFilesCount: uploadedFiles.length
                                   });
                                   
