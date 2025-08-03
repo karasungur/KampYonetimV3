@@ -38,7 +38,8 @@ export default function QuestionsPage() {
         headers: setAuthHeader(),
       });
       if (!response.ok) throw new Error('Failed to fetch questions');
-      return response.json();
+      const result = await response.json();
+      return result.data || [];
     },
   });
 
