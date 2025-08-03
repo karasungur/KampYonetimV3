@@ -176,13 +176,11 @@ export default function MainMenuPage() {
       {/* Header with Logo Space */}
       <div className="text-center mb-8">
         {/* Logo */}
-        <div className="w-28 h-28 md:w-32 md:h-32 mx-auto mb-6 bg-gradient-to-br from-orange-100/90 to-yellow-50/90 rounded-full flex items-center justify-center backdrop-blur-sm p-4 shadow-lg">
-          <img 
-            src={akPartiLogo} 
-            alt="AK Parti" 
-            className="w-full h-full object-contain"
-          />
-        </div>
+        <img 
+          src={akPartiLogo} 
+          alt="AK Parti" 
+          className="w-28 h-28 md:w-32 md:h-32 mx-auto mb-6 object-contain"
+        />
         
         <h1 className="text-2xl md:text-3xl font-bold text-white mb-3">
           {menuSettings?.mainTitle || "AK Parti Gençlik Kolları"}
