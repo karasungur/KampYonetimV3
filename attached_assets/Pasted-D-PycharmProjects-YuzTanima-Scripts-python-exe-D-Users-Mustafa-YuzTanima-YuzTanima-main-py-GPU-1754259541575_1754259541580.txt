@@ -1,0 +1,40 @@
+D:\PycharmProjects\YuzTanima\Scripts\python.exe D:\Users\Mustafa\YuzTanima\YuzTanima\main.py 
+✅ GPU Tespit Edildi: NVIDIA GeForce GTX 1650
+   PyTorch GPU Desteği: Aktif
+   GPU Belleği: 3 GB
+🚀 GPU Modunda Başlatılıyor...
+Applied providers: ['CUDAExecutionProvider', 'CPUExecutionProvider'], with options: {'CUDAExecutionProvider': {'device_id': '0', 'has_user_compute_stream': '0', 'cudnn_conv1d_pad_to_nc1d': '0', 'user_compute_stream': '0', 'gpu_external_alloc': '0', 'gpu_mem_limit': '18446744073709551615', 'enable_cuda_graph': '0', 'gpu_external_free': '0', 'gpu_external_empty_cache': '0', 'arena_extend_strategy': 'kNextPowerOfTwo', 'cudnn_conv_algo_search': 'EXHAUSTIVE', 'do_copy_in_default_stream': '1', 'cudnn_conv_use_max_workspace': '1', 'tunable_op_enable': '0', 'tunable_op_tuning_enable': '0', 'tunable_op_max_tuning_duration_ms': '0', 'enable_skip_layer_norm_strict_mode': '0', 'prefer_nhwc': '0', 'use_ep_level_unified_stream': '0', 'use_tf32': '1', 'sdpa_kernel': '0', 'fuse_conv_bias': '0'}, 'CPUExecutionProvider': {}}
+find model: C:\Users\Mustafa/.insightface\models\buffalo_l\1k3d68.onnx landmark_3d_68 ['None', 3, 192, 192] 0.0 1.0
+Applied providers: ['CUDAExecutionProvider', 'CPUExecutionProvider'], with options: {'CUDAExecutionProvider': {'device_id': '0', 'has_user_compute_stream': '0', 'cudnn_conv1d_pad_to_nc1d': '0', 'user_compute_stream': '0', 'gpu_external_alloc': '0', 'gpu_mem_limit': '18446744073709551615', 'enable_cuda_graph': '0', 'gpu_external_free': '0', 'gpu_external_empty_cache': '0', 'arena_extend_strategy': 'kNextPowerOfTwo', 'cudnn_conv_algo_search': 'EXHAUSTIVE', 'do_copy_in_default_stream': '1', 'cudnn_conv_use_max_workspace': '1', 'tunable_op_enable': '0', 'tunable_op_tuning_enable': '0', 'tunable_op_max_tuning_duration_ms': '0', 'enable_skip_layer_norm_strict_mode': '0', 'prefer_nhwc': '0', 'use_ep_level_unified_stream': '0', 'use_tf32': '1', 'sdpa_kernel': '0', 'fuse_conv_bias': '0'}, 'CPUExecutionProvider': {}}
+find model: C:\Users\Mustafa/.insightface\models\buffalo_l\2d106det.onnx landmark_2d_106 ['None', 3, 192, 192] 0.0 1.0
+Applied providers: ['CUDAExecutionProvider', 'CPUExecutionProvider'], with options: {'CUDAExecutionProvider': {'device_id': '0', 'has_user_compute_stream': '0', 'cudnn_conv1d_pad_to_nc1d': '0', 'user_compute_stream': '0', 'gpu_external_alloc': '0', 'gpu_mem_limit': '18446744073709551615', 'enable_cuda_graph': '0', 'gpu_external_free': '0', 'gpu_external_empty_cache': '0', 'arena_extend_strategy': 'kNextPowerOfTwo', 'cudnn_conv_algo_search': 'EXHAUSTIVE', 'do_copy_in_default_stream': '1', 'cudnn_conv_use_max_workspace': '1', 'tunable_op_enable': '0', 'tunable_op_tuning_enable': '0', 'tunable_op_max_tuning_duration_ms': '0', 'enable_skip_layer_norm_strict_mode': '0', 'prefer_nhwc': '0', 'use_ep_level_unified_stream': '0', 'use_tf32': '1', 'sdpa_kernel': '0', 'fuse_conv_bias': '0'}, 'CPUExecutionProvider': {}}
+find model: C:\Users\Mustafa/.insightface\models\buffalo_l\det_10g.onnx detection [1, 3, '?', '?'] 127.5 128.0
+Applied providers: ['CUDAExecutionProvider', 'CPUExecutionProvider'], with options: {'CUDAExecutionProvider': {'device_id': '0', 'has_user_compute_stream': '0', 'cudnn_conv1d_pad_to_nc1d': '0', 'user_compute_stream': '0', 'gpu_external_alloc': '0', 'gpu_mem_limit': '18446744073709551615', 'enable_cuda_graph': '0', 'gpu_external_free': '0', 'gpu_external_empty_cache': '0', 'arena_extend_strategy': 'kNextPowerOfTwo', 'cudnn_conv_algo_search': 'EXHAUSTIVE', 'do_copy_in_default_stream': '1', 'cudnn_conv_use_max_workspace': '1', 'tunable_op_enable': '0', 'tunable_op_tuning_enable': '0', 'tunable_op_max_tuning_duration_ms': '0', 'enable_skip_layer_norm_strict_mode': '0', 'prefer_nhwc': '0', 'use_ep_level_unified_stream': '0', 'use_tf32': '1', 'sdpa_kernel': '0', 'fuse_conv_bias': '0'}, 'CPUExecutionProvider': {}}
+find model: C:\Users\Mustafa/.insightface\models\buffalo_l\genderage.onnx genderage ['None', 3, 96, 96] 0.0 1.0
+Applied providers: ['CUDAExecutionProvider', 'CPUExecutionProvider'], with options: {'CUDAExecutionProvider': {'device_id': '0', 'has_user_compute_stream': '0', 'cudnn_conv1d_pad_to_nc1d': '0', 'user_compute_stream': '0', 'gpu_external_alloc': '0', 'gpu_mem_limit': '18446744073709551615', 'enable_cuda_graph': '0', 'gpu_external_free': '0', 'gpu_external_empty_cache': '0', 'arena_extend_strategy': 'kNextPowerOfTwo', 'cudnn_conv_algo_search': 'EXHAUSTIVE', 'do_copy_in_default_stream': '1', 'cudnn_conv_use_max_workspace': '1', 'tunable_op_enable': '0', 'tunable_op_tuning_enable': '0', 'tunable_op_max_tuning_duration_ms': '0', 'enable_skip_layer_norm_strict_mode': '0', 'prefer_nhwc': '0', 'use_ep_level_unified_stream': '0', 'use_tf32': '1', 'sdpa_kernel': '0', 'fuse_conv_bias': '0'}, 'CPUExecutionProvider': {}}
+find model: C:\Users\Mustafa/.insightface\models\buffalo_l\w600k_r50.onnx recognition ['None', 3, 112, 112] 127.5 127.5
+set det-size: (640, 640)
+✅ Yüz Analizi Sistemi Hazır - GPU (NVIDIA GeForce GTX 1650)
+Python API Server başlatıldı - Port: 8080
+ * Serving Flask app 'main'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://172.20.10.4:8080
+Press CTRL+C to quit
+[ WARN:0@68.172] global loadsave.cpp:268 cv::findDecoder imread_('E:/resimler/11 Temmuz/14-00_16-00/GİRİS KİSMİ\_DSC3474.JPG'): can't open/read file: check file path/integrity
+[ WARN:0@68.179] global loadsave.cpp:268 cv::findDecoder imread_('E:/resimler/11 Temmuz/14-00_16-00/GİRİS KİSMİ\_DSC3477.JPG'): can't open/read file: check file path/integrity
+[ WARN:0@68.179] global loadsave.cpp:268 cv::findDecoder imread_('E:/resimler/11 Temmuz/14-00_16-00/GİRİS KİSMİ\_DSC3483.JPG'): can't open/read file: check file path/integrity
+[ WARN:0@68.179] global loadsave.cpp:268 cv::findDecoder imread_('E:/resimler/11 Temmuz/14-00_16-00/GİRİS KİSMİ\_DSC3485.JPG'): can't open/read file: check file path/integrity
+[ WARN:0@68.180] global loadsave.cpp:268 cv::findDecoder imread_('E:/resimler/11 Temmuz/14-00_16-00/GİRİS KİSMİ\_DSC3488.JPG'): can't open/read file: check file path/integrity
+[ WARN:0@68.180] global loadsave.cpp:268 cv::findDecoder imread_('E:/resimler/11 Temmuz/14-00_16-00/GİRİS KİSMİ\_DSC3499.JPG'): can't open/read file: check file path/integrity
+[ WARN:0@68.180] global loadsave.cpp:268 cv::findDecoder imread_('E:/resimler/11 Temmuz/14-00_16-00/GİRİS KİSMİ\_DSC3501.JPG'): can't open/read file: check file path/integrity
+[ WARN:0@68.180] global loadsave.cpp:268 cv::findDecoder imread_('E:/resimler/11 Temmuz/14-00_16-00/GİRİS KİSMİ\_DSC3507.JPG'): can't open/read file: check file path/integrity
+[ WARN:0@68.180] global loadsave.cpp:268 cv::findDecoder imread_('E:/resimler/11 Temmuz/14-00_16-00/GİRİS KİSMİ\_DSC3512.JPG'): can't open/read file: check file path/integrity
+[ WARN:0@68.180] global loadsave.cpp:268 cv::findDecoder imread_('E:/resimler/11 Temmuz/14-00_16-00/GİRİS KİSMİ\_DSC3531.JPG'): can't open/read file: check file path/integrity
+[ WARN:0@68.180] global loadsave.cpp:268 cv::findDecoder imread_('E:/resimler/11 Temmuz/14-00_16-00/GİRİS KİSMİ\_DSC3534.JPG'): can't open/read file: check file path/integrity
+[ WARN:0@68.180] global loadsave.cpp:268 cv::findDecoder imread_('E:/resimler/11 Temmuz/14-00_16-00/GİRİS KİSMİ\_DSC3541.JPG'): can't open/read file: check file path/integrity
+[ WARN:0@68.180] global loadsave.cpp:268 cv::findDecoder imread_('E:/resimler/11 Temmuz/14-00_16-00/GİRİS KİSMİ\_DSC3549.JPG'): can't open/read file: check file path/integrity
+[ WARN:0@68.180] global loadsave.cpp:268 cv::findDecoder imread_('E:/resimler/11 Temmuz/14-00_16-00/GİRİS KİSMİ\_DSC3557.JPG'): can't open/read file: check file path/integrity
+[ WARN:0@68.180] global loadsave.cpp:268 cv::findDecoder imread_('E:/resimler/11 Temmuz/14-00_16-00/GİRİS KİSMİ\_DSC3562.JPG'): can't open/read file: check file path/integrity

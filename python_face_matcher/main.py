@@ -239,15 +239,44 @@ class ModelTrainingWorker(QThread):
         try:
             self.progress.emit(f"Model eğitimi başlıyor: {self.model_name}", 0)
             
-            # Fotoğraf dosyalarını bul
+            # Fotoğraf dosyalarını bul (tüm alt klasörler dahil)
             image_files = []
+            valid_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.webp')
+            skipped_files = []
+            
+            print(f"📁 Klasör taranıyor: {self.photos_folder}")
+            
+            # Tüm alt klasörleri dahil ederek recursive arama
             for root, dirs, files in os.walk(self.photos_folder):
+                print(f"  📂 Alt klasör: {root} ({len(files)} dosya)")
                 for file in files:
-                    if file.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
-                        image_files.append(os.path.join(root, file))
+                    if file.lower().endswith(valid_extensions):
+                        file_path = os.path.join(root, file)
+                        
+                        # Dosya var mı ve okunabilir mi kontrol et
+                        if os.path.exists(file_path) and os.path.isfile(file_path):
+                            try:
+                                # Dosya boyutu kontrolü (minimum 1KB)
+                                if os.path.getsize(file_path) > 1024:
+                                    image_files.append(file_path)
+                                else:
+                                    skipped_files.append(f"{file} (Çok küçük)")
+                            except (OSError, UnicodeDecodeError) as e:
+                                skipped_files.append(f"{file} (Erişim hatası)")
+                        else:
+                            skipped_files.append(f"{file} (Bulunamadı)")
+            
+            if skipped_files:
+                print(f"⚠️  Atlanan dosyalar ({len(skipped_files)} adet):")
+                for skip in skipped_files[:5]:  # İlk 5 tanesi
+                    print(f"    - {skip}")
+                if len(skipped_files) > 5:
+                    print(f"    ... ve {len(skipped_files) - 5} dosya daha")
+            
+            print(f"✅ Toplam geçerli fotoğraf: {len(image_files)} adet")
             
             if not image_files:
-                self.error.emit("Klasörde hiç fotoğraf bulunamadı")
+                self.error.emit(f"Klasörde hiç geçerli fotoğraf bulunamadı!\n\nKontrol edilenler:\n- Desteklenen formatlar: JPG, PNG, BMP, TIFF, WEBP\n- Minimum dosya boyutu: 1KB\n- Alt klasörler dahil {len(skipped_files)} dosya atlendı")
                 return
             
             total_files = len(image_files)
@@ -258,39 +287,92 @@ class ModelTrainingWorker(QThread):
             
             for idx, image_path in enumerate(image_files):
                 try:
-                    # Resmi oku
-                    img = cv2.imread(image_path)
-                    if img is None:
+                    filename = os.path.basename(image_path)
+                    
+                    # Güvenli dosya okuma (encoding sorunlarını çöz)
+                    try:
+                        # Dosyayı binary modda oku ve OpenCV'ye geç
+                        with open(image_path, 'rb') as f:
+                            file_bytes = f.read()
+                        
+                        # Bytes'tan numpy array'e çevir
+                        nparr = np.frombuffer(file_bytes, np.uint8)
+                        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                        
+                        if img is None:
+                            print(f"⚠️  Okunamayan resim: {filename}")
+                            continue
+                        
+                        # Resim boyutu kontrolü
+                        height, width = img.shape[:2]
+                        if height < 50 or width < 50:
+                            print(f"⚠️  Çok küçük resim: {filename} ({width}x{height})")
+                            continue
+                            
+                    except Exception as e:
+                        print(f"❌ Dosya okuma hatası - {filename}: {str(e)}")
                         continue
                     
                     # Yüzleri tespit et
-                    faces = face_app.get(img) if face_app else None
+                    try:
+                        faces = face_app.get(img) if face_app else None
+                    except Exception as e:
+                        print(f"❌ Yüz tespit hatası - {filename}: {str(e)}")
+                        continue
                     
-                    if faces:
+                    if faces and len(faces) > 0:
+                        print(f"✅ {filename}: {len(faces)} yüz tespit edildi")
                         face_database[image_path] = {
                             'faces': [],
-                            'timestamp': datetime.now().isoformat()
+                            'timestamp': datetime.now().isoformat(),
+                            'image_size': f"{width}x{height}"
                         }
                         
                         for face in faces:
-                            face_data = {
-                                'bbox': face.bbox.tolist(),
-                                'embedding': face.embedding.tolist(),
-                                'landmark_2d_106': face.landmark_2d_106.tolist() if hasattr(face, 'landmark_2d_106') else None
-                            }
-                            face_database[image_path]['faces'].append(face_data)
-                            total_faces += 1
+                            try:
+                                face_data = {
+                                    'bbox': face.bbox.tolist(),
+                                    'embedding': face.embedding.tolist(),
+                                    'landmark_2d_106': face.landmark_2d_106.tolist() if hasattr(face, 'landmark_2d_106') else None,
+                                    'confidence': float(getattr(face, 'det_score', 0.0))
+                                }
+                                face_database[image_path]['faces'].append(face_data)
+                                total_faces += 1
+                            except Exception as e:
+                                print(f"⚠️  Yüz verisi işleme hatası - {filename}: {str(e)}")
+                                continue
+                    else:
+                        # Sessizce geç, çünkü her fotoğrafta yüz olmayabilir
+                        pass
                     
                     # İlerleme güncelle
                     progress = 10 + int((idx + 1) / total_files * 80)
                     self.progress.emit(f"İşlenen: {idx + 1}/{total_files} - {total_faces} yüz tespit edildi", progress)
                     
                 except Exception as e:
-                    print(f"Fotoğraf işleme hatası - {image_path}: {str(e)}")
+                    print(f"❌ Genel hata - {os.path.basename(image_path)}: {str(e)}")
                     continue
             
+            # Sonuçları değerlendirme
+            total_photos_with_faces = len(face_database)
+            
+            print(f"\n📊 Eğitim Özeti:")
+            print(f"  📁 Taranan dosya: {total_files}")
+            print(f"  🖼️ Yüzlü fotoğraf: {total_photos_with_faces}")
+            print(f"  👤 Toplam yüz: {total_faces}")
+            
             if total_faces == 0:
-                self.error.emit("Hiç yüz tespit edilemedi")
+                error_msg = f"Hiç yüz tespit edilemedi!\n\n" + \
+                           f"Olasi Nedenler:\n" + \
+                           f"- Fotoğraf kalitesi düşük (bulanık, karşıt düşük)\n" + \
+                           f"- Yüz açısı uygun değil (profil yerine önden)\n" + \
+                           f"- Aydınlatma yetersiz (karartılmış)\n" + \
+                           f"- Resim boyutu çok küçük\n" + \
+                           f"- Dosya formatı desteklenmiyor\n\n" + \
+                           f"Tarama Detayları:\n" + \
+                           f"- İncelenen dosya: {total_files}\n" + \
+                           f"- Atlanan dosya: {len(skipped_files)}"
+                self.error.emit(error_msg)
                 return
             
             # Model dosyalarını kaydet
@@ -321,7 +403,10 @@ class ModelTrainingWorker(QThread):
             self.finished.emit(self.model_id, model_info)
             
         except Exception as e:
-            self.error.emit(f"Model eğitimi hatası: {str(e)}")
+            print(f"❌ Kritik hata: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            self.error.emit(f"Model eğitimi hatası: {str(e)}\n\nDetaylar konsola yazdırıldı.")
 
 class PhotoMatchingWorker(QThread):
     """Fotoğraf eşleştirme worker thread'i"""
