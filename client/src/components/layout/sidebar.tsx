@@ -75,11 +75,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         )}
       >
         <div className="flex flex-col items-center justify-center h-auto p-4 bg-white border-b">
-          <img 
-            src={akPartiLogo} 
-            alt="AK Parti" 
-            className="w-16 h-16 mb-2 object-contain"
-          />
+          <div className="w-24 h-24 mb-3 bg-gradient-to-br from-orange-200 to-yellow-200 rounded-full flex items-center justify-center p-2 shadow-lg">
+            <img 
+              src={akPartiLogo} 
+              alt="AK Parti" 
+              className="w-full h-full object-contain"
+            />
+          </div>
           <h1 className="text-center ak-text font-bold text-sm">İrade, İstikamet ve İstişare Kampı</h1>
           <p className="text-xs ak-gray mt-1">AK Parti Gençlik Kolları Genel Sekreterlik</p>
         </div>

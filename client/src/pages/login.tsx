@@ -31,7 +31,7 @@ export default function LoginPage() {
       <div className="max-w-md w-full mx-4">
         <Card className="shadow-2xl">
           <CardHeader className="text-center pb-6">
-            <div className="w-40 h-40 mx-auto mb-6 bg-gradient-to-br from-orange-100 to-yellow-50 rounded-full flex items-center justify-center p-4 shadow-lg">
+            <div className="w-56 h-56 mx-auto mb-6 bg-gradient-to-br from-orange-200 to-yellow-200 rounded-full flex items-center justify-center p-6 shadow-xl border-4 border-white">
               <img 
                 src={akPartiLogo} 
                 alt="AK Parti" 
