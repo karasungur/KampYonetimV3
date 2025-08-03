@@ -28,6 +28,7 @@ import {
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { useLocation } from "wouter";
+import backgroundImage from "@assets/GK-KAMP LOGOTYPE -BACKROUND - Düzenlendi_1754227727579.png";
 
 interface MenuSettings {
   moderatorLoginEnabled: boolean;
@@ -280,7 +281,10 @@ export default function MainMenuPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-400 via-orange-500 to-yellow-500 p-4">
+    <div 
+      className="min-h-screen p-4 bg-cover bg-center bg-no-repeat"
+      style={{ backgroundImage: `url(${backgroundImage})` }}
+    >
       <div className="max-w-4xl mx-auto py-8">
         {!activeSection ? renderMainMenu() : (
           <div className="animate-in slide-in-from-right-4 duration-300">
