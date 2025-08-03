@@ -488,11 +488,13 @@ export default function MainMenuPage() {
                   <CardContent className="p-6">
                     <div className="max-w-md mx-auto">
                       <div className="text-center mb-6">
-                        <img 
-                          src={akPartiLogo} 
-                          alt="AK Parti" 
-                          className="w-24 h-24 mx-auto mb-4 object-contain"
-                        />
+                        <div className="w-32 h-32 bg-cyan-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <img 
+                            src={akPartiLogo} 
+                            alt="AK Parti" 
+                            className="w-24 h-24 object-contain"
+                          />
+                        </div>
                         <h3 className="text-lg font-semibold text-gray-900 mb-2">Moderatör Giriş Portalı</h3>
                         <p className="text-gray-600 text-sm">Sistem erişimi için TC kimlik numaranız ve şifrenizi giriniz</p>
                       </div>
