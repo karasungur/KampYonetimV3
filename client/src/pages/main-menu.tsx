@@ -297,7 +297,7 @@ export default function MainMenuPage() {
       className="min-h-screen bg-cover bg-center bg-no-repeat flex flex-col"
       style={{ backgroundImage: `url(${backgroundImage})` }}
     >
-      <div className="max-w-4xl mx-auto p-2 md:p-4 flex-1 flex flex-col justify-center">
+      <div className="max-w-4xl mx-auto p-2 md:p-4 flex-1 flex flex-col justify-start pt-8">
         {!activeSection ? renderMainMenu() : (
           <div className="animate-in slide-in-from-right-4 duration-300">
             {/* Back Button */}
