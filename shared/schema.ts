@@ -18,6 +18,8 @@ export const userRoleEnum = pgEnum('user_role', ['genelbaskan', 'genelsekreterli
 export const questionTypeEnum = pgEnum('question_type', ['general', 'specific']);
 export const logActionEnum = pgEnum('log_action', ['login', 'logout', 'create_question', 'edit_question', 'delete_question', 'create_answer', 'edit_answer', 'delete_answer', 'create_user', 'edit_user', 'delete_user', 'send_feedback', 'import_users']);
 export const elementTypeEnum = pgEnum('element_type', ['text', 'button', 'logo', 'slogan']);
+export const photoRequestStatusEnum = pgEnum('photo_request_status', ['pending', 'processing', 'completed', 'failed']);
+export const faceQualityEnum = pgEnum('face_quality', ['good', 'poor', 'blurry', 'profile']);
 
 // Users table
 export const users = pgTable("users", {
@@ -201,6 +203,75 @@ export const pageElements = pgTable("page_elements", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// Photo requests - Fotoğraf talepleri
+export const photoRequests = pgTable("photo_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tcNumber: varchar("tc_number", { length: 11 }).notNull(),
+  email: varchar("email").notNull(),
+  status: photoRequestStatusEnum("status").notNull().default('pending'),
+  referencePhotoPath: varchar("reference_photo_path"), // Yüklenen referans fotoğraf yolu
+  selectedFaceId: varchar("selected_face_id"), // Seçilen yüz ID'si
+  processedAt: timestamp("processed_at"),
+  emailSentAt: timestamp("email_sent_at"),
+  matchedPhotosCount: integer("matched_photos_count").default(0),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Detected faces - Tespit edilen yüzler
+export const detectedFaces = pgTable("detected_faces", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  photoRequestId: varchar("photo_request_id").notNull().references(() => photoRequests.id, { onDelete: 'cascade' }),
+  faceImagePath: varchar("face_image_path").notNull(), // Kırpılmış yüz fotoğraf yolu
+  confidence: varchar("confidence"), // Yüz tespit güvenilirlik oranı
+  quality: faceQualityEnum("quality").notNull().default('good'),
+  boundingBox: jsonb("bounding_box"), // Yüz koordinatları {x, y, width, height}
+  landmarks: jsonb("landmarks"), // Yüz işaretleri
+  embeddings: jsonb("embeddings"), // Yüz vektörleri face-api'den
+  isSelected: boolean("is_selected").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Photo database - Kamp fotoğraf veritabanı
+export const photoDatabase = pgTable("photo_database", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fileName: varchar("file_name").notNull(),
+  filePath: varchar("file_path").notNull(),
+  originalName: varchar("original_name"),
+  fileSize: integer("file_size"), // bytes
+  mimeType: varchar("mime_type"),
+  uploadedBy: varchar("uploaded_by").references(() => users.id),
+  isProcessed: boolean("is_processed").notNull().default(false),
+  faceCount: integer("face_count").default(0),
+  processingError: text("processing_error"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Photo matches - Eşleşen fotoğraflar
+export const photoMatches = pgTable("photo_matches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  photoRequestId: varchar("photo_request_id").notNull().references(() => photoRequests.id, { onDelete: 'cascade' }),
+  photoDatabaseId: varchar("photo_database_id").notNull().references(() => photoDatabase.id, { onDelete: 'cascade' }),
+  similarityScore: varchar("similarity_score"), // Benzerlik oranı
+  matchedFaceBox: jsonb("matched_face_box"), // Eşleşen yüzün koordinatları
+  isEmailSent: boolean("is_email_sent").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Processing queue - İşlem kuyruğu
+export const processingQueue = pgTable("processing_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  photoRequestId: varchar("photo_request_id").notNull().references(() => photoRequests.id, { onDelete: 'cascade' }),
+  queuePosition: integer("queue_position").notNull(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  progress: integer("progress").default(0), // 0-100 arası
+  currentStep: varchar("current_step"), // "face_detection", "matching", "email_sending"
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   questions: many(questions),
@@ -270,6 +341,45 @@ export const pageElementsRelations = relations(pageElements, ({ one }) => ({
   layout: one(pageLayouts, {
     fields: [pageElements.layoutId],
     references: [pageLayouts.id],
+  }),
+}));
+
+export const photoRequestsRelations = relations(photoRequests, ({ many }) => ({
+  detectedFaces: many(detectedFaces),
+  photoMatches: many(photoMatches),
+  processingQueue: many(processingQueue),
+}));
+
+export const detectedFacesRelations = relations(detectedFaces, ({ one }) => ({
+  photoRequest: one(photoRequests, {
+    fields: [detectedFaces.photoRequestId],
+    references: [photoRequests.id],
+  }),
+}));
+
+export const photoDatabaseRelations = relations(photoDatabase, ({ one, many }) => ({
+  uploadedBy: one(users, {
+    fields: [photoDatabase.uploadedBy],
+    references: [users.id],
+  }),
+  photoMatches: many(photoMatches),
+}));
+
+export const photoMatchesRelations = relations(photoMatches, ({ one }) => ({
+  photoRequest: one(photoRequests, {
+    fields: [photoMatches.photoRequestId],
+    references: [photoRequests.id],
+  }),
+  photoDatabase: one(photoDatabase, {
+    fields: [photoMatches.photoDatabaseId],
+    references: [photoDatabase.id],
+  }),
+}));
+
+export const processingQueueRelations = relations(processingQueue, ({ one }) => ({
+  photoRequest: one(photoRequests, {
+    fields: [processingQueue.photoRequestId],
+    references: [photoRequests.id],
   }),
 }));
 
@@ -351,6 +461,35 @@ export const insertPageElementSchema = createInsertSchema(pageElements).omit({
   updatedAt: true,
 });
 
+export const insertPhotoRequestSchema = createInsertSchema(photoRequests).omit({
+  id: true,
+  processedAt: true,
+  emailSentAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertDetectedFaceSchema = createInsertSchema(detectedFaces).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPhotoDatabaseSchema = createInsertSchema(photoDatabase).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPhotoMatchSchema = createInsertSchema(photoMatches).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertProcessingQueueSchema = createInsertSchema(processingQueue).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -378,6 +517,16 @@ export type PageLayout = typeof pageLayouts.$inferSelect;
 export type InsertPageLayout = z.infer<typeof insertPageLayoutSchema>;
 export type PageElement = typeof pageElements.$inferSelect;
 export type InsertPageElement = z.infer<typeof insertPageElementSchema>;
+export type PhotoRequest = typeof photoRequests.$inferSelect;
+export type InsertPhotoRequest = z.infer<typeof insertPhotoRequestSchema>;
+export type DetectedFace = typeof detectedFaces.$inferSelect;
+export type InsertDetectedFace = z.infer<typeof insertDetectedFaceSchema>;
+export type PhotoDatabase = typeof photoDatabase.$inferSelect;
+export type InsertPhotoDatabase = z.infer<typeof insertPhotoDatabaseSchema>;
+export type PhotoMatch = typeof photoMatches.$inferSelect;
+export type InsertPhotoMatch = z.infer<typeof insertPhotoMatchSchema>;
+export type ProcessingQueue = typeof processingQueue.$inferSelect;
+export type InsertProcessingQueue = z.infer<typeof insertProcessingQueueSchema>;
 
 // Additional types for API responses
 export type UserWithStats = User & {
@@ -417,4 +566,31 @@ export type PageLayoutWithFiles = PageLayout & {
 
 export type PageElementWithLayout = PageElement & {
   layout?: PageLayout | null;
+};
+
+export type PhotoRequestWithDetails = PhotoRequest & {
+  detectedFacesCount?: number;
+  selectedFace?: DetectedFace | null;
+  matchesCount?: number;
+  queuePosition?: number;
+};
+
+export type DetectedFaceWithRequest = DetectedFace & {
+  photoRequest?: PhotoRequest | null;
+};
+
+export type PhotoDatabaseWithDetails = PhotoDatabase & {
+  uploadedByName?: string | null;
+  matchesCount?: number;
+};
+
+export type PhotoMatchWithDetails = PhotoMatch & {
+  photoRequest?: PhotoRequest | null;
+  photoDatabase?: PhotoDatabase | null;
+};
+
+export type ProcessingQueueWithDetails = ProcessingQueue & {
+  photoRequest?: PhotoRequest | null;
+  tcNumber?: string | null;
+  email?: string | null;
 };

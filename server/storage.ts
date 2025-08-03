@@ -12,6 +12,11 @@ import {
   uploadedFiles,
   pageLayouts,
   pageElements,
+  photoRequests,
+  detectedFaces,
+  photoDatabase,
+  photoMatches,
+  processingQueue,
   type User,
   type InsertUser,
   type Table,
@@ -38,12 +43,27 @@ import {
   type InsertPageLayout,
   type PageElement,
   type InsertPageElement,
+  type PhotoRequest,
+  type InsertPhotoRequest,
+  type DetectedFace,
+  type InsertDetectedFace,
+  type PhotoDatabase,
+  type InsertPhotoDatabase,
+  type PhotoMatch,
+  type InsertPhotoMatch,
+  type ProcessingQueue,
+  type InsertProcessingQueue,
   type UserWithStats,
   type QuestionWithStats,
   type AnswerWithDetails,
   type FeedbackWithDetails,
   type ActivityLogWithUser,
   type PageLayoutWithFiles,
+  type PhotoRequestWithDetails,
+  type DetectedFaceWithRequest,
+  type PhotoDatabaseWithDetails,
+  type PhotoMatchWithDetails,
+  type ProcessingQueueWithDetails,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, desc, asc, sql, count, inArray } from "drizzle-orm";
@@ -151,6 +171,37 @@ export interface IStorage {
   updatePageElement(id: string, updates: Partial<InsertPageElement>): Promise<PageElement>;
   deletePageElement(id: string): Promise<void>;
   updateElementPosition(id: string, positionX: number, positionY: number): Promise<void>;
+  
+  // Photo management operations
+  createPhotoRequest(request: InsertPhotoRequest): Promise<PhotoRequest>;
+  getPhotoRequest(id: string): Promise<PhotoRequest | undefined>;
+  getPhotoRequestByTc(tcNumber: string): Promise<PhotoRequest | undefined>;
+  updatePhotoRequest(id: string, updates: Partial<InsertPhotoRequest>): Promise<PhotoRequest>;
+  getAllPhotoRequests(): Promise<PhotoRequestWithDetails[]>;
+  
+  // Detected faces operations
+  createDetectedFace(face: InsertDetectedFace): Promise<DetectedFace>;
+  getDetectedFacesByRequest(photoRequestId: string): Promise<DetectedFace[]>;
+  updateDetectedFace(id: string, updates: Partial<InsertDetectedFace>): Promise<DetectedFace>;
+  selectDetectedFace(photoRequestId: string, faceId: string): Promise<void>;
+  
+  // Photo database operations
+  createPhotoDatabase(photo: InsertPhotoDatabase): Promise<PhotoDatabase>;
+  getAllPhotosInDatabase(): Promise<PhotoDatabaseWithDetails[]>;
+  updatePhotoDatabase(id: string, updates: Partial<InsertPhotoDatabase>): Promise<PhotoDatabase>;
+  deletePhotoFromDatabase(id: string): Promise<void>;
+  
+  // Photo matches operations
+  createPhotoMatch(match: InsertPhotoMatch): Promise<PhotoMatch>;
+  getPhotoMatchesByRequest(photoRequestId: string): Promise<PhotoMatchWithDetails[]>;
+  markMatchEmailSent(matchId: string): Promise<void>;
+  
+  // Processing queue operations
+  addToProcessingQueue(queueItem: InsertProcessingQueue): Promise<ProcessingQueue>;
+  getNextInQueue(): Promise<ProcessingQueueWithDetails | undefined>;
+  updateQueueProgress(id: string, progress: number, currentStep: string): Promise<void>;
+  completeQueueItem(id: string): Promise<void>;
+  getQueueStatus(): Promise<ProcessingQueueWithDetails[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1013,6 +1064,256 @@ export class DatabaseStorage implements IStorage {
       .update(pageElements)
       .set({ positionX, positionY, updatedAt: new Date() })
       .where(eq(pageElements.id, id));
+  }
+  
+  // Photo management operations
+  async createPhotoRequest(insertRequest: InsertPhotoRequest): Promise<PhotoRequest> {
+    const [request] = await db
+      .insert(photoRequests)
+      .values(insertRequest)
+      .returning();
+    return request;
+  }
+
+  async getPhotoRequest(id: string): Promise<PhotoRequest | undefined> {
+    const [request] = await db.select().from(photoRequests).where(eq(photoRequests.id, id));
+    return request || undefined;
+  }
+
+  async getPhotoRequestByTc(tcNumber: string): Promise<PhotoRequest | undefined> {
+    const [request] = await db.select().from(photoRequests).where(eq(photoRequests.tcNumber, tcNumber));
+    return request || undefined;
+  }
+
+  async updatePhotoRequest(id: string, updates: Partial<InsertPhotoRequest>): Promise<PhotoRequest> {
+    const [request] = await db
+      .update(photoRequests)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(photoRequests.id, id))
+      .returning();
+    return request;
+  }
+
+  async getAllPhotoRequests(): Promise<PhotoRequestWithDetails[]> {
+    const result = await db
+      .select({
+        id: photoRequests.id,
+        tcNumber: photoRequests.tcNumber,
+        email: photoRequests.email,
+        status: photoRequests.status,
+        referencePhotoPath: photoRequests.referencePhotoPath,
+        selectedFaceId: photoRequests.selectedFaceId,
+        processedAt: photoRequests.processedAt,
+        emailSentAt: photoRequests.emailSentAt,
+        matchedPhotosCount: photoRequests.matchedPhotosCount,
+        errorMessage: photoRequests.errorMessage,
+        createdAt: photoRequests.createdAt,
+        updatedAt: photoRequests.updatedAt,
+        detectedFacesCount: count(detectedFaces.id),
+        queuePosition: processingQueue.queuePosition,
+      })
+      .from(photoRequests)
+      .leftJoin(detectedFaces, eq(photoRequests.id, detectedFaces.photoRequestId))
+      .leftJoin(processingQueue, eq(photoRequests.id, processingQueue.photoRequestId))
+      .groupBy(photoRequests.id, processingQueue.queuePosition)
+      .orderBy(desc(photoRequests.createdAt));
+    
+    return result;
+  }
+
+  // Detected faces operations
+  async createDetectedFace(insertFace: InsertDetectedFace): Promise<DetectedFace> {
+    const [face] = await db
+      .insert(detectedFaces)
+      .values(insertFace)
+      .returning();
+    return face;
+  }
+
+  async getDetectedFacesByRequest(photoRequestId: string): Promise<DetectedFace[]> {
+    return db.select().from(detectedFaces).where(eq(detectedFaces.photoRequestId, photoRequestId));
+  }
+
+  async updateDetectedFace(id: string, updates: Partial<InsertDetectedFace>): Promise<DetectedFace> {
+    const [face] = await db
+      .update(detectedFaces)
+      .set(updates)
+      .where(eq(detectedFaces.id, id))
+      .returning();
+    return face;
+  }
+
+  async selectDetectedFace(photoRequestId: string, faceId: string): Promise<void> {
+    // Önce tüm yüzleri seçilmemiş yap
+    await db
+      .update(detectedFaces)
+      .set({ isSelected: false })
+      .where(eq(detectedFaces.photoRequestId, photoRequestId));
+    
+    // Seçilen yüzü işaretle
+    await db
+      .update(detectedFaces)
+      .set({ isSelected: true })
+      .where(eq(detectedFaces.id, faceId));
+    
+    // PhotoRequest'teki selectedFaceId'yi güncelle
+    await db
+      .update(photoRequests)
+      .set({ selectedFaceId: faceId, updatedAt: new Date() })
+      .where(eq(photoRequests.id, photoRequestId));
+  }
+
+  // Photo database operations
+  async createPhotoDatabase(insertPhoto: InsertPhotoDatabase): Promise<PhotoDatabase> {
+    const [photo] = await db
+      .insert(photoDatabase)
+      .values(insertPhoto)
+      .returning();
+    return photo;
+  }
+
+  async getAllPhotosInDatabase(): Promise<PhotoDatabaseWithDetails[]> {
+    const result = await db
+      .select({
+        id: photoDatabase.id,
+        fileName: photoDatabase.fileName,
+        filePath: photoDatabase.filePath,
+        originalName: photoDatabase.originalName,
+        fileSize: photoDatabase.fileSize,
+        mimeType: photoDatabase.mimeType,
+        uploadedBy: photoDatabase.uploadedBy,
+        isProcessed: photoDatabase.isProcessed,
+        faceCount: photoDatabase.faceCount,
+        processingError: photoDatabase.processingError,
+        createdAt: photoDatabase.createdAt,
+        updatedAt: photoDatabase.updatedAt,
+        uploadedByName: sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
+        matchesCount: count(photoMatches.id),
+      })
+      .from(photoDatabase)
+      .leftJoin(users, eq(photoDatabase.uploadedBy, users.id))
+      .leftJoin(photoMatches, eq(photoDatabase.id, photoMatches.photoDatabaseId))
+      .groupBy(photoDatabase.id, users.firstName, users.lastName)
+      .orderBy(desc(photoDatabase.createdAt));
+    
+    return result;
+  }
+
+  async updatePhotoDatabase(id: string, updates: Partial<InsertPhotoDatabase>): Promise<PhotoDatabase> {
+    const [photo] = await db
+      .update(photoDatabase)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(photoDatabase.id, id))
+      .returning();
+    return photo;
+  }
+
+  async deletePhotoFromDatabase(id: string): Promise<void> {
+    await db.delete(photoDatabase).where(eq(photoDatabase.id, id));
+  }
+
+  // Photo matches operations
+  async createPhotoMatch(insertMatch: InsertPhotoMatch): Promise<PhotoMatch> {
+    const [match] = await db
+      .insert(photoMatches)
+      .values(insertMatch)
+      .returning();
+    return match;
+  }
+
+  async getPhotoMatchesByRequest(photoRequestId: string): Promise<PhotoMatchWithDetails[]> {
+    const result = await db
+      .select({
+        id: photoMatches.id,
+        photoRequestId: photoMatches.photoRequestId,
+        photoDatabaseId: photoMatches.photoDatabaseId,
+        similarityScore: photoMatches.similarityScore,
+        matchedFaceBox: photoMatches.matchedFaceBox,
+        isEmailSent: photoMatches.isEmailSent,
+        createdAt: photoMatches.createdAt,
+        photoFileName: photoDatabase.fileName,
+        photoFilePath: photoDatabase.filePath,
+      })
+      .from(photoMatches)
+      .leftJoin(photoDatabase, eq(photoMatches.photoDatabaseId, photoDatabase.id))
+      .where(eq(photoMatches.photoRequestId, photoRequestId))
+      .orderBy(desc(photoMatches.createdAt));
+    
+    return result;
+  }
+
+  async markMatchEmailSent(matchId: string): Promise<void> {
+    await db
+      .update(photoMatches)
+      .set({ isEmailSent: true })
+      .where(eq(photoMatches.id, matchId));
+  }
+
+  // Processing queue operations
+  async addToProcessingQueue(insertQueue: InsertProcessingQueue): Promise<ProcessingQueue> {
+    const [queueItem] = await db
+      .insert(processingQueue)
+      .values(insertQueue)
+      .returning();
+    return queueItem;
+  }
+
+  async getNextInQueue(): Promise<ProcessingQueueWithDetails | undefined> {
+    const [nextItem] = await db
+      .select({
+        id: processingQueue.id,
+        photoRequestId: processingQueue.photoRequestId,
+        queuePosition: processingQueue.queuePosition,
+        startedAt: processingQueue.startedAt,
+        completedAt: processingQueue.completedAt,
+        progress: processingQueue.progress,
+        currentStep: processingQueue.currentStep,
+        createdAt: processingQueue.createdAt,
+        tcNumber: photoRequests.tcNumber,
+        email: photoRequests.email,
+      })
+      .from(processingQueue)
+      .leftJoin(photoRequests, eq(processingQueue.photoRequestId, photoRequests.id))
+      .where(sql`${processingQueue.startedAt} IS NULL`)
+      .orderBy(processingQueue.queuePosition)
+      .limit(1);
+    
+    return nextItem || undefined;
+  }
+
+  async updateQueueProgress(id: string, progress: number, currentStep: string): Promise<void> {
+    await db
+      .update(processingQueue)
+      .set({ progress, currentStep })
+      .where(eq(processingQueue.id, id));
+  }
+
+  async completeQueueItem(id: string): Promise<void> {
+    await db
+      .update(processingQueue)
+      .set({ completedAt: new Date(), progress: 100 })
+      .where(eq(processingQueue.id, id));
+  }
+
+  async getQueueStatus(): Promise<ProcessingQueueWithDetails[]> {
+    const result = await db
+      .select({
+        id: processingQueue.id,
+        photoRequestId: processingQueue.photoRequestId,
+        queuePosition: processingQueue.queuePosition,
+        startedAt: processingQueue.startedAt,
+        completedAt: processingQueue.completedAt,
+        progress: processingQueue.progress,
+        currentStep: processingQueue.currentStep,
+        createdAt: processingQueue.createdAt,
+        tcNumber: photoRequests.tcNumber,
+        email: photoRequests.email,
+      })
+      .from(processingQueue)
+      .leftJoin(photoRequests, eq(processingQueue.photoRequestId, photoRequests.id))
+      .orderBy(processingQueue.queuePosition);
+    
+    return result;
   }
 }
 

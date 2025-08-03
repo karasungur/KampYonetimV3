@@ -265,16 +265,13 @@ export default function MainMenuPage() {
 
         {/* Fotoğraflar */}
         {menuSettings.photosEnabled && (
-          <div className="aspect-square">
+          <div className="aspect-square" onClick={() => navigate('/photos')}>
             <div className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl border-0 rounded-2xl h-full flex flex-col items-center justify-center p-2 md:p-3 cursor-pointer group">
               <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-500 rounded-full flex items-center justify-center mb-1 md:mb-2 group-hover:bg-orange-600 transition-colors">
                 <Camera className="w-4 h-4 md:w-5 md:h-5 text-white" />
               </div>
               <div className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {menuSettings.photosTitle}
-              </div>
-              <div className="text-xs text-gray-400 mt-1">
-                Yakında
               </div>
             </div>
           </div>

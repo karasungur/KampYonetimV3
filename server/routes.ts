@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { requireAuth, requireRole, generateToken, comparePassword, hashPassword, type AuthenticatedRequest } from "./auth";
-import { insertUserSchema, insertQuestionSchema, insertAnswerSchema, insertFeedbackSchema, insertProgramEventSchema, insertUploadedFileSchema, insertPageLayoutSchema, insertPageElementSchema } from "@shared/schema";
+import { insertUserSchema, insertQuestionSchema, insertAnswerSchema, insertFeedbackSchema, insertProgramEventSchema, insertUploadedFileSchema, insertPageLayoutSchema, insertPageElementSchema, insertPhotoRequestSchema, insertDetectedFaceSchema, insertPhotoDatabaseSchema, insertPhotoMatchSchema, insertProcessingQueueSchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import * as XLSX from "xlsx";
@@ -10,6 +10,15 @@ import rateLimit from "express-rate-limit";
 import path from "path";
 import fs from "fs";
 import { nanoid } from "nanoid";
+
+// Object Storage için gerekli importlar
+let ObjectStorageService: any;
+try {
+  // Object storage şu an mock olarak çalışıyor
+  ObjectStorageService = null;
+} catch (error) {
+  console.warn('Object storage not available:', error.message);
+}
 
 // TC Kimlik doğrulama fonksiyonu
 function validateTCNumber(tc: string): boolean {
@@ -1281,6 +1290,268 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       res.status(400).json({ message: 'Sayfa öğesi silinemedi' });
     }
+  });
+
+  // =============================================================================
+  // FOTOĞRAF YÖNETİMİ API ROTALARI
+  // =============================================================================
+
+  // Object Storage upload URL endpoint (Mock)
+  app.post('/api/objects/upload', async (req, res) => {
+    try {
+      // Mock upload URL for development
+      const mockUploadURL = `https://mock-storage.example.com/upload/${Date.now()}`;
+      res.json({ uploadURL: mockUploadURL });
+    } catch (error) {
+      console.error('Upload URL error:', error);
+      res.status(500).json({ error: 'Upload URL alınamadı' });
+    }
+  });
+
+  // Yeni fotoğraf talebi oluşturma
+  app.post('/api/photo-requests', async (req, res) => {
+    try {
+      const requestData = insertPhotoRequestSchema.parse({
+        ...req.body,
+        status: 'pending'
+      });
+      
+      // TC kimlik doğrulama
+      if (!validateTCNumber(requestData.tcNumber)) {
+        return res.status(400).json({ message: 'Geçersiz TC kimlik numarası' });
+      }
+      
+      // Önceki talep kontrolü
+      const existingRequest = await storage.getPhotoRequestByTc(requestData.tcNumber);
+      if (existingRequest) {
+        return res.status(400).json({ 
+          message: 'Bu TC kimlik numarası için zaten bir talep mevcut',
+          existingRequest 
+        });
+      }
+      
+      const photoRequest = await storage.createPhotoRequest(requestData);
+      
+      // Aktivite logu
+      await storage.logActivity({
+        userId: 'system',
+        action: 'create_question', // En yakın action type
+        details: `Fotoğraf talebi oluşturuldu: ${requestData.tcNumber}`,
+        metadata: { tcNumber: requestData.tcNumber, email: requestData.email },
+        ipAddress: req.ip
+      });
+      
+      res.status(201).json(photoRequest);
+    } catch (error) {
+      console.error('Photo request creation error:', error);
+      res.status(400).json({ message: 'Fotoğraf talebi oluşturulamadı' });
+    }
+  });
+
+  // TC numarası ile talep kontrolü
+  app.get('/api/photo-requests/check/:tcNumber', async (req, res) => {
+    try {
+      const { tcNumber } = req.params;
+      
+      if (!validateTCNumber(tcNumber)) {
+        return res.status(400).json({ message: 'Geçersiz TC kimlik numarası' });
+      }
+      
+      const existingRequest = await storage.getPhotoRequestByTc(tcNumber);
+      
+      if (existingRequest) {
+        res.json({ 
+          exists: true, 
+          request: existingRequest 
+        });
+      } else {
+        res.json({ exists: false });
+      }
+    } catch (error) {
+      console.error('Photo request check error:', error);
+      res.status(500).json({ message: 'Talep kontrolü yapılamadı' });
+    }
+  });
+
+  // Referans fotoğraf yükleme
+  app.post('/api/photo-requests/:id/upload', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { referencePhotoURL } = req.body;
+      
+      if (!referencePhotoURL) {
+        return res.status(400).json({ message: 'Referans fotoğraf URL gerekli' });
+      }
+      
+      // PhotoRequest'i güncelle
+      const updatedRequest = await storage.updatePhotoRequest(id, {
+        referencePhotoPath: referencePhotoURL,
+        status: 'processing'
+      });
+      
+      // İşlem kuyruğuna ekle
+      const queuePosition = await storage.getQueueStatus().then(queue => queue.length + 1);
+      await storage.addToProcessingQueue({
+        photoRequestId: id,
+        queuePosition,
+        progress: 0,
+        currentStep: 'face_detection'
+      });
+      
+      // Mock yüz tespit verisi (gerçek uygulamada face-api.js kullanılacak)
+      setTimeout(async () => {
+        try {
+          // Mock tespit edilen yüzler
+          const mockFaces = [
+            {
+              photoRequestId: id,
+              faceImagePath: 'mock/face1.jpg',
+              confidence: '0.95',
+              quality: 'good' as const,
+              boundingBox: { x: 100, y: 100, width: 150, height: 150 },
+              landmarks: {},
+              embeddings: {},
+              isSelected: false
+            },
+            {
+              photoRequestId: id,
+              faceImagePath: 'mock/face2.jpg',
+              confidence: '0.87',
+              quality: 'good' as const,
+              boundingBox: { x: 200, y: 150, width: 140, height: 140 },
+              landmarks: {},
+              embeddings: {},
+              isSelected: false
+            }
+          ];
+          
+          // Tespit edilen yüzleri kaydet
+          for (const face of mockFaces) {
+            await storage.createDetectedFace(face);
+          }
+          
+          // Request'i güncelle
+          await storage.updatePhotoRequest(id, {
+            status: 'pending' // Yüz seçimi için bekliyor
+          });
+          
+        } catch (error) {
+          console.error('Mock face detection error:', error);
+          await storage.updatePhotoRequest(id, {
+            status: 'failed',
+            errorMessage: 'Yüz tespit işlemi başarısız'
+          });
+        }
+      }, 2000); // 2 saniye sonra mock sonuç
+      
+      res.json({ message: 'Fotoğraf yüklendi, yüz tespit işlemi başlatıldı' });
+    } catch (error) {
+      console.error('Photo upload error:', error);
+      res.status(400).json({ message: 'Fotoğraf yüklenemedi' });
+    }
+  });
+
+  // Tespit edilen yüzleri getirme
+  app.get('/api/photo-requests/:id/faces', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const faces = await storage.getDetectedFacesByRequest(id);
+      res.json(faces);
+    } catch (error) {
+      console.error('Get faces error:', error);
+      res.status(500).json({ message: 'Yüzler getirilemedi' });
+    }
+  });
+
+  // Yüz seçimi
+  app.post('/api/photo-requests/:id/select-face', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { faceId } = req.body;
+      
+      if (!faceId) {
+        return res.status(400).json({ message: 'Yüz ID gerekli' });
+      }
+      
+      await storage.selectDetectedFace(id, faceId);
+      
+      // Mock eşleşme işlemi
+      setTimeout(async () => {
+        try {
+          // Mock eşleşen fotoğraflar
+          const mockMatches = [
+            {
+              photoRequestId: id,
+              photoDatabaseId: 'mock-photo-1',
+              similarityScore: '0.92',
+              matchedFaceBox: { x: 50, y: 60, width: 100, height: 100 },
+              isEmailSent: false
+            },
+            {
+              photoRequestId: id,
+              photoDatabaseId: 'mock-photo-2',
+              similarityScore: '0.88',
+              matchedFaceBox: { x: 80, y: 90, width: 110, height: 110 },
+              isEmailSent: false
+            }
+          ];
+          
+          // Eşleşmeleri kaydet
+          for (const match of mockMatches) {
+            await storage.createPhotoMatch(match);
+          }
+          
+          // Request'i tamamlandı olarak işaretle
+          await storage.updatePhotoRequest(id, {
+            status: 'completed',
+            matchedPhotosCount: mockMatches.length,
+            processedAt: new Date(),
+            emailSentAt: new Date()
+          });
+          
+        } catch (error) {
+          console.error('Mock matching error:', error);
+          await storage.updatePhotoRequest(id, {
+            status: 'failed',
+            errorMessage: 'Eşleşme işlemi başarısız'
+          });
+        }
+      }, 3000); // 3 saniye sonra mock eşleşme
+      
+      res.json({ message: 'Yüz seçildi, eşleşme işlemi başlatıldı' });
+    } catch (error) {
+      console.error('Face selection error:', error);
+      res.status(400).json({ message: 'Yüz seçilemedi' });
+    }
+  });
+
+  // Tüm fotoğraf talepleri (Admin)
+  app.get('/api/photo-requests', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const requests = await storage.getAllPhotoRequests();
+      res.json(requests);
+    } catch (error) {
+      console.error('Get photo requests error:', error);
+      res.status(500).json({ message: 'Fotoğraf talepleri getirilemedi' });
+    }
+  });
+
+  // İşlem kuyruğu durumu (Admin)
+  app.get('/api/photo-requests/queue', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const queueStatus = await storage.getQueueStatus();
+      res.json(queueStatus);
+    } catch (error) {
+      console.error('Get queue status error:', error);
+      res.status(500).json({ message: 'Kuyruk durumu getirilemedi' });
+    }
+  });
+
+  // Mock görsel servis (gerçek uygulamada object storage kullanılacak)
+  app.get('/api/images/:imagePath', (req, res) => {
+    const { imagePath } = req.params;
+    // Mock image response
+    res.status(404).json({ message: 'Görsel bulunamadı (mock mode)' });
   });
 
   const httpServer = createServer(app);
