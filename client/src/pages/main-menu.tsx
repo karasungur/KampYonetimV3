@@ -186,24 +186,24 @@ export default function MainMenuPage() {
   const renderMainMenu = () => (
     <>
       {/* Header with Logo Space */}
-      <div className="text-center mb-2">
+      <div className="text-center mb-1">
         {/* Logo */}
         <img 
           src={akPartiLogo} 
           alt="AK Parti" 
-          className="w-40 h-40 mx-auto mb-0 object-contain"
+          className="w-32 h-32 mx-auto mb-0 object-contain"
         />
         
         {/* Metin Resmi */}
         <img 
           src={metinResmi} 
           alt="AK Parti Gençlik Kolları Genel Sekreterlik - Strateji ve İstişare Kampı" 
-          className="w-64 md:w-72 mx-auto mb-0 object-contain -mt-2"
+          className="w-56 md:w-64 mx-auto mb-0 object-contain -mt-1"
         />
       </div>
 
       {/* Mobile Optimized Menu Grid */}
-      <div className="grid grid-cols-3 gap-2 max-w-sm mx-auto mb-2 md:mb-0">
+      <div className="grid grid-cols-3 gap-2 max-w-sm mx-auto">
         {/* Moderatör Girişi */}
         {menuSettings.moderatorLoginEnabled && (
           <div className="aspect-square" onClick={() => handleSectionClick('login')}>
@@ -277,18 +277,6 @@ export default function MainMenuPage() {
           </div>
         )}
       </div>
-      
-      {/* Footer */}
-      <div className="text-center mt-6">
-        <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 inline-block">
-          <p className="text-white/90 text-sm font-medium">
-            © 2025 AK Parti Gençlik Kolları Genel Sekreterlik
-          </p>
-          <p className="text-white/70 text-xs mt-1">
-            Tüm hakları saklıdır
-          </p>
-        </div>
-      </div>
     </>
   );
 
@@ -297,7 +285,7 @@ export default function MainMenuPage() {
       className="min-h-screen bg-cover bg-center bg-no-repeat flex flex-col"
       style={{ backgroundImage: `url(${backgroundImage})` }}
     >
-      <div className="max-w-4xl mx-auto p-2 md:p-4 flex-1 flex flex-col justify-start pt-8">
+      <div className="max-w-4xl mx-auto p-2 md:p-4 h-screen flex flex-col justify-center">
         {!activeSection ? renderMainMenu() : (
           <div className="animate-in slide-in-from-right-4 duration-300">
             {/* Back Button */}
