@@ -203,7 +203,7 @@ export default function MainMenuPage() {
       </div>
 
       {/* Mobile Optimized Menu Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-w-xs md:max-w-sm mx-auto mb-2 md:mb-0">
+      <div className="grid grid-cols-3 gap-2 max-w-sm mx-auto mb-2 md:mb-0">
         {/* Moderatör Girişi */}
         {menuSettings.moderatorLoginEnabled && (
           <div className="aspect-square" onClick={() => handleSectionClick('login')}>
