@@ -73,21 +73,85 @@ AK_COLORS = {
 
 # Global değişkenler
 face_app = None
+device_info = {'type': 'CPU', 'name': 'CPU Only', 'cuda_available': False}
 trained_models = {}  # {camp_day_id: {'name': str, 'date': str, 'model_path': str, 'face_count': int}}
 processing_queue = queue.Queue()
 current_requests = {}
 request_lock = Lock()
 api_connection_status = {'connected': False, 'last_check': None}
 
+def check_device_capabilities():
+    """Device yeteneklerini kontrol et (GPU/CPU)"""
+    global device_info
+    
+    # CUDA availability kontrolü
+    cuda_available = torch.cuda.is_available()
+    
+    if cuda_available:
+        device_count = torch.cuda.device_count()
+        gpu_name = torch.cuda.get_device_name(0) if device_count > 0 else "Unknown GPU"
+        device_info = {
+            'type': 'GPU',
+            'name': gpu_name,
+            'cuda_available': True,
+            'device_count': device_count,
+            'memory': f"{torch.cuda.get_device_properties(0).total_memory // 1024**3} GB" if device_count > 0 else "Unknown"
+        }
+        print(f"✅ GPU Tespit Edildi: {gpu_name}")
+        print(f"   PyTorch GPU Desteği: Aktif")
+        print(f"   GPU Belleği: {device_info['memory']}")
+    else:
+        device_info = {
+            'type': 'CPU',
+            'name': 'CPU Only',
+            'cuda_available': False
+        }
+        print("⚠️  GPU Bulunamadı - CPU Modu Kullanılacak")
+    
+    return device_info
+
 def init_face_analysis():
     """Yüz analizi sistemini başlat"""
-    global face_app
+    global face_app, device_info
+    
     try:
-        face_app = FaceAnalysis(providers=['CPUExecutionProvider'])
-        face_app.prepare(ctx_id=0, det_size=(640, 640))
+        # Device kontrolü
+        check_device_capabilities()
+        
+        # Provider listesi oluştur
+        providers = []
+        if device_info['cuda_available']:
+            providers.append('CUDAExecutionProvider')
+            providers.append('CPUExecutionProvider')  # Fallback
+            print("🚀 GPU Modunda Başlatılıyor...")
+        else:
+            providers.append('CPUExecutionProvider')
+            print("💻 CPU Modunda Başlatılıyor...")
+        
+        # FaceAnalysis başlat
+        face_app = FaceAnalysis(providers=providers)
+        
+        # GPU kullanılıyorsa ctx_id=0 (GPU), değilse ctx_id=-1 (CPU)
+        ctx_id = 0 if device_info['cuda_available'] else -1
+        face_app.prepare(ctx_id=ctx_id, det_size=(640, 640))
+        
+        print(f"✅ Yüz Analizi Sistemi Hazır - {device_info['type']} ({device_info['name']})")
         return True
+        
     except Exception as e:
-        print(f"Yüz analizi başlatma hatası: {str(e)}")
+        print(f"❌ Yüz analizi başlatma hatası: {str(e)}")
+        # GPU başarısız olursa CPU'ya geç
+        if device_info['cuda_available']:
+            print("🔄 GPU başarısız, CPU moduna geçiliyor...")
+            try:
+                face_app = FaceAnalysis(providers=['CPUExecutionProvider'])
+                face_app.prepare(ctx_id=-1, det_size=(640, 640))
+                device_info['type'] = 'CPU (Fallback)'
+                print("✅ CPU Modunda Başlatıldı")
+                return True
+            except Exception as e2:
+                print(f"❌ CPU modu da başarısız: {str(e2)}")
+                return False
         return False
 
 def load_trained_models():
@@ -434,7 +498,8 @@ class PythonAPIServer:
                 'status': 'healthy',
                 'timestamp': datetime.now().isoformat(),
                 'trained_models': len(trained_models),
-                'api_connection': api_connection_status['connected']
+                'api_connection': api_connection_status['connected'],
+                'device': device_info
             })
         
         @self.app.route('/api/process-photo-request', methods=['POST'])
@@ -498,11 +563,25 @@ class ModelTrainingSection(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
         
-        # Başlık
+        # Başlık ve sistem bilgisi
+        header_layout = QHBoxLayout()
+        
         title = QLabel("Model Eğitimi")
         title.setFont(QFont("Segoe UI", 18, QFont.Bold))
         title.setStyleSheet(f"color: {AK_COLORS['BLUE']}; margin-bottom: 10px;")
-        layout.addWidget(title)
+        header_layout.addWidget(title)
+        
+        # Device bilgisi
+        device_label = QLabel(f"🖥️ {device_info['type']}: {device_info['name']}")
+        device_label.setFont(QFont("Segoe UI", 11))
+        if device_info['cuda_available']:
+            device_label.setStyleSheet(f"color: {AK_COLORS['SUCCESS']}; font-weight: bold;")
+        else:
+            device_label.setStyleSheet(f"color: {AK_COLORS['WARNING']}; font-weight: bold;")
+        header_layout.addStretch()
+        header_layout.addWidget(device_label)
+        
+        layout.addLayout(header_layout)
         
         # Yeni model eğitimi grubu
         train_group = QGroupBox("Yeni Model Eğit")
@@ -810,11 +889,29 @@ class RequestProcessingSection(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
         
-        # Başlık
+        # Başlık ve sistem bilgisi
+        header_layout = QHBoxLayout()
+        
         title = QLabel("İstek İşleme")
         title.setFont(QFont("Segoe UI", 18, QFont.Bold))
         title.setStyleSheet(f"color: {AK_COLORS['BLUE']}; margin-bottom: 10px;")
-        layout.addWidget(title)
+        header_layout.addWidget(title)
+        
+        # Processing info
+        if device_info['cuda_available']:
+            processing_info = f"⚡ GPU Hızlandırma Aktif"
+            color = AK_COLORS['SUCCESS']
+        else:
+            processing_info = f"💻 CPU İşleme Modu"
+            color = AK_COLORS['WARNING']
+        
+        processing_label = QLabel(processing_info)
+        processing_label.setFont(QFont("Segoe UI", 11))
+        processing_label.setStyleSheet(f"color: {color}; font-weight: bold;")
+        header_layout.addStretch()
+        header_layout.addWidget(processing_label)
+        
+        layout.addLayout(header_layout)
         
         # API durum bilgisi
         status_frame = QFrame()
