@@ -13,6 +13,16 @@ import {
   ExternalLink,
   Construction
 } from "lucide-react";
+import { 
+  SiX, 
+  SiInstagram, 
+  SiYoutube, 
+  SiFacebook, 
+  SiLinkedin, 
+  SiTiktok,
+  SiTelegram,
+  SiWhatsapp
+} from "react-icons/si";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { useLocation } from "wouter";
@@ -98,6 +108,38 @@ export default function MainMenuPage() {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
+  const getSocialMediaIcon = (platform: string) => {
+    const platformLower = platform.toLowerCase();
+    
+    if (platformLower.includes('twitter') || platformLower.includes('x')) {
+      return <SiX className="w-5 h-5" />;
+    }
+    if (platformLower.includes('instagram')) {
+      return <SiInstagram className="w-5 h-5" />;
+    }
+    if (platformLower.includes('youtube')) {
+      return <SiYoutube className="w-5 h-5" />;
+    }
+    if (platformLower.includes('facebook')) {
+      return <SiFacebook className="w-5 h-5" />;
+    }
+    if (platformLower.includes('linkedin')) {
+      return <SiLinkedin className="w-5 h-5" />;
+    }
+    if (platformLower.includes('tiktok')) {
+      return <SiTiktok className="w-5 h-5" />;
+    }
+    if (platformLower.includes('telegram')) {
+      return <SiTelegram className="w-5 h-5" />;
+    }
+    if (platformLower.includes('whatsapp')) {
+      return <SiWhatsapp className="w-5 h-5" />;
+    }
+    
+    // Default icon for unknown platforms
+    return <Share2 className="w-5 h-5" />;
+  };
+
   if (!menuSettings) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 to-yellow-500">
@@ -112,7 +154,7 @@ export default function MainMenuPage() {
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
-            AK Parti Gençlik Kolları
+            AK Parti Gençlik Kolları Genel Sekreterlik
           </h1>
           <h2 className="text-2xl md:text-3xl text-white/90 mb-2">
             İrade, İstikamet ve İstişare Kampı
@@ -123,10 +165,10 @@ export default function MainMenuPage() {
         </div>
 
         {/* Menu Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {/* Moderatör Girişi */}
           {menuSettings.moderatorLoginEnabled && (
-            <Card className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 cursor-pointer transform hover:scale-105"
+            <Card className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 cursor-pointer transform hover:scale-105 shadow-lg hover:shadow-xl border-0"
                   onClick={handleModeratorLogin}>
               <CardHeader className="text-center pb-4">
                 <UserCheck className="w-16 h-16 mx-auto text-blue-600 mb-4" />
@@ -144,7 +186,7 @@ export default function MainMenuPage() {
 
           {/* Program Akışı */}
           {menuSettings.programFlowEnabled && (
-            <Card className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300">
+            <Card className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 shadow-lg hover:shadow-xl border-0">
               <CardHeader className="text-center pb-4">
                 <Calendar className="w-16 h-16 mx-auto text-blue-600 mb-4" />
                 <CardTitle className="text-2xl text-blue-600">
@@ -155,7 +197,7 @@ export default function MainMenuPage() {
                 <div className="space-y-4 max-h-80 overflow-y-auto">
                   {programEvents && programEvents.length > 0 ? (
                     programEvents.map((event) => (
-                      <div key={event.id} className="bg-gray-50 p-4 rounded-lg">
+                      <div key={event.id} className="bg-gradient-to-r from-blue-50 to-yellow-50 p-4 rounded-lg border border-blue-100 hover:shadow-md transition-shadow">
                         <div className="flex items-start gap-3">
                           <Clock className="w-5 h-5 text-blue-600 mt-1" />
                           <div className="flex-1">
@@ -192,7 +234,7 @@ export default function MainMenuPage() {
 
           {/* Fotoğraflar */}
           {menuSettings.photosEnabled && (
-            <Card className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300">
+            <Card className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 shadow-lg hover:shadow-xl border-0">
               <CardHeader className="text-center pb-4">
                 <Camera className="w-16 h-16 mx-auto text-blue-600 mb-4" />
                 <CardTitle className="text-2xl text-blue-600">
@@ -215,7 +257,7 @@ export default function MainMenuPage() {
 
           {/* Sosyal Medya */}
           {menuSettings.socialMediaEnabled && (
-            <Card className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300">
+            <Card className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 shadow-lg hover:shadow-xl border-0">
               <CardHeader className="text-center pb-4">
                 <Share2 className="w-16 h-16 mx-auto text-blue-600 mb-4" />
                 <CardTitle className="text-2xl text-blue-600">
@@ -231,12 +273,15 @@ export default function MainMenuPage() {
                         <Button
                           key={account.id}
                           variant="outline"
-                          className="w-full justify-between hover:bg-blue-600 hover:text-white"
+                          className="w-full justify-between hover:bg-blue-600 hover:text-white transition-all duration-200"
                           onClick={() => handleSocialMediaClick(account.accountUrl)}
                         >
-                          <span>
-                            <strong>{account.platform}:</strong> {account.accountName}
-                          </span>
+                          <div className="flex items-center gap-3">
+                            {getSocialMediaIcon(account.platform)}
+                            <span>
+                              <strong>{account.platform}:</strong> {account.accountName}
+                            </span>
+                          </div>
                           <ExternalLink className="w-4 h-4" />
                         </Button>
                       ))
@@ -252,7 +297,7 @@ export default function MainMenuPage() {
 
           {/* Ekibimiz */}
           {menuSettings.teamEnabled && (
-            <Card className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300">
+            <Card className="bg-white/95 backdrop-blur-sm hover:bg-white transition-all duration-300 shadow-lg hover:shadow-xl border-0">
               <CardHeader className="text-center pb-4">
                 <Users className="w-16 h-16 mx-auto text-blue-600 mb-4" />
                 <CardTitle className="text-2xl text-blue-600">
@@ -265,7 +310,7 @@ export default function MainMenuPage() {
                     teamMembers
                       .sort((a, b) => a.displayOrder - b.displayOrder)
                       .map((member) => (
-                        <div key={member.id} className="bg-gray-50 p-4 rounded-lg">
+                        <div key={member.id} className="bg-gradient-to-r from-blue-50 to-yellow-50 p-4 rounded-lg border border-blue-100 hover:shadow-md transition-shadow">
                           <h4 className="font-semibold text-gray-900 mb-1">
                             {member.firstName} {member.lastName}
                           </h4>
@@ -297,10 +342,15 @@ export default function MainMenuPage() {
         </div>
 
         {/* Footer */}
-        <div className="text-center mt-12">
-          <p className="text-white/70 text-sm">
-            © 2025 AK Parti Gençlik Kolları - Tüm hakları saklıdır
-          </p>
+        <div className="text-center mt-16">
+          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 inline-block">
+            <p className="text-white/90 text-sm font-medium">
+              © 2025 AK Parti Gençlik Kolları Genel Sekreterlik
+            </p>
+            <p className="text-white/70 text-xs mt-1">
+              Tüm hakları saklıdır
+            </p>
+          </div>
         </div>
       </div>
     </div>

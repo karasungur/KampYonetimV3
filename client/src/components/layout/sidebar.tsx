@@ -69,7 +69,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Sidebar */}
       <div 
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-200 ease-in-out",
+          "fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-200 ease-in-out flex flex-col",
           isOpen ? "translate-x-0" : "-translate-x-full",
           "lg:translate-x-0"
         )}
@@ -81,15 +81,15 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             className="w-16 h-16 mb-2 object-contain"
           />
           <h1 className="text-center ak-text font-bold text-sm">İrade, İstikamet ve İstişare Kampı</h1>
-          <p className="text-xs ak-gray mt-1">AK Parti Gençlik Kolları</p>
+          <p className="text-xs ak-gray mt-1">AK Parti Gençlik Kolları Genel Sekreterlik</p>
         </div>
         
-        <nav className="mt-8">
+        <nav className="mt-8 flex-1 overflow-hidden">
           <div className="px-4 mb-4">
             <p className="text-xs font-semibold ak-gray uppercase tracking-wider">Menü</p>
           </div>
           
-          <div className="space-y-2 px-4">
+          <div className="space-y-2 px-4 overflow-y-auto h-full pb-20">
             {items.map((item) => {
               const Icon = item.icon;
               const isActive = location === item.path;

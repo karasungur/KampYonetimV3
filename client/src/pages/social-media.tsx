@@ -16,6 +16,16 @@ import {
   DialogTrigger 
 } from "@/components/ui/dialog";
 import { Plus, Edit, Trash2, Share2, ExternalLink, ArrowUp, ArrowDown } from "lucide-react";
+import { 
+  SiX, 
+  SiInstagram, 
+  SiYoutube, 
+  SiFacebook, 
+  SiLinkedin, 
+  SiTiktok,
+  SiTelegram,
+  SiWhatsapp
+} from "react-icons/si";
 import { setAuthHeader } from "@/lib/auth-utils";
 import { useToast } from "@/hooks/use-toast";
 
@@ -200,6 +210,38 @@ export default function SocialMediaPage() {
     }
   };
 
+  const getSocialMediaIcon = (platform: string) => {
+    const platformLower = platform.toLowerCase();
+    
+    if (platformLower.includes('twitter') || platformLower.includes('x')) {
+      return <SiX className="w-5 h-5 text-black" />;
+    }
+    if (platformLower.includes('instagram')) {
+      return <SiInstagram className="w-5 h-5 text-pink-500" />;
+    }
+    if (platformLower.includes('youtube')) {
+      return <SiYoutube className="w-5 h-5 text-red-600" />;
+    }
+    if (platformLower.includes('facebook')) {
+      return <SiFacebook className="w-5 h-5 text-blue-600" />;
+    }
+    if (platformLower.includes('linkedin')) {
+      return <SiLinkedin className="w-5 h-5 text-blue-700" />;
+    }
+    if (platformLower.includes('tiktok')) {
+      return <SiTiktok className="w-5 h-5 text-black" />;
+    }
+    if (platformLower.includes('telegram')) {
+      return <SiTelegram className="w-5 h-5 text-blue-500" />;
+    }
+    if (platformLower.includes('whatsapp')) {
+      return <SiWhatsapp className="w-5 h-5 text-green-500" />;
+    }
+    
+    // Default icon for unknown platforms
+    return <Share2 className="w-5 h-5 text-blue-600" />;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -342,7 +384,7 @@ export default function SocialMediaPage() {
                       <div className="flex justify-between items-center">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
-                            <Share2 className="w-5 h-5 text-blue-600" />
+                            {getSocialMediaIcon(account.platform)}
                             <CardTitle className="text-lg ak-text">
                               {account.platform}
                             </CardTitle>
