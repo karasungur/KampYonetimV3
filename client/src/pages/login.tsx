@@ -1,16 +1,25 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { LogIn } from "lucide-react";
+import { useLocation } from "wouter";
 import akPartiLogo from "@assets/akpartilogo_1753719301210.png";
 
 export default function LoginPage() {
   const [tcNumber, setTcNumber] = useState("");
   const [password, setPassword] = useState("");
-  const { login, isLoggingIn } = useAuth();
+  const { user, login, isLoggingIn } = useAuth();
+  const [, navigate] = useLocation();
+
+  // Giriş başarılı olduğunda ana sayfaya yönlendir
+  useEffect(() => {
+    if (user) {
+      navigate("/");
+    }
+  }, [user, navigate]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
