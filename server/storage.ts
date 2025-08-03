@@ -23,7 +23,7 @@ import {
   type FeedbackWithDetails,
   type ActivityLogWithUser,
 } from "@shared/schema";
-import { db } from "./db";
+import { getDb } from "./db";
 import { eq, and, or, desc, asc, sql, count, inArray } from "drizzle-orm";
 
 export interface IStorage {
@@ -90,17 +90,17 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   // User operations
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
+    const [user] = await getDb().select().from(users).where(eq(users.id, id));
     return user || undefined;
   }
 
   async getUserByTcNumber(tcNumber: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.tcNumber, tcNumber));
+    const [user] = await getDb().select().from(users).where(eq(users.tcNumber, tcNumber));
     return user || undefined;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db
+    const [user] = await getDb()
       .insert(users)
       .values(insertUser)
       .returning();
@@ -108,7 +108,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUser(id: string, updates: Partial<InsertUser>): Promise<User> {
-    const [user] = await db
+    const [user] = await getDb()
       .update(users)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(users.id, id))
@@ -117,14 +117,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserLastLogin(id: string): Promise<void> {
-    await db
+    await getDb()
       .update(users)
       .set({ lastLogin: new Date() })
       .where(eq(users.id, id));
   }
 
   async getAllUsers(): Promise<UserWithStats[]> {
-    const result = await db
+    const result = await getDb()
       .select({
         id: users.id,
         firstName: users.firstName,
@@ -148,20 +148,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteUser(id: string): Promise<void> {
-    await db.delete(users).where(eq(users.id, id));
+    await getDb().delete(users).where(eq(users.id, id));
   }
 
   async deleteAnswersByUser(userId: string): Promise<void> {
-    await db.delete(answers).where(eq(answers.userId, userId));
+    await getDb().delete(answers).where(eq(answers.userId, userId));
   }
 
   async deleteFeedbackByUser(userId: string): Promise<void> {
-    await db.delete(feedback).where(eq(feedback.userId, userId));
+    await getDb().delete(feedback).where(eq(feedback.userId, userId));
   }
 
   // Table operations
   async createTable(insertTable: InsertTable): Promise<Table> {
-    const [table] = await db
+    const [table] = await getDb()
       .insert(tables)
       .values(insertTable)
       .returning();
@@ -169,11 +169,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllTables(): Promise<Table[]> {
-    return db.select().from(tables).where(eq(tables.isActive, true)).orderBy(tables.number);
+    return getDb().select().from(tables).where(eq(tables.isActive, true)).orderBy(tables.number);
   }
 
   async getAllTablesWithStats(): Promise<(Table & { userCount: number })[]> {
-    const tablesWithUsers = await db
+    const tablesWithUsers = await getDb()
       .select({
         id: tables.id,
         number: tables.number,
@@ -194,14 +194,14 @@ export class DatabaseStorage implements IStorage {
 
   async getAllTablesWithDetails(): Promise<(Table & { userCount: number, users: Array<{ id: string; firstName: string; lastName: string; role: string }> })[]> {
     // First get all tables
-    const allTables = await db
+    const allTables = await getDb()
       .select()
       .from(tables)
       .where(eq(tables.isActive, true))
       .orderBy(tables.number);
 
     // Then get users grouped by table
-    const tableUsers = await db
+    const tableUsers = await getDb()
       .select({
         tableNumber: users.tableNumber,
         id: users.id,
@@ -213,8 +213,8 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.isActive, true));
 
     // Combine the data
-    const tablesWithDetails = allTables.map(table => {
-      const tableUserList = tableUsers.filter(u => u.tableNumber === table.number);
+    const tablesWithDetails = allTables.map((table: any) => {
+      const tableUserList = tableUsers.filter((u: any) => u.tableNumber === table.number);
       return {
         ...table,
         userCount: tableUserList.length,
@@ -226,24 +226,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTable(id: string): Promise<Table | undefined> {
-    const [table] = await db.select().from(tables).where(eq(tables.id, id));
+    const [table] = await getDb().select().from(tables).where(eq(tables.id, id));
     return table || undefined;
   }
 
   async getTableByNumber(number: number): Promise<Table | undefined> {
-    const [table] = await db.select().from(tables).where(eq(tables.number, number));
+    const [table] = await getDb().select().from(tables).where(eq(tables.number, number));
     return table || undefined;
   }
 
   async deleteTable(id: string): Promise<void> {
-    await db
+    await getDb()
       .update(tables)
       .set({ isActive: false })
       .where(eq(tables.id, id));
   }
 
   async updateTable(id: string, updates: Partial<InsertTable>): Promise<Table> {
-    const [table] = await db
+    const [table] = await getDb()
       .update(tables)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(tables.id, id))
@@ -253,7 +253,7 @@ export class DatabaseStorage implements IStorage {
 
   // Question operations
   async createQuestion(insertQuestion: InsertQuestion): Promise<Question> {
-    const [question] = await db
+    const [question] = await getDb()
       .insert(questions)
       .values(insertQuestion)
       .returning();
@@ -261,7 +261,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateQuestion(id: string, updates: Partial<InsertQuestion>): Promise<Question> {
-    const [question] = await db
+    const [question] = await getDb()
       .update(questions)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(questions.id, id))
@@ -270,7 +270,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteQuestion(id: string): Promise<void> {
-    await db
+    await getDb()
       .update(questions)
       .set({ isActive: false })
       .where(eq(questions.id, id));
@@ -278,7 +278,7 @@ export class DatabaseStorage implements IStorage {
 
   async getAllQuestions(pagination?: { limit: number; offset: number }): Promise<{ questions: QuestionWithStats[]; total: number }> {
     // Önce toplam sayıyı al
-    const [totalResult] = await db
+    const [totalResult] = await getDb()
       .select({ count: count() })
       .from(questions)
       .where(eq(questions.isActive, true));
@@ -286,7 +286,7 @@ export class DatabaseStorage implements IStorage {
     const total = totalResult?.count || 0;
     
     // Sonra sayfalanmış veriyi al
-    const baseQuery = db
+    const baseQuery = getDb()
       .select({
         id: questions.id,
         text: questions.text,
@@ -315,7 +315,7 @@ export class DatabaseStorage implements IStorage {
 
   async getQuestionsForTable(tableNumber: number, pagination?: { limit: number; offset: number }): Promise<{ questions: QuestionWithStats[]; total: number }> {
     // Önce toplam sayıyı al
-    const [totalResult] = await db
+    const [totalResult] = await getDb()
       .select({ count: count() })
       .from(questions)
       .where(
@@ -331,7 +331,7 @@ export class DatabaseStorage implements IStorage {
     const total = totalResult?.count || 0;
     
     // Sonra sayfalanmış veriyi al
-    const baseQuery = db
+    const baseQuery = getDb()
       .select({
         id: questions.id,
         text: questions.text,
@@ -367,13 +367,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getQuestion(id: string): Promise<Question | undefined> {
-    const [question] = await db.select().from(questions).where(eq(questions.id, id));
+    const [question] = await getDb().select().from(questions).where(eq(questions.id, id));
     return question || undefined;
   }
 
   // Answer operations
   async createAnswer(insertAnswer: InsertAnswer): Promise<Answer> {
-    const [answer] = await db
+    const [answer] = await getDb()
       .insert(answers)
       .values(insertAnswer)
       .returning();
@@ -381,7 +381,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateAnswer(id: string, updates: Partial<InsertAnswer>): Promise<Answer> {
-    const [answer] = await db
+    const [answer] = await getDb()
       .update(answers)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(answers.id, id))
@@ -390,11 +390,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteAnswer(id: string): Promise<void> {
-    await db.delete(answers).where(eq(answers.id, id));
+    await getDb().delete(answers).where(eq(answers.id, id));
   }
 
   async getAnswersForQuestion(questionId: string): Promise<AnswerWithDetails[]> {
-    const result = await db
+    const result = await getDb()
       .select({
         id: answers.id,
         questionId: answers.questionId,
@@ -417,7 +417,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAnswersForUser(userId: string): Promise<AnswerWithDetails[]> {
-    const result = await db
+    const result = await getDb()
       .select({
         id: answers.id,
         questionId: answers.questionId,
@@ -440,7 +440,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllAnswers(): Promise<AnswerWithDetails[]> {
-    const result = await db
+    const result = await getDb()
       .select({
         id: answers.id,
         questionId: answers.questionId,
@@ -463,7 +463,7 @@ export class DatabaseStorage implements IStorage {
 
   // Feedback operations
   async createFeedback(insertFeedback: InsertFeedback): Promise<Feedback> {
-    const [feedbackItem] = await db
+    const [feedbackItem] = await getDb()
       .insert(feedback)
       .values(insertFeedback)
       .returning();
@@ -471,7 +471,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllFeedback(): Promise<FeedbackWithDetails[]> {
-    const result = await db
+    const result = await getDb()
       .select({
         id: feedback.id,
         questionId: feedback.questionId,
@@ -498,21 +498,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async markFeedbackAsRead(id: string): Promise<void> {
-    await db
+    await getDb()
       .update(feedback)
       .set({ isRead: true })
       .where(eq(feedback.id, id));
   }
 
   async markFeedbackAsResolved(id: string): Promise<void> {
-    await db
+    await getDb()
       .update(feedback)
       .set({ isResolved: true })
       .where(eq(feedback.id, id));
   }
 
   async getFeedbackForUser(userId: string): Promise<FeedbackWithDetails[]> {
-    const result = await db
+    const result = await getDb()
       .select({
         id: feedback.id,
         questionId: feedback.questionId,
@@ -540,7 +540,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async respondToFeedback(id: string, response: string, respondedBy: string): Promise<void> {
-    await db
+    await getDb()
       .update(feedback)
       .set({ 
         response, 
@@ -552,17 +552,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getFeedback(id: string): Promise<Feedback | undefined> {
-    const [feedbackItem] = await db.select().from(feedback).where(eq(feedback.id, id));
+    const [feedbackItem] = await getDb().select().from(feedback).where(eq(feedback.id, id));
     return feedbackItem || undefined;
   }
 
   async deleteFeedback(id: string): Promise<void> {
-    await db.delete(feedback).where(eq(feedback.id, id));
+    await getDb().delete(feedback).where(eq(feedback.id, id));
   }
 
   // Activity log operations
   async logActivity(insertLog: InsertActivityLog): Promise<ActivityLog> {
-    const [log] = await db
+    const [log] = await getDb()
       .insert(activityLogs)
       .values(insertLog)
       .returning();
@@ -570,7 +570,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getActivityLogs(limit: number = 100): Promise<ActivityLogWithUser[]> {
-    return db
+    return getDb()
       .select({
         id: activityLogs.id,
         userId: activityLogs.userId,
@@ -590,7 +590,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   async getActivityLogsForUser(userId: string, limit: number = 100): Promise<ActivityLogWithUser[]> {
-    return db
+    return getDb()
       .select({
         id: activityLogs.id,
         userId: activityLogs.userId,
@@ -617,22 +617,22 @@ export class DatabaseStorage implements IStorage {
     totalAnswers: number;
     pendingAnswers: number;
   }> {
-    const [tablesCount] = await db
+    const [tablesCount] = await getDb()
       .select({ count: count(tables.id) })
       .from(tables)
       .where(eq(tables.isActive, true));
 
-    const [questionsCount] = await db
+    const [questionsCount] = await getDb()
       .select({ count: count(questions.id) })
       .from(questions)
       .where(eq(questions.isActive, true));
 
-    const [answersCount] = await db
+    const [answersCount] = await getDb()
       .select({ count: count(answers.id) })
       .from(answers);
 
     // Calculate pending answers (questions without answers from tables they're assigned to)
-    const allQuestionsWithAnswers = await db
+    const allQuestionsWithAnswers = await getDb()
       .select({
         questionId: questions.id,
         type: questions.type,
@@ -647,13 +647,13 @@ export class DatabaseStorage implements IStorage {
     let pendingCount = 0;
     for (const q of allQuestionsWithAnswers) {
       if (q.type === 'general') {
-        const activeTables = await db.select({ number: tables.number }).from(tables).where(eq(tables.isActive, true));
+        const activeTables = await getDb().select({ number: tables.number }).from(tables).where(eq(tables.isActive, true));
         const totalTables = activeTables.length;
         const answeredTables = q.answeredTables.length;
         pendingCount += totalTables - answeredTables;
       } else if (q.assignedTables && Array.isArray(q.assignedTables)) {
         const assignedCount = q.assignedTables.length;
-        const answeredCount = q.answeredTables.filter(t => (q.assignedTables as number[]).includes(t)).length;
+        const answeredCount = q.answeredTables.filter((t: any) => (q.assignedTables as number[]).includes(t)).length;
         pendingCount += assignedCount - answeredCount;
       }
     }
