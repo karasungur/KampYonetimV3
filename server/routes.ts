@@ -1351,13 +1351,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Yeni fotoğraf talebi oluşturma
   app.post('/api/photo-requests', async (req, res) => {
     try {
+      // Debug: Ham veriyi kontrol et
+      console.log('🔍 req.body içeriği:', Object.keys(req.body));
+      console.log('🔍 faceData var mı:', req.body.faceData ? 'VAR' : 'YOK');
+      
       const { selectedCampDays, uploadedFilesCount, ...requestBody } = req.body;
+      
+      // Debug: Destructuring sonrası
+      console.log('🔍 requestBody içeriği:', Object.keys(requestBody));
+      console.log('🔍 requestBody.faceData:', requestBody.faceData ? 'VAR' : 'YOK');
       
       const requestData = insertPhotoRequestSchema.parse({
         ...requestBody,
         faceData: req.body.faceData, // Web'den gelen yüz embedding verileri
         status: 'pending'
       });
+      
+      // Debug: Parse sonrası
+      console.log('🔍 requestData.faceData:', requestData.faceData ? 'VAR' : 'YOK');
       
       // TC kimlik doğrulama
       if (!validateTCNumber(requestData.tcNumber)) {
