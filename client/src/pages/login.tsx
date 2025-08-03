@@ -31,11 +31,13 @@ export default function LoginPage() {
       <div className="max-w-md w-full mx-4">
         <Card className="shadow-2xl">
           <CardHeader className="text-center pb-6">
-            <img 
-              src={akPartiLogo} 
-              alt="AK Parti" 
-              className="w-32 h-32 mx-auto mb-6 object-contain"
-            />
+            <div className="w-40 h-40 mx-auto mb-6 bg-gradient-to-br from-orange-100 to-yellow-50 rounded-full flex items-center justify-center p-4 shadow-lg">
+              <img 
+                src={akPartiLogo} 
+                alt="AK Parti" 
+                className="w-full h-full object-contain"
+              />
+            </div>
             <h2 className="text-2xl font-bold ak-text">İrade, İstikamet ve İstişare Kampı</h2>
             <p className="ak-gray mt-2">AK Parti Gençlik Kolları Genel Sekreterlik</p>
           </CardHeader>

@@ -176,7 +176,7 @@ export default function MainMenuPage() {
       {/* Header with Logo Space */}
       <div className="text-center mb-8">
         {/* Logo */}
-        <div className="w-20 h-20 mx-auto mb-6 bg-white/90 rounded-full flex items-center justify-center backdrop-blur-sm p-2">
+        <div className="w-28 h-28 md:w-32 md:h-32 mx-auto mb-6 bg-gradient-to-br from-orange-100/90 to-yellow-50/90 rounded-full flex items-center justify-center backdrop-blur-sm p-4 shadow-lg">
           <img 
             src={akPartiLogo} 
             alt="AK Parti" 
