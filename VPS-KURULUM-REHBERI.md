@@ -160,18 +160,14 @@ npm run db:push
 # PostgreSQL shell'e gir
 sudo -u postgres psql -d ak_parti_gk_camp
 
-# Admin kullanıcıları ekle (PostgreSQL shell içinde)
+# Mevcut kullanıcıları ekle (PostgreSQL shell içinde)
 -- Gülbahar Öztürk (Genel Sekreterlik)
 INSERT INTO users (first_name, last_name, tc_number, password, role, is_active) 
-VALUES ('Gülbahar', 'Öztürk', '11111111111', '$2b$10$encrypted_password_here', 'genelsekreterlik', true);
+VALUES ('Gülbahar', 'Öztürk', '47704699208', '$2b$10$encrypted_password_here', 'genelsekreterlik', true);
 
--- Yusuf İbiş (Genel Sekreterlik)
+-- Yusuf İbiş (Genel Başkan)
 INSERT INTO users (first_name, last_name, tc_number, password, role, is_active) 
-VALUES ('Yusuf', 'İbiş', '22222222222', '$2b$10$encrypted_password_here', 'genelsekreterlik', true);
-
--- Test admin kullanıcısı (opsiyonel)
-INSERT INTO users (first_name, last_name, tc_number, password, role, is_active) 
-VALUES ('Admin', 'User', '12345678901', '$2b$10$encrypted_password_here', 'genelsekreterlik', true);
+VALUES ('Yusuf', 'İbiş', '46480904230', '$2b$10$encrypted_password_here', 'genelbaskan', true);
 \q
 ```
 
