@@ -852,10 +852,11 @@ class GoogleDriveSender(QThread):
             
             file_id = file.get('id')
             
-            # Dosyayı herkese açık yap
+            # Dosyayı sadece email sahibine özel yap (GÜVENLİK!)
             permission = {
-                'type': 'anyone',
-                'role': 'reader'
+                'type': 'user',
+                'role': 'reader',
+                'emailAddress': self.email
             }
             service.permissions().create(
                 fileId=file_id,
