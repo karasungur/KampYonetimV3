@@ -749,69 +749,194 @@ class EmailSender(QThread):
     
     def run(self):
         try:
+            logger.info(f"📧 E-POSTA GÖNDERME BAŞLADI - TC: {self.tc_number}")
+            logger.info(f"   📊 Eşleşen fotoğraf: {len(self.matched_photos)}")
+            log_memory_usage("E-posta başlangıç")
+            
             self.progress.emit(self.tc_number, "E-posta hazırlanıyor...")
             
-            # ZIP dosyası oluştur
+            # ZIP dosyası oluştur - Güvenli yol
             zip_path = f"./temp/{self.tc_number}_photos.zip"
-            os.makedirs("./temp", exist_ok=True)
+            try:
+                os.makedirs("./temp", exist_ok=True)
+                logger.info(f"📁 Temp klasörü hazır: ./temp")
+            except Exception as e:
+                logger.error(f"❌ Temp klasör oluşturma hatası: {str(e)}")
+                raise Exception(f"Geçici klasör oluşturulamadı: {str(e)}")
             
-            with zipfile.ZipFile(zip_path, 'w') as zip_file:
+            # Güvenli ZIP oluşturma
+            successful_photos = 0
+            failed_photos = []
+            
+            logger.info(f"🗜️ ZIP dosyası oluşturuluyor: {zip_path}")
+            
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
                 for idx, match in enumerate(self.matched_photos[:20]):  # İlk 20 fotoğraf
-                    photo_path = match['photo_path']
-                    if os.path.exists(photo_path):
-                        filename = f"{idx+1:02d}_{os.path.basename(photo_path)}"
-                        zip_file.write(photo_path, filename)
+                    try:
+                        photo_path = match['photo_path']
+                        logger.debug(f"   📄 Fotoğraf ekleniyor [{idx+1}/20]: {os.path.basename(photo_path)}")
+                        
+                        # Dosya varlığı kontrolü
+                        if not os.path.exists(photo_path):
+                            logger.warning(f"⚠️ Dosya bulunamadı: {photo_path}")
+                            failed_photos.append(f"Bulunamadı: {os.path.basename(photo_path)}")
+                            continue
+                        
+                        # Dosya boyutu kontrolü (max 50MB)
+                        file_size = os.path.getsize(photo_path) / 1024 / 1024  # MB
+                        if file_size > 50:
+                            logger.warning(f"⚠️ Dosya çok büyük ({file_size:.1f}MB): {os.path.basename(photo_path)}")
+                            failed_photos.append(f"Çok büyük: {os.path.basename(photo_path)}")
+                            continue
+                        
+                        # Güvenli dosya ismi
+                        base_name = os.path.basename(photo_path)
+                        safe_filename = f"{idx+1:02d}_{base_name}"
+                        
+                        # ZIP'e ekle
+                        zip_file.write(photo_path, safe_filename)
+                        successful_photos += 1
+                        
+                        # Her 5 fotoğrafta bellek durumu
+                        if idx % 5 == 0:
+                            log_memory_usage(f"ZIP ekleme - {idx+1}/{len(self.matched_photos[:20])}")
+                            
+                    except Exception as photo_error:
+                        logger.error(f"❌ Fotoğraf ekleme hatası [{idx+1}]: {str(photo_error)}")
+                        failed_photos.append(f"Hata: {os.path.basename(match.get('photo_path', 'unknown'))}")
+                        continue
+            
+            logger.info(f"✅ ZIP oluşturuldu: {successful_photos} başarılı, {len(failed_photos)} başarısız")
+            if failed_photos:
+                logger.warning(f"   Başarısız dosyalar: {failed_photos[:3]}...")
+            
+            # ZIP boyutu kontrolü
+            zip_size = os.path.getsize(zip_path) / 1024 / 1024  # MB
+            logger.info(f"📦 ZIP boyutu: {zip_size:.1f} MB")
+            
+            if zip_size > 25:  # 25MB limit
+                logger.error(f"❌ ZIP dosyası çok büyük: {zip_size:.1f} MB")
+                os.remove(zip_path)
+                raise Exception(f"E-posta eki çok büyük ({zip_size:.1f} MB). Lütfen daha az fotoğraf seçin.")
             
             # E-posta gönder
             self.progress.emit(self.tc_number, "E-posta gönderiliyor...")
+            logger.info(f"📨 E-posta hazırlanıyor: {self.email}")
             
-            msg = MIMEMultipart()
-            msg['From'] = CONFIG['EMAIL_FROM']
-            msg['To'] = self.email
-            msg['Subject'] = f"AK Parti Gençlik Kolları Kamp Fotoğraflarınız - {self.tc_number}"
-            
-            body = f"""
+            try:
+                msg = MIMEMultipart()
+                msg['From'] = CONFIG['EMAIL_FROM']
+                msg['To'] = self.email
+                msg['Subject'] = f"AK Parti Gençlik Kolları Kamp Fotoğraflarınız - {self.tc_number}"
+                
+                body = f"""
 Sayın Katılımcımız,
 
 AK Parti Gençlik Kolları İrade, İstikamet ve İstişare Kampı fotoğraflarınız hazır!
 
 Tespit edilen fotoğraf sayısı: {len(self.matched_photos)}
+ZIP'e eklenen fotoğraf: {successful_photos}
 TC Kimlik No: {self.tc_number}
 
 Fotoğraflarınız ekte ZIP dosyası olarak gönderilmiştir.
 
 Saygılarımızla,
 AK Parti Gençlik Kolları Genel Sekreterliği
-            """
+                """
+                
+                msg.attach(MIMEText(body, 'plain', 'utf-8'))
+                logger.info(f"📝 E-posta metni hazırlandı")
+                
+                # ZIP dosyasını güvenli şekilde ekle
+                try:
+                    with open(zip_path, "rb") as attachment:
+                        logger.info(f"📎 Ek dosyası okunuyor: {zip_size:.1f} MB")
+                        file_data = attachment.read()
+                        
+                        part = MIMEBase('application', 'octet-stream')
+                        part.set_payload(file_data)
+                        encoders.encode_base64(part)
+                        part.add_header(
+                            'Content-Disposition',
+                            f'attachment; filename={self.tc_number}_photos.zip'
+                        )
+                        msg.attach(part)
+                        
+                        # Bellek temizle
+                        del file_data
+                        gc.collect()
+                        
+                        logger.info(f"✅ Ek dosyası e-postaya eklendi")
+                        
+                except Exception as attach_error:
+                    logger.error(f"❌ Ek dosya ekleme hatası: {str(attach_error)}")
+                    raise Exception(f"Dosya ekleme hatası: {str(attach_error)}")
+                
+                # SMTP güvenli gönderim
+                logger.info(f"📤 SMTP bağlantısı kuruluyor: {CONFIG['SMTP_SERVER']}:{CONFIG['SMTP_PORT']}")
+                
+                server = None
+                try:
+                    server = smtplib.SMTP(CONFIG['SMTP_SERVER'], CONFIG['SMTP_PORT'])
+                    server.starttls()
+                    server.login(CONFIG['EMAIL_FROM'], CONFIG['EMAIL_PASSWORD'])
+                    
+                    logger.info(f"📧 E-posta gönderiliyor...")
+                    server.send_message(msg)
+                    logger.info(f"✅ E-posta başarıyla gönderildi")
+                    
+                except Exception as smtp_error:
+                    logger.error(f"❌ SMTP gönderim hatası: {str(smtp_error)}")
+                    raise Exception(f"E-posta gönderim hatası: {str(smtp_error)}")
+                finally:
+                    if server:
+                        try:
+                            server.quit()
+                        except:
+                            pass
+                
+            except Exception as email_error:
+                logger.error(f"❌ E-posta hazırlama hatası: {str(email_error)}")
+                raise email_error
             
-            msg.attach(MIMEText(body, 'plain', 'utf-8'))
+            # Geçici dosyayı güvenli sil
+            try:
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+                    logger.info(f"🗑️ Geçici ZIP dosyası silindi")
+            except Exception as cleanup_error:
+                logger.warning(f"⚠️ Cleanup hatası: {str(cleanup_error)}")
             
-            # ZIP dosyasını ekle
-            with open(zip_path, "rb") as attachment:
-                part = MIMEBase('application', 'octet-stream')
-                part.set_payload(attachment.read())
-                encoders.encode_base64(part)
-                part.add_header(
-                    'Content-Disposition',
-                    f'attachment; filename= {self.tc_number}_photos.zip'
-                )
-                msg.attach(part)
-            
-            # SMTP ile gönder
-            server = smtplib.SMTP(CONFIG['SMTP_SERVER'], CONFIG['SMTP_PORT'])
-            server.starttls()
-            server.login(CONFIG['EMAIL_FROM'], CONFIG['EMAIL_PASSWORD'])
-            server.send_message(msg)
-            server.quit()
-            
-            # Geçici dosyayı sil
-            os.remove(zip_path)
-            
+            log_memory_usage("E-posta tamamlandı")
+            logger.info(f"🎉 E-POSTA GÖNDERİMİ TAMAMLANDI - TC: {self.tc_number}")
             self.finished.emit(self.tc_number, True)
             
         except Exception as e:
+            # Kritik hata durumunda detaylı log
+            logger.error(f"💥 E-POSTA KRİTİK HATA - TC: {self.tc_number}")
+            logger.error(f"   Hata mesajı: {str(e)}")
+            logger.error(f"   Stack trace: {traceback.format_exc()}")
+            log_memory_usage("E-posta hata anında")
+            
+            # Geçici dosyayı temizle
+            try:
+                zip_path = f"./temp/{self.tc_number}_photos.zip"
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+                    logger.info(f"🗑️ Hata sonrası ZIP dosyası silindi")
+            except Exception as cleanup_error:
+                logger.warning(f"⚠️ Hata sonrası cleanup hatası: {str(cleanup_error)}")
+            
             self.finished.emit(self.tc_number, False)
             print(f"E-posta gönderme hatası: {str(e)}")
+            
+        finally:
+            # Final cleanup
+            try:
+                gc.collect()
+                logger.info(f"🧹 E-posta worker cleanup tamamlandı - TC: {self.tc_number}")
+            except:
+                pass
 
 class PythonAPIServer:
     """Python API Server - Web'den gelen istekleri karşılar"""
