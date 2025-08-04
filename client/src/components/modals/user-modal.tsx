@@ -189,7 +189,7 @@ export default function UserModal({ isOpen, onClose }: UserModalProps) {
                 value={tableNumber}
                 onChange={(e) => setTableNumber(e.target.value)}
                 className="mt-2 focus:ring-ak-yellow focus:border-ak-yellow"
-                placeholder="1-12 arası bir numara"
+                placeholder="Masa numarası giriniz"
                 required
               />
             </div>

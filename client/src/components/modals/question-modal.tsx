@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,8 +25,19 @@ export default function QuestionModal({ isOpen, onClose, question }: QuestionMod
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Sample table numbers - in real app, this would come from API
-  const tableNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  // Fetch actual tables from API
+  const { data: tables = [] } = useQuery({
+    queryKey: ["/api/tables"],
+    queryFn: async () => {
+      const response = await fetch('/api/tables', {
+        headers: {
+          ...setAuthHeader(),
+        },
+      });
+      if (!response.ok) throw new Error('Failed to fetch tables');
+      return response.json();
+    },
+  });
 
   useEffect(() => {
     if (question) {
@@ -182,15 +193,15 @@ export default function QuestionModal({ isOpen, onClose, question }: QuestionMod
             <div>
               <Label className="ak-text font-medium">Masa Seçimi</Label>
               <div className="grid grid-cols-3 gap-2 mt-2">
-                {tableNumbers.map((tableNumber) => (
-                  <div key={tableNumber} className="flex items-center space-x-2">
+                {tables.map((table: any) => (
+                  <div key={table.number} className="flex items-center space-x-2">
                     <Checkbox
-                      id={`table-${tableNumber}`}
-                      checked={assignedTables.includes(tableNumber)}
-                      onCheckedChange={(checked) => handleTableChange(tableNumber, checked as boolean)}
+                      id={`table-${table.number}`}
+                      checked={assignedTables.includes(table.number)}
+                      onCheckedChange={(checked) => handleTableChange(table.number, checked as boolean)}
                     />
-                    <Label htmlFor={`table-${tableNumber}`} className="ak-text">
-                      Masa {tableNumber}
+                    <Label htmlFor={`table-${table.number}`} className="ak-text">
+                      Masa {table.number}{table.name ? ` - ${table.name}` : ''}
                     </Label>
                   </div>
                 ))}
