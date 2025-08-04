@@ -749,44 +749,13 @@ class EmailSender(QThread):
         self.email = email
         self.matched_photos = matched_photos
     
-    def compress_photo(self, photo_path, max_size_mb=3, quality=85):
-        """Fotoğrafı sıkıştır ve boyutunu küçült"""
+    def is_photo_too_big(self, photo_path, max_size_mb=5):
+        """Fotoğraf boyutu kontrolü (basit ve güvenli)"""
         try:
-            import cv2
-            from PIL import Image
-            import io
-            
-            # Fotoğrafı oku
-            img = cv2.imread(photo_path)
-            if img is None:
-                return None
-            
-            # RGB'ye çevir
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            pil_img = Image.fromarray(img)
-            
-            # Boyutu küçült (max 1920x1080)
-            max_width, max_height = 1920, 1080
-            if pil_img.width > max_width or pil_img.height > max_height:
-                pil_img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
-            
-            # Sıkıştırma ile kaydet
-            for attempt_quality in [quality, 70, 50, 30]:  # Kaliteyi düşürerek dene
-                buffer = io.BytesIO()
-                pil_img.save(buffer, format='JPEG', quality=attempt_quality, optimize=True)
-                
-                # Boyut kontrolü
-                size_mb = len(buffer.getvalue()) / 1024 / 1024
-                if size_mb <= max_size_mb:
-                    logger.info(f"📷 Fotoğraf sıkıştırıldı: {os.path.basename(photo_path)} -> {size_mb:.1f}MB (Kalite: {attempt_quality})")
-                    return buffer.getvalue()
-            
-            logger.warning(f"⚠️ Fotoğraf sıkıştırılamadı: {os.path.basename(photo_path)}")
-            return None
-            
-        except Exception as e:
-            logger.error(f"❌ Fotoğraf sıkıştırma hatası: {str(e)}")
-            return None
+            file_size_mb = os.path.getsize(photo_path) / 1024 / 1024
+            return file_size_mb > max_size_mb
+        except:
+            return True  # Hata durumunda güvenli taraf
     
     def send_multiple_emails(self):
         """Büyük dosyalar için birden fazla e-posta gönder"""
@@ -810,14 +779,9 @@ class EmailSender(QThread):
                             base_name = os.path.basename(photo_path)
                             safe_filename = f"{idx+1:02d}_{base_name}"
                             
-                            # Sıkıştırılmış fotoğraf ekle
-                            compressed_photo = self.compress_photo(photo_path, max_size_mb=2)
-                            if compressed_photo:
-                                temp_path = f"./temp/compressed_{batch_idx}_{idx}.jpg"
-                                with open(temp_path, 'wb') as temp_file:
-                                    temp_file.write(compressed_photo)
-                                zip_file.write(temp_path, safe_filename)
-                                os.remove(temp_path)
+                            # Dosyayı doğrudan ekle (basit)
+                            if not self.is_photo_too_big(photo_path, max_size_mb=5):
+                                zip_file.write(photo_path, safe_filename)
                 
                 # Bu batch'i e-posta ile gönder
                 self.send_single_batch_email(batch_zip_path, batch_idx + 1, len(photo_batches[:3]), len(batch_photos))
@@ -904,11 +868,11 @@ AK Parti Gençlik Kolları Genel Sekreterliği
             
             logger.info(f"🗜️ ZIP dosyası oluşturuluyor: {zip_path}")
             
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as zip_file:
-                for idx, match in enumerate(self.matched_photos[:25]):  # İlk 25 fotoğraf
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as zip_file:
+                for idx, match in enumerate(self.matched_photos[:15]):  # Sadece ilk 15 fotoğraf (güvenli)
                     try:
                         photo_path = match['photo_path']
-                        logger.debug(f"   📄 Fotoğraf ekleniyor [{idx+1}/25]: {os.path.basename(photo_path)}")
+                        logger.debug(f"   📄 Fotoğraf ekleniyor [{idx+1}/15]: {os.path.basename(photo_path)}")
                         
                         # Dosya varlığı kontrolü
                         if not os.path.exists(photo_path):
@@ -916,37 +880,23 @@ AK Parti Gençlik Kolları Genel Sekreterliği
                             failed_photos.append(f"Bulunamadı: {os.path.basename(photo_path)}")
                             continue
                         
+                        # Dosya boyutu kontrolü (basit)
+                        if self.is_photo_too_big(photo_path, max_size_mb=4):
+                            logger.warning(f"⚠️ Dosya çok büyük: {os.path.basename(photo_path)}")
+                            failed_photos.append(f"Çok büyük: {os.path.basename(photo_path)}")
+                            continue
+                        
                         # Güvenli dosya ismi
                         base_name = os.path.basename(photo_path)
                         safe_filename = f"{idx+1:02d}_{base_name}"
                         
-                        # Fotoğrafı sıkıştırarak ekle
-                        compressed_photo = self.compress_photo(photo_path, max_size_mb=3)
-                        if compressed_photo:
-                            # Geçici sıkıştırılmış dosya oluştur
-                            temp_compressed_path = f"./temp/compressed_{idx+1:02d}_{base_name}"
-                            with open(temp_compressed_path, 'wb') as temp_file:
-                                temp_file.write(compressed_photo)
-                            
-                            # ZIP'e ekle
-                            zip_file.write(temp_compressed_path, safe_filename)
-                            successful_photos += 1
-                            
-                            # Geçici dosyayı sil
-                            os.remove(temp_compressed_path)
-                        else:
-                            # Sıkıştırma başarısız, orijinali ekle (boyut kontrolü ile)
-                            file_size = os.path.getsize(photo_path) / 1024 / 1024  # MB
-                            if file_size <= 5:  # Max 5MB
-                                zip_file.write(photo_path, safe_filename)
-                                successful_photos += 1
-                            else:
-                                logger.warning(f"⚠️ Dosya çok büyük ({file_size:.1f}MB): {os.path.basename(photo_path)}")
-                                failed_photos.append(f"Çok büyük: {os.path.basename(photo_path)}")
+                        # Dosyayı doğrudan ZIP'e ekle (basit ve güvenli)
+                        zip_file.write(photo_path, safe_filename)
+                        successful_photos += 1
                         
                         # Her 5 fotoğrafta bellek durumu
                         if idx % 5 == 0:
-                            log_memory_usage(f"ZIP ekleme - {idx+1}/{len(self.matched_photos[:25])}")
+                            log_memory_usage(f"ZIP ekleme - {idx+1}/{len(self.matched_photos[:15])}")
                             
                     except Exception as photo_error:
                         logger.error(f"❌ Fotoğraf ekleme hatası [{idx+1}]: {str(photo_error)}")
@@ -961,15 +911,10 @@ AK Parti Gençlik Kolları Genel Sekreterliği
             zip_size = os.path.getsize(zip_path) / 1024 / 1024  # MB
             logger.info(f"📦 ZIP boyutu: {zip_size:.1f} MB")
             
-            if zip_size > 24:  # 24MB limit (e-posta sağlayıcıları için güvenli)
-                logger.warning(f"⚠️ ZIP dosyası büyük: {zip_size:.1f} MB - Birden fazla e-posta ile gönderilecek")
-                # Büyük dosya için birden fazla e-posta gönder
-                self.send_multiple_emails()
-                return
-            elif zip_size > 50:  # Kritik limit - bu asla olmamalı
+            if zip_size > 20:  # 20MB güvenli limit
                 logger.error(f"❌ ZIP dosyası çok büyük: {zip_size:.1f} MB")
                 os.remove(zip_path)
-                raise Exception(f"E-posta eki çok büyük ({zip_size:.1f} MB). Sistem hatası.")
+                raise Exception(f"E-posta eki çok büyük ({zip_size:.1f} MB). Daha az fotoğraf seçildi ama yine büyük.")
             
             # E-posta gönder
             self.progress.emit(self.tc_number, "E-posta gönderiliyor...")
