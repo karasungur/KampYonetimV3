@@ -13,12 +13,19 @@
 
 ## 📋 1. SUNUCUYA BAĞLANMA VE İLK AYARLAR
 
+**Sizin VPS Bağlantı Bilgileriniz:**
+- **IP Adresi**: 2.59.117.53
+- **Port**: 22
+- **Kullanıcı Adı**: virtcon-W6tcX6pk
+- **Şifre**: Xn5ty6iJxnexMBXR
+
 Git Bash ile sunucunuza bağlanın:
 ```bash
-ssh root@YOUR_VPS_IP
-# veya
-ssh username@YOUR_VPS_IP
+ssh virtcon-W6tcX6pk@2.59.117.53
+# Şifre sorulduğunda: Xn5ty6iJxnexMBXR
 ```
+
+**Not**: İlk bağlantıda "authenticity of host" onayı istenirse **yes** yazın.
 
 Sistem güncellemesi:
 ```bash
@@ -90,7 +97,7 @@ git clone YOUR_REPO_URL .
 Local makinenizden Git Bash ile:
 ```bash
 # Tüm proje dosyalarını yükle
-scp -r /path/to/your/project/* root@YOUR_VPS_IP:/var/www/ak-parti-gk-camp/
+scp -r /path/to/your/project/* virtcon-W6tcX6pk@2.59.117.53:/var/www/ak-parti-gk-camp/
 ```
 
 ---
@@ -243,7 +250,7 @@ Configuration dosyasına:
 ```nginx
 server {
     listen 80;
-    server_name YOUR_VPS_IP;  # IP adresinizi buraya yazın
+    server_name 2.59.117.53;  # Sizin VPS IP adresiniz
 
     # Gzip compression
     gzip on;
@@ -361,7 +368,7 @@ pm2 logs ak-parti-gk-camp
 
 Web tarayıcınızda şuraya gidin:
 ```
-http://YOUR_VPS_IP
+http://2.59.117.53
 ```
 
 ---
