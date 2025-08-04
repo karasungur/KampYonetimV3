@@ -135,45 +135,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Face embedding extraction endpoint
   app.post('/api/extract-embedding', imageUpload.single('photo'), async (req, res) => {
     try {
+      console.log('🔍 Extract embedding endpoint called');
+      
       if (!req.file) {
+        console.log('❌ No file uploaded');
         return res.status(400).json({ error: 'Fotoğraf gerekli' });
       }
 
       const tempFilePath = req.file.path;
+      console.log('📁 File saved at:', tempFilePath);
+      console.log('📏 File size:', req.file.size, 'bytes');
       
       // Python script ile embedding çıkar
+      console.log('🐍 Starting Python process...');
       const pythonProcess = spawn('python3', ['extract_embedding.py', tempFilePath]);
+      console.log('🐍 Python process started');
       
       let output = '';
       let errorOutput = '';
       
       pythonProcess.stdout.on('data', (data) => {
-        output += data.toString();
+        const chunk = data.toString();
+        console.log('📤 Python stdout:', chunk);
+        output += chunk;
       });
       
       pythonProcess.stderr.on('data', (data) => {
-        errorOutput += data.toString();
+        const chunk = data.toString();
+        console.log('⚠️ Python stderr:', chunk);
+        errorOutput += chunk;
       });
       
       pythonProcess.on('close', (code) => {
+        console.log('🏁 Python process closed with code:', code);
+        console.log('📝 Python output:', output);
+        console.log('❗ Python errors:', errorOutput);
+        
         // Geçici dosyayı sil
         fs.unlink(tempFilePath, (err) => {
           if (err) console.error('Geçici dosya silinirken hata:', err);
+          else console.log('🗑️ Temp file deleted:', tempFilePath);
         });
         
         if (code !== 0) {
-          console.error('Python script hatası:', errorOutput);
+          console.error('❌ Python script hatası (exit code:', code, '):', errorOutput);
           return res.status(500).json({ error: 'Embedding çıkarılamadı' });
         }
         
         try {
+          console.log('🔄 Parsing JSON output...');
           const result = JSON.parse(output);
+          console.log('✅ JSON parsed successfully:', result);
+          
           if (result.error) {
+            console.log('❌ Python script returned error:', result.error);
             return res.status(400).json(result);
           }
+          
+          console.log('🎉 Sending successful result');
           res.json(result);
         } catch (parseError) {
-          console.error('JSON parse hatası:', parseError);
+          console.error('❌ JSON parse hatası:', parseError);
+          console.error('Raw output was:', JSON.stringify(output));
           return res.status(500).json({ error: 'JSON parse hatası' });
         }
       });
