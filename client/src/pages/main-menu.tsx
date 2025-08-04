@@ -142,39 +142,16 @@ export default function MainMenuPage() {
     quality: 'good' | 'poor' | 'blurry' | 'profile';
     boundingBox: { x: number; y: number; width: number; height: number };
     landmarks: any;
-    descriptor?: Float32Array; // Face embedding for recognition
+    descriptor?: number[]; // 512-dimensional face embedding for recognition
     originalFile: File;
     isSelected: boolean;
   }
 
-  // Initialize face-api
+  // Initialize embedding extraction (server-side)
   useEffect(() => {
-    const initializeFaceAPI = async () => {
-      try {
-        // Load models from CDN first as test
-        const modelPath = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js-models@master';
-        
-        console.log('Loading face-api models...');
-        await faceapi.nets.tinyFaceDetector.loadFromUri(`${modelPath}/tiny_face_detector`);
-        console.log('Tiny face detector loaded');
-        
-        await faceapi.nets.faceLandmark68Net.loadFromUri(`${modelPath}/face_landmark_68`);
-        console.log('Face landmarks loaded');
-        
-        await faceapi.nets.faceRecognitionNet.loadFromUri(`${modelPath}/face_recognition`);
-        console.log('Face recognition loaded');
-        
-        setIsFaceDetectionReady(true);
-        console.log('Face-API initialized successfully');
-      } catch (error) {
-        console.error('Face-API initialization error:', error);
-        console.error('Error details:', error instanceof Error ? error.message : 'Unknown error', error instanceof Error ? error.stack : '');
-        // Fallback to basic functionality
-        setIsFaceDetectionReady(false);
-      }
-    };
-    
-    initializeFaceAPI();
+    // Server-side embedding extraction is always ready
+    setIsFaceDetectionReady(true);
+    console.log('Server-side face embedding extraction ready');
   }, []);
   
   // Preload images
@@ -221,35 +198,52 @@ export default function MainMenuPage() {
       try {
         setFaceDetectionProgress(Math.round((fileIndex / files.length) * 100));
         
-        const img = await loadImageFromFile(file);
-        const detections = await faceapi
-          .detectAllFaces(img, new faceapi.TinyFaceDetectorOptions())
-          .withFaceLandmarks()
-          .withFaceDescriptors();
-
-        for (let faceIndex = 0; faceIndex < detections.length; faceIndex++) {
-          const detection = detections[faceIndex];
-          const croppedFace = await cropFaceFromImage(img, detection.detection.box);
-          const quality = assessFaceQuality(detection);
-          
+        // Server-side face embedding extraction
+        const formData = new FormData();
+        formData.append('photo', file);
+        
+        const response = await fetch('/api/extract-embedding', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Server error: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.error) {
+          console.error(`Face detection error for file ${file.name}:`, result.error);
+          continue;
+        }
+        
+        if (result.success && result.embedding) {
+          // Create a simple face detection result
           const face: DetectedFace = {
-            id: `${fileIndex}-${faceIndex}-${Date.now()}`,
-            imageData: croppedFace,
-            confidence: detection.detection.score * 100,
-            quality,
+            id: `${fileIndex}-0-${Date.now()}`,
+            imageData: await fileToBase64(file), // Use original image as face crop
+            confidence: (result.confidence || 1.0) * 100,
+            quality: 'good', // Assume good quality from server
             boundingBox: {
-              x: detection.detection.box.x,
-              y: detection.detection.box.y, 
-              width: detection.detection.box.width,
-              height: detection.detection.box.height,
+              x: 0,
+              y: 0, 
+              width: 100,
+              height: 100,
             },
-            landmarks: detection.landmarks,
-            descriptor: detection.descriptor, // Face embedding
+            landmarks: null,
+            descriptor: result.embedding, // 512-dimensional embedding
             originalFile: file,
             isSelected: false,
           };
           
           allFaces.push(face);
+          
+          console.log(`✅ Face embedding extracted for ${file.name}:`, {
+            embeddingSize: result.embedding_size,
+            confidence: result.confidence,
+            facesCount: result.faces_count
+          });
         }
         
       } catch (error) {
@@ -260,6 +254,16 @@ export default function MainMenuPage() {
     setFaceDetectionProgress(100);
     setIsDetectingFaces(false);
     return allFaces;
+  };
+  
+  // Helper function to convert file to base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   };
 
   const loadImageFromFile = (file: File): Promise<HTMLImageElement> => {
@@ -1242,7 +1246,7 @@ export default function MainMenuPage() {
                                   const selectedFaces = detectedFaces.filter(face => selectedFaceIds.includes(face.id));
                                   const faceData = selectedFaces.map(face => ({
                                     id: face.id,
-                                    embedding: face.descriptor ? Array.from(face.descriptor) : [],
+                                    embedding: face.descriptor || [], // 512-dimensional embedding
                                     confidence: face.confidence,
                                     quality: face.quality
                                   }));

@@ -10,6 +10,7 @@ import rateLimit from "express-rate-limit";
 import path from "path";
 import fs from "fs";
 import { nanoid } from "nanoid";
+import { spawn } from "child_process";
 
 // Object Storage için gerekli importlar
 let ObjectStorageService: any;
@@ -131,6 +132,58 @@ const userImportSchema = z.object({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Face embedding extraction endpoint
+  app.post('/api/extract-embedding', imageUpload.single('photo'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'Fotoğraf gerekli' });
+      }
+
+      const tempFilePath = req.file.path;
+      
+      // Python script ile embedding çıkar
+      const pythonProcess = spawn('python3', ['extract_embedding.py', tempFilePath]);
+      
+      let output = '';
+      let errorOutput = '';
+      
+      pythonProcess.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+      
+      pythonProcess.stderr.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+      
+      pythonProcess.on('close', (code) => {
+        // Geçici dosyayı sil
+        fs.unlink(tempFilePath, (err) => {
+          if (err) console.error('Geçici dosya silinirken hata:', err);
+        });
+        
+        if (code !== 0) {
+          console.error('Python script hatası:', errorOutput);
+          return res.status(500).json({ error: 'Embedding çıkarılamadı' });
+        }
+        
+        try {
+          const result = JSON.parse(output);
+          if (result.error) {
+            return res.status(400).json(result);
+          }
+          res.json(result);
+        } catch (parseError) {
+          console.error('JSON parse hatası:', parseError);
+          return res.status(500).json({ error: 'JSON parse hatası' });
+        }
+      });
+      
+    } catch (error) {
+      console.error('Embedding endpoint hatası:', error);
+      res.status(500).json({ error: 'Server hatası' });
+    }
+  });
+
   // Genel API rate limiting (auth hariç)
   app.use('/api/', (req, res, next) => {
     // Auth rotalarına rate limiting uygulanmasın (zaten kendi limitleri var)
