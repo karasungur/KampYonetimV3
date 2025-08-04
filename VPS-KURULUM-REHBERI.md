@@ -163,11 +163,11 @@ sudo -u postgres psql -d ak_parti_gk_camp
 # Mevcut kullanıcıları ekle (PostgreSQL shell içinde)
 -- Gülbahar Öztürk (Genel Sekreterlik)
 INSERT INTO users (first_name, last_name, tc_number, password, role, is_active) 
-VALUES ('Gülbahar', 'Öztürk', '47704699208', '$2b$10$encrypted_password_here', 'genelsekreterlik', true);
+VALUES ('Gülbahar', 'Öztürk', '47704699208', '$2b$10$fbO0hdCDwZ/L9R38JU8WZO2xA3S18j1JP.0UdzvJZNZVsunJHVS/S', 'genelsekreterlik', true);
 
 -- Yusuf İbiş (Genel Başkan)
 INSERT INTO users (first_name, last_name, tc_number, password, role, is_active) 
-VALUES ('Yusuf', 'İbiş', '46480904230', '$2b$10$encrypted_password_here', 'genelbaskan', true);
+VALUES ('Yusuf', 'İbiş', '46480904230', '$2b$10$UVLOgM.GizyhevtGNl/Tcu6Hef/NbosiqLkvw8MjHQLTow9Kr5xGy', 'genelbaskan', true);
 \q
 ```
 
