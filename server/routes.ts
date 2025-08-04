@@ -989,7 +989,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/export/answers', requireAuth, requireRole(['genelbaskan', 'genelsekreterlik']), async (req, res) => {
     try {
       const format = req.query.format as string || 'csv';
-      const answers = await storage.getAllAnswers();
+      const allAnswers = await storage.getAllAnswers();
+      
+      // Sıralama: Önce soru metni, sonra masa numarası
+      const answers = allAnswers.sort((a, b) => {
+        // Önce soru metnine göre sırala
+        const questionCompare = (a.questionText || '').localeCompare(b.questionText || '', 'tr-TR');
+        if (questionCompare !== 0) return questionCompare;
+        
+        // Soru aynı ise masa numarasına göre sırala
+        return (a.tableNumber || 0) - (b.tableNumber || 0);
+      });
       
       if (format === 'csv') {
         const csv = [
@@ -1067,7 +1077,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/export/users', requireAuth, requireRole(['genelsekreterlik']), async (req, res) => {
     try {
       const format = req.query.format as string || 'csv';
-      const users = await storage.getAllUsers();
+      const allUsers = await storage.getAllUsers();
+      
+      // Sıralama: Önce rol, sonra masa numarası, sonra ad-soyad
+      const users = allUsers.sort((a, b) => {
+        // Önce role göre sırala (genelsekreterlik, genelbaskan, moderator)
+        const roleOrder = { genelsekreterlik: 1, genelbaskan: 2, moderator: 3 };
+        const roleCompare = (roleOrder[a.role as keyof typeof roleOrder] || 4) - (roleOrder[b.role as keyof typeof roleOrder] || 4);
+        if (roleCompare !== 0) return roleCompare;
+        
+        // Rol aynı ise masa numarasına göre sırala
+        const tableCompare = (a.tableNumber || 0) - (b.tableNumber || 0);
+        if (tableCompare !== 0) return tableCompare;
+        
+        // Masa da aynı ise ada göre sırala
+        const nameCompare = a.firstName.localeCompare(b.firstName, 'tr-TR');
+        if (nameCompare !== 0) return nameCompare;
+        
+        // Ad da aynı ise soyada göre sırala
+        return a.lastName.localeCompare(b.lastName, 'tr-TR');
+      });
       
       if (format === 'csv') {
         const csv = [

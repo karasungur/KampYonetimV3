@@ -41,10 +41,25 @@ export default function ReportsPage() {
 
   const handleExportExcel = async () => {
     try {
+      const response = await fetch('/api/export/answers?format=xlsx', {
+        headers: setAuthHeader(),
+      });
+      
+      if (!response.ok) throw new Error('Export failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cevaplar_${new Date().toLocaleDateString('tr-TR').replace(/\./g, '-')}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
       toast({
-        title: "Excel İndiriliyor",
-        description: "Excel formatı henüz desteklenmiyor. CSV formatını kullanabilirsiniz.",
-        variant: "destructive",
+        title: "Başarılı",
+        description: "Excel dosyası indirildi",
       });
     } catch (error) {
       toast({
@@ -154,9 +169,10 @@ export default function ReportsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Tüm Masalar</SelectItem>
-                      {Array.from({ length: 12 }, (_, i) => (
-                        <SelectItem key={i + 1} value={`table${i + 1}`}>
-                          Masa {i + 1}
+                      {/* Gerçek masalar buraya eklenecek - API'den çekilip listelenecek */}
+                      {Array.from(new Set(answers.map(a => a.tableNumber))).sort((a, b) => a - b).map((tableNum) => (
+                        <SelectItem key={tableNum} value={`table${tableNum}`}>
+                          Masa {tableNum}
                         </SelectItem>
                       ))}
                     </SelectContent>

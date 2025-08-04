@@ -120,7 +120,9 @@ export default function ResponsesPage() {
 
   const handleDownloadQuestion = async (questionId: string, questionText: string) => {
     try {
-      const questionAnswers = answers.filter(a => a.questionId === questionId);
+      const questionAnswers = answers
+        .filter(a => a.questionId === questionId)
+        .sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0)); // Masa numarasına göre sırala
       
       const csv = [
         ['Soru', 'Masa No', 'Cevap', 'Cevaplayan', 'Tarih'].join(','),
