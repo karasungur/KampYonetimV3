@@ -401,7 +401,7 @@ class ModelTrainingWorker(QThread):
             self.error.emit(f"Model eğitimi hatası: {str(e)}\n\nDetaylar konsola yazdırıldı.")
 
 class PhotoMatchingWorker(QThread):
-    """Fotoğraf eşleştirme worker thread'i"""
+    """Fotoğraf eşleştirme worker thread'i - Memory-safe implementation"""
     progress = pyqtSignal(str, int, str)  # message, percentage, tc_number
     finished = pyqtSignal(str, list)  # tc_number, matched_photos
     error = pyqtSignal(str, str)  # tc_number, error_message
@@ -409,40 +409,52 @@ class PhotoMatchingWorker(QThread):
     def __init__(self, tc_number, reference_embeddings, email, selected_models):
         super().__init__()
         self.tc_number = tc_number
-        self.reference_embeddings = reference_embeddings
+        self.reference_embeddings = [np.array(emb, dtype=np.float32) for emb in reference_embeddings]  # Pre-convert to numpy
         self.email = email
         self.selected_models = selected_models
+        self._should_stop = False
     
     def run(self):
+        # Initialize variables at the start to ensure they exist for cleanup
+        matched_photos = []
+        all_photos = {}
+        
         try:
             self.progress.emit(f"Eşleştirme başlıyor", 0, self.tc_number)
             
-            matched_photos = []
-            total_photos = 0
-            processed = 0
-            
             # Seçilen modellerdeki tüm fotoğrafları birleştir
-            all_photos = {}
             for model_id in self.selected_models:
+                if self._should_stop:
+                    return
+                    
                 model_file = f"./models/{model_id}/face_database.pkl"
                 if os.path.exists(model_file):
                     try:
                         with open(model_file, 'rb') as f:
                             model_data = pickle.load(f)
                         
-                        # Orijinal GUI formatında model verilerini işle
+                        # Memory-efficient processing
                         for key, photo_data in model_data.items():
+                            if self._should_stop:
+                                return
+                                
                             # Orijinal GUI key formatı: "path||face_N"
                             if '||face_' in key:
                                 photo_path = photo_data['path']
                                 if photo_path not in all_photos:
                                     all_photos[photo_path] = []
-                                all_photos[photo_path].append(photo_data)
+                                # Pre-convert embedding to numpy with proper dtype
+                                photo_data_copy = photo_data.copy()
+                                photo_data_copy['embedding'] = np.array(photo_data['embedding'], dtype=np.float32)
+                                all_photos[photo_path].append(photo_data_copy)
                             else:
                                 # Fallback - eski format
                                 all_photos[key] = [photo_data] if isinstance(photo_data, dict) else photo_data
                         
-                        self.progress.emit(f"Model yüklendi: {model_id}", 0, self.tc_number)
+                        # Clear model_data immediately to free memory
+                        del model_data
+                        
+                        self.progress.emit(f"Model yüklendi: {model_id}", 10, self.tc_number)
                     except Exception as e:
                         print(f"Model yükleme hatası - {model_id}: {str(e)}")
             
@@ -451,44 +463,102 @@ class PhotoMatchingWorker(QThread):
                 self.error.emit(self.tc_number, "Seçilen modellerde fotoğraf bulunamadı")
                 return
             
+            processed = 0
+            progress_update_interval = max(1, total_photos // 20)  # Maximum 20 progress updates
+            
             for photo_path, face_list in all_photos.items():
+                if self._should_stop:
+                    break
+                    
                 try:
+                    best_similarity = 0.0
+                    best_face_data = None
+                    
+                    # Find best matching face in this photo
                     for face_data in face_list:
-                        photo_embedding = np.array(face_data['embedding'])
+                        photo_embedding = face_data['embedding']  # Already converted to numpy
                         
-                        # Her referans embedding ile karşılaştır
+                        # Check against all reference embeddings
                         for ref_embedding in self.reference_embeddings:
-                            similarity = self.calculate_similarity(ref_embedding, photo_embedding)
-                            
-                            if similarity > CONFIG['SIMILARITY_THRESHOLD']:
-                                matched_photos.append({
-                                    'photo_path': photo_path,
-                                    'similarity': float(similarity),
-                                    'bbox': face_data['bbox']
-                                })
-                                break
+                            try:
+                                similarity = self.calculate_similarity(ref_embedding, photo_embedding)
+                                
+                                if similarity > best_similarity and similarity > CONFIG['SIMILARITY_THRESHOLD']:
+                                    best_similarity = similarity
+                                    best_face_data = face_data
+                                    
+                            except Exception as e:
+                                print(f"Similarity calculation error: {str(e)}")
+                                continue
+                    
+                    # Add best match if found
+                    if best_face_data is not None:
+                        matched_photos.append({
+                            'photo_path': photo_path,
+                            'similarity': float(best_similarity),
+                            'bbox': best_face_data['bbox'].tolist() if hasattr(best_face_data['bbox'], 'tolist') else best_face_data['bbox']
+                        })
                     
                     processed += 1
-                    progress = int((processed / total_photos) * 100)
-                    self.progress.emit(f"Eşleştirme: {processed}/{total_photos}", 
-                                     progress, self.tc_number)
+                    
+                    # Update progress less frequently to avoid signal spam
+                    if processed % progress_update_interval == 0 or processed == total_photos:
+                        progress = int((processed / total_photos) * 100)
+                        self.progress.emit(f"Eşleştirme: {processed}/{total_photos}", 
+                                         progress, self.tc_number)
                     
                 except Exception as e:
                     print(f"Eşleştirme hatası - {photo_path}: {str(e)}")
+                    processed += 1
                     continue
             
-            # Eşleşmeleri benzerlik skoruna göre sırala
-            matched_photos.sort(key=lambda x: x['similarity'], reverse=True)
+            # Clear all_photos to free memory before sorting
+            del all_photos
             
-            self.finished.emit(self.tc_number, matched_photos)
+            if not self._should_stop and matched_photos:
+                # Memory-efficient sorting
+                try:
+                    matched_photos.sort(key=lambda x: x['similarity'], reverse=True)
+                    self.progress.emit("Eşleştirme tamamlandı", 100, self.tc_number)
+                    self.finished.emit(self.tc_number, matched_photos)
+                except Exception as e:
+                    print(f"Sorting error: {str(e)}")
+                    self.error.emit(self.tc_number, f"Sonuç sıralama hatası: {str(e)}")
+            elif not self._should_stop:
+                self.finished.emit(self.tc_number, [])
             
         except Exception as e:
+            print(f"Critical matching error: {str(e)}")
+            import traceback
+            traceback.print_exc()
             self.error.emit(self.tc_number, f"Eşleştirme hatası: {str(e)}")
+        finally:
+            # Cleanup reference embeddings to free memory
+            try:
+                if hasattr(self, 'reference_embeddings'):
+                    del self.reference_embeddings
+            except:
+                pass
     
     def calculate_similarity(self, embedding1, embedding2):
-        """Dot product similarity hesapla (normalize edilmiş vektörler için)"""
-        # Normalize edilmiş vektörler için dot product = cosine similarity
-        return np.dot(embedding1, embedding2)
+        """Memory-safe dot product similarity hesapla (normalize edilmiş vektörler için)"""
+        try:
+            # Ensure both are float32 numpy arrays for consistency
+            if not isinstance(embedding1, np.ndarray):
+                embedding1 = np.array(embedding1, dtype=np.float32)
+            if not isinstance(embedding2, np.ndarray):
+                embedding2 = np.array(embedding2, dtype=np.float32)
+            
+            # Use optimized dot product
+            similarity = float(np.dot(embedding1, embedding2))
+            return similarity
+        except Exception as e:
+            print(f"Similarity calculation error: {str(e)}")
+            return 0.0
+    
+    def stop(self):
+        """Güvenli thread durdurma"""
+        self._should_stop = True
 
 class EmailSender(QThread):
     """E-posta gönderme worker thread'i"""
@@ -1311,6 +1381,13 @@ class RequestProcessingSection(QWidget):
         )
         
         email_worker.start()
+        
+        # Matching worker'ını temizle
+        if tc_number in self.active_workers:
+            worker = self.active_workers[tc_number]
+            if hasattr(worker, 'stop'):
+                worker.stop()
+            del self.active_workers[tc_number]
     
     def update_email_progress(self, tc_number, message, table_row):
         """E-posta gönderme ilerlemesini güncelle"""
@@ -1334,9 +1411,29 @@ class RequestProcessingSection(QWidget):
         """Eşleştirme hatası"""
         self.requests_table.setItem(table_row, 2, QTableWidgetItem(f"❌ Hata: {error_message}"))
         
-        # Worker'ı temizle
+        # Worker'ı güvenli durdur ve temizle
         if tc_number in self.active_workers:
+            worker = self.active_workers[tc_number]
+            if hasattr(worker, 'stop'):
+                worker.stop()
             del self.active_workers[tc_number]
+    
+    def stop_all_workers(self):
+        """Tüm aktif worker'ları güvenli durdur"""
+        for tc_number, worker in list(self.active_workers.items()):
+            try:
+                if hasattr(worker, 'stop'):
+                    worker.stop()
+                if worker.isRunning():
+                    worker.quit()
+                    worker.wait(3000)  # 3 saniye bekle
+                    if worker.isRunning():
+                        worker.terminate()  # Force terminate if still running
+            except Exception as e:
+                print(f"Worker durdurma hatası - {tc_number}: {str(e)}")
+        
+        self.active_workers.clear()
+        print("✅ Tüm worker'lar güvenli durduruldu")
 
 class MainWindow(QMainWindow):
     """Ana pencere - İki bölümlü tasarım"""
@@ -1352,6 +1449,30 @@ class MainWindow(QMainWindow):
         self.request_timer.start(10000)  # 10 saniyede bir kontrol
         
         self.processed_requests = set()  # İşlenmiş istekleri takip et
+        
+        # Reference to request processing section for cleanup
+        self.request_section = None
+    
+    def closeEvent(self, a0):
+        """Uygulama kapatılırken güvenli cleanup"""
+        print("🔄 Uygulama kapatılıyor - Aktif işlemler durduruluyor...")
+        
+        try:
+            # Timer'ı durdur
+            if hasattr(self, 'request_timer') and self.request_timer:
+                self.request_timer.stop()
+            
+            # Request section'daki worker'ları durdur
+            if self.request_section and hasattr(self.request_section, 'stop_all_workers'):
+                self.request_section.stop_all_workers()
+            
+            print("✅ Güvenli cleanup tamamlandı")
+            
+        except Exception as e:
+            print(f"⚠️ Cleanup sırasında hata: {str(e)}")
+        
+        if a0:
+            a0.accept()
     
     def setup_ui(self):
         """Ana arayüzü kur"""
@@ -1394,6 +1515,7 @@ class MainWindow(QMainWindow):
         
         # Sağ bölüm - İstek İşleme
         self.processing_section = RequestProcessingSection()
+        self.request_section = self.processing_section  # Reference for cleanup
         processing_frame = QFrame()
         processing_frame.setStyleSheet(f"""
             QFrame {{
