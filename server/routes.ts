@@ -1433,19 +1433,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // FOTOĞRAF YÖNETİMİ API ROTALARI
   // =============================================================================
 
-  // Object Storage upload URL endpoint (Development)
+  // Object Storage upload URL endpoint (Real Object Storage)
   app.post('/api/objects/upload', async (req, res) => {
     try {
-      // Development mode için geçici upload URL
-      const uploadURL = `${req.protocol}://${req.get('host')}/api/upload-temp/${nanoid()}`;
+      const { filename } = req.body;
+      
+      if (!filename) {
+        return res.status(400).json({ error: 'Filename gerekli' });
+      }
+      
+      // Generate presigned URL for Object Storage upload
+      const bucketId = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
+      const privateDir = process.env.PRIVATE_OBJECT_DIR;
+      
+      if (!bucketId || !privateDir) {
+        return res.status(500).json({ error: 'Object Storage yapılandırılmamış' });
+      }
+      
+      // Create object path in private directory
+      const objectPath = `${privateDir}/${filename}`;
+      
+      // Generate presigned URL using Replit's sidecar endpoint
+      const sidecarEndpoint = 'http://127.0.0.1:1106';
+      const signRequest = {
+        bucket_name: bucketId,
+        object_name: filename,
+        method: 'PUT',
+        expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString() // 15 minutes
+      };
+      
+      const response = await fetch(`${sidecarEndpoint}/object-storage/signed-object-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signRequest)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Presigned URL oluşturulamadı: ${response.status}`);
+      }
+      
+      const { signed_url: uploadURL } = await response.json();
+      
       res.json({ uploadURL });
     } catch (error) {
-      console.error('Upload URL error:', error);
-      res.status(500).json({ error: 'Upload URL alınamadı' });
+      console.error('Object Storage upload URL error:', error);
+      res.status(500).json({ error: 'Upload URL alınamadı: ' + (error as Error).message });
     }
   });
 
-  // Geçici upload endpoint (Development)
+  // Object Storage file serving endpoint
+  app.get('/objects/:objectPath(*)', async (req, res) => {
+    try {
+      const objectPath = req.params.objectPath;
+      
+      if (!objectPath) {
+        return res.status(400).json({ error: 'Object path gerekli' });
+      }
+      
+      const bucketId = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
+      const privateDir = process.env.PRIVATE_OBJECT_DIR;
+      
+      if (!bucketId || !privateDir) {
+        return res.status(500).json({ error: 'Object Storage yapılandırılmamış' });
+      }
+      
+      // Generate presigned URL for download
+      const sidecarEndpoint = 'http://127.0.0.1:1106';
+      const signRequest = {
+        bucket_name: bucketId,
+        object_name: objectPath,
+        method: 'GET',
+        expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString() // 1 hour
+      };
+      
+      const response = await fetch(`${sidecarEndpoint}/object-storage/signed-object-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signRequest)
+      });
+      
+      if (!response.ok) {
+        return res.status(404).json({ error: 'Dosya bulunamadı' });
+      }
+      
+      const { signed_url: downloadURL } = await response.json();
+      
+      // Redirect to the actual file for download
+      res.redirect(302, downloadURL);
+      
+    } catch (error) {
+      console.error('Object Storage serve error:', error);
+      res.status(500).json({ error: 'Dosya servis edilemedi: ' + (error as Error).message });
+    }
+  });
+  
+  // Geçici upload endpoint (Development) - Backward compatibility
   app.put('/api/upload-temp/:id', imageUpload.single('file'), async (req, res) => {
     try {
       if (!req.file) {
