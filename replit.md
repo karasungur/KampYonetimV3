@@ -21,6 +21,10 @@ This is a web-based management system for the AK Party Youth Branches Consultati
 - **User Deletion Bug Fix**: Added cascade delete constraints to foreign keys to properly delete users with their associated data
 - **Confirmed**: Moderators can see responses from genelsekreterlik to their feedback
 - **Schema Updates**: Added updatedAt field to tables table and cascade delete constraints to all foreign keys
+- **Critical Bug Fixes**: Fixed infinite redirect loop in questions page for moderators
+- **UI Consistency**: Made moderator login page logo consistent with main login page (removed blue circle background)
+- **Layout Improvements**: Logout button moved to header top-right, proper redirect to homepage after logout
+- **VPS Deployment**: Added comprehensive VPS deployment guide with production configuration
 
 ### January 28, 2025
 - **Role Renaming Completed**: Successfully renamed all user roles throughout the entire codebase:
