@@ -28,9 +28,59 @@ from email import encoders
 import zipfile
 import base64
 from dotenv import load_dotenv
+import logging
+import psutil
+import gc
+import platform
 
 # Load environment variables
 load_dotenv()
+
+# Detaylı hata ayıklama sistemi kurulumu
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - [%(threadName)s] - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('debug.log', encoding='utf-8')
+    ]
+)
+logger = logging.getLogger(__name__)
+
+def log_memory_usage(context=""):
+    """Bellek kullanımını logla"""
+    try:
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        memory_mb = memory_info.rss / 1024 / 1024
+        logger.info(f"🧠 BELLEK [{context}]: {memory_mb:.1f} MB (RSS: {memory_info.rss:,} bytes)")
+        return memory_mb
+    except Exception as e:
+        logger.warning(f"Bellek ölçüm hatası [{context}]: {str(e)}")
+        return 0
+
+def log_system_info():
+    """Sistem bilgilerini logla"""
+    try:
+        logger.info(f"💻 SİSTEM BİLGİSİ:")
+        logger.info(f"   Platform: {platform.platform()}")
+        logger.info(f"   Python: {platform.python_version()}")
+        logger.info(f"   İşlemci: {platform.processor()}")
+        
+        # CPU ve Bellek bilgisi
+        cpu_count = psutil.cpu_count()
+        memory = psutil.virtual_memory()
+        logger.info(f"   CPU Çekirdek: {cpu_count}")
+        logger.info(f"   RAM: {memory.total / 1024**3:.1f} GB (Kullanılabilir: {memory.available / 1024**3:.1f} GB)")
+        
+        # PyTorch ve CUDA bilgisi
+        logger.info(f"   PyTorch: {torch.__version__}")
+        logger.info(f"   CUDA: {'Evet' if torch.cuda.is_available() else 'Hayır'}")
+        if torch.cuda.is_available():
+            logger.info(f"   GPU: {torch.cuda.get_device_name(0)}")
+            
+    except Exception as e:
+        logger.warning(f"Sistem bilgisi alınamadı: {str(e)}")
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, 
@@ -401,7 +451,7 @@ class ModelTrainingWorker(QThread):
             self.error.emit(f"Model eğitimi hatası: {str(e)}\n\nDetaylar konsola yazdırıldı.")
 
 class PhotoMatchingWorker(QThread):
-    """Fotoğraf eşleştirme worker thread'i - Memory-safe implementation"""
+    """Fotoğraf eşleştirme worker thread'i - Memory-safe implementation with debugging"""
     progress = pyqtSignal(str, int, str)  # message, percentage, tc_number
     finished = pyqtSignal(str, list)  # tc_number, matched_photos
     error = pyqtSignal(str, str)  # tc_number, error_message
@@ -413,136 +463,266 @@ class PhotoMatchingWorker(QThread):
         self.email = email
         self.selected_models = selected_models
         self._should_stop = False
+        self.start_time = None
+        self.debug_counter = 0
+        
+        # Başlangıç logları
+        logger.info(f"🚀 EŞLEŞTIRME BAŞLAT - TC: {tc_number}")
+        logger.info(f"   📧 Email: {email}")
+        logger.info(f"   🤖 Seçilen modeller: {selected_models}")
+        logger.info(f"   📊 Referans embedding sayısı: {len(reference_embeddings)}")
+        log_memory_usage("PhotoMatchingWorker __init__")
     
     def run(self):
         # Initialize variables at the start to ensure they exist for cleanup
         matched_photos = []
         all_photos = {}
+        processed = 0
+        total_photos = 0
+        self.start_time = time.time()
         
         try:
+            logger.info(f"🔄 EŞLEŞTIRME RUN BAŞLADI - TC: {self.tc_number}")
+            log_memory_usage("Run başlangıcı")
+            log_system_info()
+            
             self.progress.emit(f"Eşleştirme başlıyor", 0, self.tc_number)
             
             # Seçilen modellerdeki tüm fotoğrafları birleştir
-            for model_id in self.selected_models:
+            logger.info(f"📁 MODEL YÜKLEME BAŞLADI - {len(self.selected_models)} model")
+            
+            for idx, model_id in enumerate(self.selected_models):
                 if self._should_stop:
+                    logger.info(f"⛔ DURDURMA İSTEĞİ - Model yükleme iptal edildi")
                     return
                     
                 model_file = f"./models/{model_id}/face_database.pkl"
+                logger.info(f"📂 Model yükleniyor [{idx+1}/{len(self.selected_models)}]: {model_id}")
+                
                 if os.path.exists(model_file):
                     try:
+                        file_size = os.path.getsize(model_file) / 1024 / 1024  # MB
+                        logger.info(f"   📏 Dosya boyutu: {file_size:.1f} MB")
+                        
                         with open(model_file, 'rb') as f:
                             model_data = pickle.load(f)
                         
+                        model_photo_count = 0
+                        model_face_count = len(model_data)
+                        logger.info(f"   👤 Model'de {model_face_count} yüz verisi var")
+                        
                         # Memory-efficient processing
-                        for key, photo_data in model_data.items():
+                        for key_idx, (key, photo_data) in enumerate(model_data.items()):
                             if self._should_stop:
+                                logger.info(f"⛔ DURDURMA İSTEĞİ - Model işleme iptal edildi")
                                 return
                                 
-                            # Orijinal GUI key formatı: "path||face_N"
-                            if '||face_' in key:
-                                photo_path = photo_data['path']
-                                if photo_path not in all_photos:
-                                    all_photos[photo_path] = []
-                                # Pre-convert embedding to numpy with proper dtype
-                                photo_data_copy = photo_data.copy()
-                                photo_data_copy['embedding'] = np.array(photo_data['embedding'], dtype=np.float32)
-                                all_photos[photo_path].append(photo_data_copy)
-                            else:
-                                # Fallback - eski format
-                                all_photos[key] = [photo_data] if isinstance(photo_data, dict) else photo_data
+                            try:
+                                # Orijinal GUI key formatı: "path||face_N"
+                                if '||face_' in key:
+                                    photo_path = photo_data['path']
+                                    if photo_path not in all_photos:
+                                        all_photos[photo_path] = []
+                                        model_photo_count += 1
+                                    # Pre-convert embedding to numpy with proper dtype
+                                    photo_data_copy = photo_data.copy()
+                                    photo_data_copy['embedding'] = np.array(photo_data['embedding'], dtype=np.float32)
+                                    all_photos[photo_path].append(photo_data_copy)
+                                else:
+                                    # Fallback - eski format
+                                    all_photos[key] = [photo_data] if isinstance(photo_data, dict) else photo_data
+                                    model_photo_count += 1
+                                    
+                                # Her 1000 yüzde bir bellek durumu logla
+                                if key_idx > 0 and key_idx % 1000 == 0:
+                                    log_memory_usage(f"Model işleme - {key_idx}/{model_face_count}")
+                                    
+                            except Exception as e:
+                                logger.error(f"❌ Yüz verisi işleme hatası - Key: {key[:50]}...: {str(e)}")
+                                continue
                         
                         # Clear model_data immediately to free memory
                         del model_data
+                        gc.collect()  # Force garbage collection
+                        
+                        logger.info(f"✅ Model yüklendi: {model_id} - {model_photo_count} fotoğraf")
+                        log_memory_usage(f"Model {model_id} yüklendi")
                         
                         self.progress.emit(f"Model yüklendi: {model_id}", 10, self.tc_number)
                     except Exception as e:
-                        print(f"Model yükleme hatası - {model_id}: {str(e)}")
+                        logger.error(f"❌ Model yükleme hatası - {model_id}: {str(e)}")
+                        logger.error(f"   Stack trace: {traceback.format_exc()}")
+                else:
+                    logger.warning(f"⚠️ Model dosyası bulunamadı: {model_file}")
             
             total_photos = len(all_photos)
+            logger.info(f"📊 TOPLAM FOTOĞRAF: {total_photos}")
+            log_memory_usage("Tüm modeller yüklendi")
+            
             if total_photos == 0:
+                logger.error(f"❌ Hiç fotoğraf bulunamadı - TC: {self.tc_number}")
                 self.error.emit(self.tc_number, "Seçilen modellerde fotoğraf bulunamadı")
                 return
             
             processed = 0
             progress_update_interval = max(1, total_photos // 20)  # Maximum 20 progress updates
+            logger.info(f"🔄 EŞLEŞTIRME BAŞLIYOR - {total_photos} fotoğraf işlenecek")
             
-            for photo_path, face_list in all_photos.items():
+            for photo_idx, (photo_path, face_list) in enumerate(all_photos.items()):
                 if self._should_stop:
+                    logger.info(f"⛔ DURDURMA İSTEĞİ - Eşleştirme iptal edildi [{processed}/{total_photos}]")
                     break
                     
                 try:
                     best_similarity = 0.0
                     best_face_data = None
                     
+                    # Her 100 fotoğrafta bir detaylı log
+                    if photo_idx % 100 == 0:
+                        logger.info(f"🔍 Fotoğraf işleniyor [{photo_idx+1}/{total_photos}]: {os.path.basename(photo_path)}")
+                        log_memory_usage(f"Fotoğraf {photo_idx+1}/{total_photos}")
+                    
                     # Find best matching face in this photo
-                    for face_data in face_list:
-                        photo_embedding = face_data['embedding']  # Already converted to numpy
-                        
-                        # Check against all reference embeddings
-                        for ref_embedding in self.reference_embeddings:
-                            try:
-                                similarity = self.calculate_similarity(ref_embedding, photo_embedding)
-                                
-                                if similarity > best_similarity and similarity > CONFIG['SIMILARITY_THRESHOLD']:
-                                    best_similarity = similarity
-                                    best_face_data = face_data
+                    for face_idx, face_data in enumerate(face_list):
+                        try:
+                            photo_embedding = face_data['embedding']  # Already converted to numpy
+                            
+                            # Check against all reference embeddings
+                            for ref_idx, ref_embedding in enumerate(self.reference_embeddings):
+                                try:
+                                    similarity = self.calculate_similarity(ref_embedding, photo_embedding)
                                     
-                            except Exception as e:
-                                print(f"Similarity calculation error: {str(e)}")
-                                continue
+                                    if similarity > best_similarity and similarity > CONFIG['SIMILARITY_THRESHOLD']:
+                                        best_similarity = similarity
+                                        best_face_data = face_data
+                                        
+                                except Exception as e:
+                                    logger.warning(f"⚠️ Similarity hesaplama hatası [foto:{photo_idx}, yüz:{face_idx}, ref:{ref_idx}]: {str(e)}")
+                                    continue
+                                    
+                        except Exception as e:
+                            logger.warning(f"⚠️ Yüz verisi hatası [foto:{photo_idx}, yüz:{face_idx}]: {str(e)}")
+                            continue
                     
                     # Add best match if found
                     if best_face_data is not None:
-                        matched_photos.append({
-                            'photo_path': photo_path,
-                            'similarity': float(best_similarity),
-                            'bbox': best_face_data['bbox'].tolist() if hasattr(best_face_data['bbox'], 'tolist') else best_face_data['bbox']
-                        })
+                        try:
+                            matched_photos.append({
+                                'photo_path': photo_path,
+                                'similarity': float(best_similarity),
+                                'bbox': best_face_data['bbox'].tolist() if hasattr(best_face_data['bbox'], 'tolist') else best_face_data['bbox']
+                            })
+                            
+                            # İlk 5 eşleşmeyi logla
+                            if len(matched_photos) <= 5:
+                                logger.info(f"✅ Eşleşme bulundu #{len(matched_photos)}: {os.path.basename(photo_path)} (Benzerlik: {best_similarity:.3f})")
+                                
+                        except Exception as e:
+                            logger.error(f"❌ Eşleşme kaydetme hatası - {photo_path}: {str(e)}")
                     
                     processed += 1
                     
                     # Update progress less frequently to avoid signal spam
                     if processed % progress_update_interval == 0 or processed == total_photos:
                         progress = int((processed / total_photos) * 100)
+                        elapsed_time = time.time() - self.start_time
+                        
+                        logger.info(f"📈 İLERLEME: {processed}/{total_photos} ({progress}%) - {elapsed_time:.1f}s - {len(matched_photos)} eşleşme")
+                        
+                        # %95'den sonra her adımı logla (crash risk yüksek)
+                        if progress >= 95:
+                            log_memory_usage(f"Kritik nokta - {processed}/{total_photos}")
+                            logger.info(f"🚨 KRİTİK NOKTA: %{progress} - Kalan: {total_photos - processed} fotoğraf")
+                        
                         self.progress.emit(f"Eşleştirme: {processed}/{total_photos}", 
                                          progress, self.tc_number)
                     
                 except Exception as e:
-                    print(f"Eşleştirme hatası - {photo_path}: {str(e)}")
+                    logger.error(f"❌ Fotoğraf eşleştirme hatası - {photo_path}: {str(e)}")
+                    logger.error(f"   Stack trace: {traceback.format_exc()}")
                     processed += 1
                     continue
             
             # Clear all_photos to free memory before sorting
+            logger.info(f"🧹 Bellek temizleniyor - all_photos siliniyor")
             del all_photos
+            gc.collect()  # Force garbage collection
+            log_memory_usage("all_photos silindi")
             
             if not self._should_stop and matched_photos:
+                logger.info(f"📊 SONUÇ HAZIRLAMA: {len(matched_photos)} eşleşme bulundu")
+                
                 # Memory-efficient sorting
                 try:
+                    logger.info(f"🔀 Sonuçlar sıralanıyor...")
                     matched_photos.sort(key=lambda x: x['similarity'], reverse=True)
+                    
+                    # En iyi 3 sonucu logla
+                    for i, match in enumerate(matched_photos[:3]):
+                        logger.info(f"   #{i+1}: {os.path.basename(match['photo_path'])} (Benzerlik: {match['similarity']:.3f})")
+                    
+                    elapsed_time = time.time() - self.start_time
+                    logger.info(f"🎉 EŞLEŞTIRME TAMAMLANDI - {elapsed_time:.1f}s - TC: {self.tc_number}")
+                    log_memory_usage("Eşleştirme tamamlandı")
+                    
                     self.progress.emit("Eşleştirme tamamlandı", 100, self.tc_number)
                     self.finished.emit(self.tc_number, matched_photos)
+                    
                 except Exception as e:
-                    print(f"Sorting error: {str(e)}")
+                    logger.error(f"❌ Sonuç sıralama hatası: {str(e)}")
+                    logger.error(f"   Stack trace: {traceback.format_exc()}")
                     self.error.emit(self.tc_number, f"Sonuç sıralama hatası: {str(e)}")
             elif not self._should_stop:
+                elapsed_time = time.time() - self.start_time
+                logger.info(f"ℹ️ Eşleşme bulunamadı - {elapsed_time:.1f}s - TC: {self.tc_number}")
                 self.finished.emit(self.tc_number, [])
             
         except Exception as e:
-            print(f"Critical matching error: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            elapsed_time = time.time() - self.start_time if self.start_time else 0
+            logger.error(f"💥 KRİTİK HATA - TC: {self.tc_number} - {elapsed_time:.1f}s")
+            logger.error(f"   Hata mesajı: {str(e)}")
+            logger.error(f"   İşlenen fotoğraf: {processed}/{total_photos if 'total_photos' in locals() else 'bilinmiyor'}")
+            logger.error(f"   Bulunan eşleşme: {len(matched_photos) if 'matched_photos' in locals() else 'bilinmiyor'}")
+            logger.error(f"   Stack trace: {traceback.format_exc()}")
+            log_memory_usage("Kritik hata anında")
+            
+            # Sistem durumu
+            try:
+                process = psutil.Process()
+                logger.error(f"   CPU kullanımı: {process.cpu_percent()}%")
+                logger.error(f"   Bellek kullanımı: {process.memory_percent():.1f}%")
+            except:
+                pass
+            
             self.error.emit(self.tc_number, f"Eşleştirme hatası: {str(e)}")
         finally:
             # Cleanup reference embeddings to free memory
+            logger.info(f"🧹 CLEANUP BAŞLADI - TC: {self.tc_number}")
             try:
                 if hasattr(self, 'reference_embeddings'):
                     del self.reference_embeddings
-            except:
-                pass
+                    logger.info(f"   ✅ reference_embeddings silindi")
+                gc.collect()
+                log_memory_usage("Cleanup sonrası")
+                logger.info(f"🏁 CLEANUP TAMAMLANDI - TC: {self.tc_number}")
+            except Exception as cleanup_error:
+                logger.error(f"❌ Cleanup hatası: {str(cleanup_error)}")
+    
+    def stop(self):
+        """Worker'ı güvenli şekilde durdur"""
+        logger.info(f"🛑 DURDURMA İSTEĞİ - TC: {self.tc_number}")
+        self._should_stop = True
     
     def calculate_similarity(self, embedding1, embedding2):
         """Memory-safe dot product similarity hesapla (normalize edilmiş vektörler için)"""
         try:
+            # Debug counter'ı artır
+            self.debug_counter += 1
+            
+            # Her 10000 hesaplamada bir debug
+            if self.debug_counter % 10000 == 0:
+                logger.debug(f"🔢 Similarity hesaplaması: {self.debug_counter}")
+            
             # Ensure both are float32 numpy arrays for consistency
             if not isinstance(embedding1, np.ndarray):
                 embedding1 = np.array(embedding1, dtype=np.float32)
@@ -555,10 +735,6 @@ class PhotoMatchingWorker(QThread):
         except Exception as e:
             print(f"Similarity calculation error: {str(e)}")
             return 0.0
-    
-    def stop(self):
-        """Güvenli thread durdurma"""
-        self._should_stop = True
 
 class EmailSender(QThread):
     """E-posta gönderme worker thread'i"""
