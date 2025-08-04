@@ -148,11 +148,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Python script ile embedding çıkar
       console.log('🐍 Starting Python process...');
-      const pythonProcess = spawn('python3', ['extract_embedding.py', tempFilePath]);
+      const pythonProcess = spawn('python3', ['extract_embedding.py', tempFilePath], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 30000 // 30 saniye timeout
+      });
       console.log('🐍 Python process started');
       
       let output = '';
       let errorOutput = '';
+      
+      // Process timeout handling
+      const timeout = setTimeout(() => {
+        console.log('⏰ Python process timeout, killing...');
+        pythonProcess.kill('SIGTERM');
+      }, 30000);
       
       pythonProcess.stdout.on('data', (data) => {
         const chunk = data.toString();
@@ -167,8 +176,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       pythonProcess.on('close', (code) => {
+        clearTimeout(timeout); // Timeout'u temizle
         console.log('🏁 Python process closed with code:', code);
-        console.log('📝 Python output:', output);
+        console.log('📝 Python output length:', output.length, 'chars');
         console.log('❗ Python errors:', errorOutput);
         
         // Geçici dosyayı sil

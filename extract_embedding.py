@@ -29,15 +29,15 @@ def extract_face_embedding(image_path):
         face = faces[0]
         embedding = face.embedding
         
-        # Numpy array'i Python list'e çevir
-        embedding_list = embedding.tolist()
+        # Numpy array'i Python list'e çevir ve float precision azalt
+        embedding_list = [round(float(x), 6) for x in embedding.tolist()]
         
         return {
             "success": True,
             "embedding": embedding_list,
             "embedding_size": len(embedding_list),
             "faces_count": len(faces),
-            "confidence": float(face.det_score) if hasattr(face, 'det_score') else 1.0
+            "confidence": round(float(face.det_score) if hasattr(face, 'det_score') else 1.0, 4)
         }
         
     except Exception as e:
