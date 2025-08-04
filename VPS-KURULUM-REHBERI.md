@@ -27,9 +27,22 @@ ssh virtcon-W6tcX6pk@2.59.117.53
 
 **Not**: İlk bağlantıda "authenticity of host" onayı istenirse **yes** yazın.
 
-Sistem güncellemesi:
+Sistem güncellemesi ve gerekli araçları kurun:
 ```bash
 sudo apt update && sudo apt upgrade -y
+
+# Temel araçları kur (git, nano, curl vs.)
+sudo apt install -y git nano curl wget unzip build-essential software-properties-common
+
+# Kurulumları kontrol edin
+echo "Git versiyonu:"
+git --version
+
+echo "Nano versiyonu:"
+nano --version
+
+echo "Curl versiyonu:"
+curl --version
 ```
 
 ---
