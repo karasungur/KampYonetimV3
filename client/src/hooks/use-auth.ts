@@ -100,6 +100,8 @@ export function useAuth() {
         title: "Çıkış Başarılı",
         description: "Güvenle çıkış yaptınız",
       });
+      // Ana sayfaya yönlendir
+      window.location.href = "/";
     },
   });
 

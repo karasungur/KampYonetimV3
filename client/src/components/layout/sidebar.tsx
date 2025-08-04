@@ -115,16 +115,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           </div>
         </nav>
         
-        <div className="absolute bottom-0 w-full p-4 border-t">
-          <Button
-            variant="ghost"
-            onClick={() => logout()}
-            className="w-full justify-start text-red-600 hover:bg-red-50"
-          >
-            <LogOut className="mr-2" size={16} />
-            Güvenli Çıkış
-          </Button>
-        </div>
       </div>
     </>
   );

@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { Menu } from "lucide-react";
+import { Menu, LogOut } from "lucide-react";
 
 interface HeaderProps {
   title: string;
@@ -8,7 +8,7 @@ interface HeaderProps {
 }
 
 export default function Header({ title, onMenuClick }: HeaderProps) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   const getUserInitials = (firstName: string, lastName: string) => {
     return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
@@ -54,6 +54,15 @@ export default function Header({ title, onMenuClick }: HeaderProps) {
                   {getUserInitials(user.firstName, user.lastName)}
                 </span>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => logout()}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 ml-2"
+                title="Güvenli Çıkış"
+              >
+                <LogOut size={16} />
+              </Button>
             </div>
           )}
         </div>
