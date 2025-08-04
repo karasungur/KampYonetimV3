@@ -87,8 +87,8 @@ sudo mkdir -p /var/www/ak-parti-gk-camp
 sudo chown -R $USER:$USER /var/www/ak-parti-gk-camp
 cd /var/www/ak-parti-gk-camp
 
-# Git repository'yi clone et (eğer GitHub'da varsa)
-git clone YOUR_REPO_URL .
+# Git repository'yi clone et
+git clone https://github.com/karasungur/AKGenclikKamp .
 
 # veya dosyaları manuel olarak yükleyin
 ```
