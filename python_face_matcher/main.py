@@ -333,7 +333,7 @@ class ModelTrainingWorker(QThread):
                             try:
                                 face_data = {
                                     'bbox': face.bbox.tolist(),
-                                    'embedding': face.embedding.tolist(),
+                                    'embedding': face.normed_embedding.tolist(),
                                     'landmark_2d_106': face.landmark_2d_106.tolist() if hasattr(face, 'landmark_2d_106') else None,
                                     'confidence': float(getattr(face, 'det_score', 0.0))
                                 }
@@ -484,11 +484,9 @@ class PhotoMatchingWorker(QThread):
             self.error.emit(self.tc_number, f"Eşleştirme hatası: {str(e)}")
     
     def calculate_similarity(self, embedding1, embedding2):
-        """Cosine similarity hesapla"""
-        cos_sim = np.dot(embedding1, embedding2) / (
-            np.linalg.norm(embedding1) * np.linalg.norm(embedding2)
-        )
-        return cos_sim
+        """Dot product similarity hesapla (normalize edilmiş vektörler için)"""
+        # Normalize edilmiş vektörler için dot product = cosine similarity
+        return np.dot(embedding1, embedding2)
 
 class EmailSender(QThread):
     """E-posta gönderme worker thread'i"""
