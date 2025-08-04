@@ -194,7 +194,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         try {
           console.log('🔄 Parsing JSON output...');
-          const result = JSON.parse(output);
+          
+          // Clean up output - trim whitespace and get only the last line (which should be the JSON)
+          const lines = output.trim().split('\n');
+          const jsonLine = lines[lines.length - 1].trim();
+          console.log('📄 JSON line length:', jsonLine.length);
+          console.log('📄 JSON line preview:', jsonLine.substring(0, 100) + '...');
+          
+          const result = JSON.parse(jsonLine);
           console.log('✅ JSON parsed successfully. Keys:', Object.keys(result));
           
           if (result.error) {
@@ -219,8 +226,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } catch (parseError) {
           console.error('❌ JSON parse hatası:', parseError);
-          console.error('Raw output was:', JSON.stringify(output));
-          return res.status(500).json({ error: 'JSON parse hatası' });
+          const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
+          console.error('❌ Parse error message:', errorMessage);
+          console.error('📝 Raw output lines:', output.split('\n').length);
+          console.error('📝 First 200 chars:', output.substring(0, 200));
+          console.error('📝 Last 200 chars:', output.substring(output.length - 200));
+          return res.status(500).json({ error: 'JSON parse hatası: ' + errorMessage });
         }
       });
       
