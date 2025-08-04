@@ -195,15 +195,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           console.log('🔄 Parsing JSON output...');
           const result = JSON.parse(output);
-          console.log('✅ JSON parsed successfully:', result);
+          console.log('✅ JSON parsed successfully. Keys:', Object.keys(result));
           
           if (result.error) {
             console.log('❌ Python script returned error:', result.error);
             return res.status(400).json(result);
           }
           
-          console.log('🎉 Sending successful result');
-          res.json(result);
+          // Convert compact format to readable format
+          if (result.s === 1) {
+            const readableResult = {
+              success: true,
+              embedding: result.e,
+              embedding_size: result.l,
+              faces_count: result.f,
+              confidence: result.c
+            };
+            console.log('🎉 Sending successful result with', result.l, 'dim embedding');
+            res.json(readableResult);
+          } else {
+            console.log('❌ Unexpected result format:', result);
+            return res.status(500).json({ error: 'Unexpected result format' });
+          }
         } catch (parseError) {
           console.error('❌ JSON parse hatası:', parseError);
           console.error('Raw output was:', JSON.stringify(output));

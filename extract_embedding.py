@@ -32,13 +32,16 @@ def extract_face_embedding(image_path):
         # Numpy array'i Python list'e çevir ve float precision azalt
         embedding_list = [round(float(x), 6) for x in embedding.tolist()]
         
-        return {
-            "success": True,
-            "embedding": embedding_list,
-            "embedding_size": len(embedding_list),
-            "faces_count": len(faces),
-            "confidence": round(float(face.det_score) if hasattr(face, 'det_score') else 1.0, 4)
+        # Very compact JSON output
+        result = {
+            "s": 1,  # success
+            "e": embedding_list,  # embedding
+            "l": len(embedding_list),  # length
+            "f": len(faces),  # faces count  
+            "c": round(float(face.det_score) if hasattr(face, 'det_score') else 1.0, 4)  # confidence
         }
+        
+        return result
         
     except Exception as e:
         return {"error": f"Hata: {str(e)}"}

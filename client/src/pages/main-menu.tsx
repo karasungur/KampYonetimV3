@@ -1250,20 +1250,32 @@ export default function MainMenuPage() {
                                   // Seçilen yüzleri server'a gönderip 512 boyutlu embedding al
                                   const faceData = [];
                                   
-                                  for (const face of selectedFaces) {
+                                  console.log('🔄 Seçilen yüzler için embedding çıkarılıyor...', selectedFaces.length, 'yüz');
+                                  
+                                  for (let i = 0; i < selectedFaces.length; i++) {
+                                    const face = selectedFaces[i];
+                                    console.log(`🔍 ${i+1}/${selectedFaces.length} yüz işleniyor...`);
+                                    
                                     try {
                                       // Yüz crop'unu server'a gönder
                                       const blob = await dataURLtoBlob(face.imageData);
+                                      console.log('📦 Blob oluşturuldu:', blob.size, 'bytes');
+                                      
                                       const formData = new FormData();
                                       formData.append('photo', blob, 'face.jpg');
                                       
+                                      console.log('📡 Servera embedding request gönderiliyor...');
                                       const response = await fetch('/api/extract-embedding', {
                                         method: 'POST',
                                         body: formData,
                                       });
                                       
+                                      console.log('📡 Response status:', response.status, response.statusText);
+                                      
                                       if (response.ok) {
                                         const result = await response.json();
+                                        console.log('📨 Response data:', result);
+                                        
                                         if (result.success && result.embedding) {
                                           faceData.push({
                                             id: face.id,
@@ -1272,12 +1284,19 @@ export default function MainMenuPage() {
                                             quality: face.quality
                                           });
                                           console.log('✅ 512 boyutlu embedding alındı:', result.embedding_size);
+                                        } else {
+                                          console.log('❌ Response success false veya embedding yok');
                                         }
+                                      } else {
+                                        const errorText = await response.text();
+                                        console.error('❌ Server error:', response.status, errorText);
                                       }
                                     } catch (error) {
-                                      console.error('Embedding hatası:', error);
+                                      console.error('❌ Embedding hatası:', error);
                                     }
                                   }
+                                  
+                                  console.log('🏁 Embedding extraction tamamlandı. FaceData:', faceData.length, 'adet');
                                   
 
                                   // Debug: Embedding çıkarıldı mı kontrol et
