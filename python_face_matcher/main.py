@@ -129,30 +129,22 @@ def init_face_analysis():
             providers.append('CPUExecutionProvider')
             print("💻 CPU Modunda Başlatılıyor...")
         
-        # FaceAnalysis başlat
-        face_app = FaceAnalysis(providers=providers)
-        
-        # GPU kullanılıyorsa ctx_id=0 (GPU), değilse ctx_id=-1 (CPU)
-        ctx_id = 0 if device_info['cuda_available'] else -1
-        face_app.prepare(ctx_id=ctx_id, det_size=(640, 640))
+        # FaceAnalysis başlat (orijinal GUI ile aynı şekilde)
+        try:
+            face_app = FaceAnalysis(name='buffalo_l', providers=providers)
+            # GPU kullanılıyorsa ctx_id=0 (GPU), değilse ctx_id=-1 (CPU)
+            ctx_id = 0 if device_info['cuda_available'] else -1
+            face_app.prepare(ctx_id=ctx_id, det_size=(640, 640))
+        except Exception:
+            face_app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])
+            face_app.prepare(ctx_id=-1, det_size=(640, 640))
+            device_info['type'] = 'CPU (Fallback)'
         
         print(f"✅ Yüz Analizi Sistemi Hazır - {device_info['type']} ({device_info['name']})")
         return True
         
     except Exception as e:
         print(f"❌ Yüz analizi başlatma hatası: {str(e)}")
-        # GPU başarısız olursa CPU'ya geç
-        if device_info['cuda_available']:
-            print("🔄 GPU başarısız, CPU moduna geçiliyor...")
-            try:
-                face_app = FaceAnalysis(providers=['CPUExecutionProvider'])
-                face_app.prepare(ctx_id=-1, det_size=(640, 640))
-                device_info['type'] = 'CPU (Fallback)'
-                print("✅ CPU Modunda Başlatıldı")
-                return True
-            except Exception as e2:
-                print(f"❌ CPU modu da başarısız: {str(e2)}")
-                return False
         return False
 
 def load_trained_models():
@@ -323,21 +315,20 @@ class ModelTrainingWorker(QThread):
                     
                     if faces and len(faces) > 0:
                         print(f"✅ {filename}: {len(faces)} yüz tespit edildi")
-                        face_database[image_path] = {
-                            'faces': [],
-                            'timestamp': datetime.now().isoformat(),
-                            'image_size': f"{width}x{height}"
-                        }
                         
-                        for face in faces:
+                        # Orijinal GUI formatında kaydet - her yüz için ayrı key
+                        for face_idx, face in enumerate(faces):
                             try:
-                                face_data = {
-                                    'bbox': face.bbox.tolist(),
-                                    'embedding': face.normed_embedding.tolist(),
-                                    'landmark_2d_106': face.landmark_2d_106.tolist() if hasattr(face, 'landmark_2d_106') else None,
-                                    'confidence': float(getattr(face, 'det_score', 0.0))
+                                embedding = face.normed_embedding.astype('float32')
+                                
+                                # Orijinal GUI key formatı
+                                key = f"{image_path}||face_{face_idx}"
+                                face_database[key] = {
+                                    'embedding': embedding,
+                                    'path': image_path,
+                                    'bbox': face.bbox,
+                                    'kps': face.kps
                                 }
-                                face_database[image_path]['faces'].append(face_data)
                                 total_faces += 1
                             except Exception as e:
                                 print(f"⚠️  Yüz verisi işleme hatası - {filename}: {str(e)}")
@@ -439,24 +430,17 @@ class PhotoMatchingWorker(QThread):
                         with open(model_file, 'rb') as f:
                             model_data = pickle.load(f)
                         
-                        # Model formatını kontrol et ve dönüştür
-                        for photo_path, photo_data in model_data.items():
-                            # Orijinal GUI formatı (direkt embedding) kontrolü
-                            if 'embedding' in photo_data and 'faces' not in photo_data:
-                                # Eski format: {'embedding': [...], 'path': ..., 'bbox': [...], 'kps': [...]}
-                                converted_data = {
-                                    'faces': [{
-                                        'embedding': photo_data['embedding'],
-                                        'bbox': photo_data.get('bbox', []),
-                                        'kps': photo_data.get('kps', []),
-                                        'confidence': 0.9  # Default confidence
-                                    }]
-                                }
-                                all_photos[photo_path] = converted_data
-                                print(f"✅ Eski format dönüştürüldü: {os.path.basename(photo_path)}")
+                        # Orijinal GUI formatında model verilerini işle
+                        for key, photo_data in model_data.items():
+                            # Orijinal GUI key formatı: "path||face_N"
+                            if '||face_' in key:
+                                photo_path = photo_data['path']
+                                if photo_path not in all_photos:
+                                    all_photos[photo_path] = []
+                                all_photos[photo_path].append(photo_data)
                             else:
-                                # Yeni format: {'faces': [{'embedding': [...], ...}]}
-                                all_photos[photo_path] = photo_data
+                                # Fallback - eski format
+                                all_photos[key] = [photo_data] if isinstance(photo_data, dict) else photo_data
                         
                         self.progress.emit(f"Model yüklendi: {model_id}", 0, self.tc_number)
                     except Exception as e:
@@ -467,9 +451,9 @@ class PhotoMatchingWorker(QThread):
                 self.error.emit(self.tc_number, "Seçilen modellerde fotoğraf bulunamadı")
                 return
             
-            for photo_path, photo_data in all_photos.items():
+            for photo_path, face_list in all_photos.items():
                 try:
-                    for face_data in photo_data['faces']:
+                    for face_data in face_list:
                         photo_embedding = np.array(face_data['embedding'])
                         
                         # Her referans embedding ile karşılaştır

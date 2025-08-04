@@ -10,9 +10,17 @@ from insightface.app import FaceAnalysis
 def extract_face_embedding(image_path):
     """Fotoğraftan InsightFace ile 512 boyutlu embedding çıkarır"""
     try:
-        # InsightFace model yükle
-        app = FaceAnalysis(providers=['CPUExecutionProvider'])
-        app.prepare(ctx_id=0, det_size=(640, 640))
+        # InsightFace model yükle (orijinal GUI ile aynı şekilde)
+        import torch
+        ctx_id = 0 if torch.cuda.is_available() else -1
+        providers = ['CUDAExecutionProvider', 'CPUExecutionProvider'] if ctx_id >= 0 else ['CPUExecutionProvider']
+        
+        try:
+            app = FaceAnalysis(name='buffalo_l', providers=providers)
+            app.prepare(ctx_id=ctx_id, det_size=(640, 640))
+        except Exception:
+            app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])
+            app.prepare(ctx_id=-1, det_size=(640, 640))
         
         # Fotoğrafı oku
         image = cv2.imread(image_path)

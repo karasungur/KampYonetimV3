@@ -1,0 +1,608 @@
+import sys
+import os
+import time
+import traceback
+import warnings
+import numpy as np
+import cv2
+import torch
+import shutil
+import pickle
+from datetime import datetime
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QFileDialog, QMessageBox,
+    QPushButton, QLabel, QVBoxLayout, QHBoxLayout,
+    QWidget, QListWidget, QListWidgetItem, QAbstractItemView,
+    QSpinBox, QCheckBox, QProgressBar, QGroupBox, QSizePolicy
+)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
+from PyQt5.QtGui import QPixmap, QImage, QIcon, QFont
+from insightface.app import FaceAnalysis
+
+# Uyarıları bastır
+warnings.filterwarnings("ignore", category=FutureWarning, message=".*rcond parameter.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+# FaceAnalysis başlatma
+ctx_id = 0 if torch.cuda.is_available() else -1
+providers = ['CUDAExecutionProvider', 'CPUExecutionProvider'] if ctx_id >= 0 else ['CPUExecutionProvider']
+try:
+    face_app = FaceAnalysis(name='buffalo_l', providers=providers)
+    face_app.prepare(ctx_id=ctx_id, det_size=(640, 640))
+except Exception:
+    face_app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])
+    face_app.prepare(ctx_id=-1, det_size=(640, 640))
+
+
+class PreprocessWorker(QThread):
+    progress = pyqtSignal(str, int)
+    finished = pyqtSignal(dict)
+    error = pyqtSignal(str)
+
+    def __init__(self, folder, recursive):
+        super().__init__()
+        self.folder = folder
+        self.recursive = recursive
+
+    def run(self):
+        try:
+            # Klasördeki tüm resimleri bul
+            files = []
+            if self.recursive:
+                for root, _, fs in os.walk(self.folder):
+                    for f in fs:
+                        if f.lower().endswith(('.jpg', '.png', '.jpeg')):
+                            files.append(os.path.join(root, f))
+            else:
+                for f in os.listdir(self.folder):
+                    if f.lower().endswith(('.jpg', '.png', '.jpeg')):
+                        files.append(os.path.join(self.folder, f))
+
+            face_database = {}
+            total = len(files)
+
+            for idx, path in enumerate(files):
+                self.progress.emit(os.path.basename(path), int((idx + 1) / total * 100))
+
+                try:
+                    with open(path, 'rb') as f:
+                        img_data = np.frombuffer(f.read(), np.uint8)
+                    img = cv2.imdecode(img_data, cv2.IMREAD_COLOR)
+                except Exception as e:
+                    print(f"Resim açılamadı: {path}: {str(e)}")
+                    continue
+
+                if img is None:
+                    continue
+
+                rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+                try:
+                    faces = face_app.get(rgb)
+                except Exception as e:
+                    print(f"Yüz tespiti başarısız: {path}: {str(e)}")
+                    continue
+
+                if not faces:
+                    continue
+
+                # Her yüz için embedding kaydet
+                for face_idx, face in enumerate(faces):
+                    embedding = face.normed_embedding.astype('float32')
+
+                    # Dosya yolu için benzersiz anahtar oluştur
+                    key = f"{path}||face_{face_idx}"
+                    face_database[key] = {
+                        'embedding': embedding,
+                        'path': path,
+                        'bbox': face.bbox,
+                        'kps': face.kps
+                    }
+
+            self.finished.emit(face_database)
+
+        except Exception as e:
+            self.error.emit(f"Ön işleme hatası: {str(e)}\n{traceback.format_exc()}")
+
+
+class QueryWorker(QThread):
+    progress = pyqtSignal(str, int)
+    result = pyqtSignal(dict)
+    finished = pyqtSignal()
+    error = pyqtSignal(str)
+
+    def __init__(self, face_database, ref_emb, sim_thresh):
+        super().__init__()
+        self.face_database = face_database
+        self.ref_emb = ref_emb
+        self.sim_thresh = sim_thresh
+
+    def run(self):
+        try:
+            results = {}
+            total = len(self.face_database)
+
+            for idx, (key, data) in enumerate(self.face_database.items()):
+                embedding = data['embedding']
+                similarity = np.dot(embedding, self.ref_emb)
+                
+                # Path değişkenini tanımla (HATA DÜZELTME)
+                path = data['path']
+
+                if similarity > self.sim_thresh:
+                    # Her resim için sadece en benzer yüzü sakla
+                    if path not in results or similarity > results[path]['similarity']:
+                        results[path] = {
+                            'path': path,
+                            'bbox': data['bbox'],
+                            'kps': data['kps'],
+                            'similarity': similarity
+                        }
+
+                # İlerleme bildirimi
+                self.progress.emit(os.path.basename(path), int((idx + 1) / total * 100))
+
+            self.result.emit(results)
+            self.finished.emit()
+
+        except Exception as e:
+            self.error.emit(f"Sorgulama hatası: {str(e)}\n{traceback.format_exc()}")
+
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle('Hızlı Yüz Tanıma Sistemi')
+        self.resize(1200, 800)
+        self.ref_emb = None
+        self.face_database = {}
+        self.sim_thresh = 0.35
+        self.init_ui()
+
+        # Otomatik yükleme
+        self.load_last_database()
+
+    def init_ui(self):
+        # Ana layout
+        main_layout = QVBoxLayout()
+
+        # Veritabanı bölümü
+        db_group = QGroupBox("Veritabanı İşlemleri")
+        db_layout = QVBoxLayout()
+
+        db_top_layout = QHBoxLayout()
+        self.btn_scan_folder = QPushButton('Klasörü Tara')
+        self.btn_scan_folder.clicked.connect(self.start_preprocessing)
+        self.btn_scan_folder.setStyleSheet("QPushButton { padding: 8px; background-color: #2196F3; color: white; }")
+        db_top_layout.addWidget(self.btn_scan_folder)
+
+        self.lbl_db_info = QLabel("Yüklenen veritabanı: Yok")
+        db_top_layout.addWidget(self.lbl_db_info)
+        db_top_layout.addStretch()
+
+        db_layout.addLayout(db_top_layout)
+
+        # İlerleme çubuğu
+        self.progress_db = QProgressBar()
+        self.progress_db.setRange(0, 100)
+        self.progress_db.setTextVisible(True)
+        db_layout.addWidget(self.progress_db)
+
+        db_group.setLayout(db_layout)
+        main_layout.addWidget(db_group)
+
+        # Referans bölümü
+        ref_group = QGroupBox("Referans Yüz")
+        ref_layout = QVBoxLayout()
+
+        ref_top_layout = QHBoxLayout()
+        self.btn_refs = QPushButton('Referans Resim Ekle')
+        self.btn_refs.clicked.connect(self.load_reference)
+        self.btn_refs.setStyleSheet("QPushButton { padding: 8px; }")
+        ref_top_layout.addWidget(self.btn_refs)
+
+        self.btn_calc_avg = QPushButton('Ortalamayı Hesapla')
+        self.btn_calc_avg.setEnabled(False)
+        self.btn_calc_avg.clicked.connect(self.calculate_average)
+        self.btn_calc_avg.setStyleSheet("QPushButton { padding: 8px; background-color: #4CAF50; color: white; }")
+        ref_top_layout.addWidget(self.btn_calc_avg)
+
+        self.btn_query = QPushButton('Sorgula')
+        self.btn_query.setEnabled(False)
+        self.btn_query.clicked.connect(self.start_query)
+        self.btn_query.setStyleSheet("QPushButton { padding: 8px; background-color: #FF9800; color: white; }")
+        ref_top_layout.addWidget(self.btn_query)
+        
+        # Temizleme butonu eklendi
+        self.btn_clear_refs = QPushButton('Listeyi Temizle')
+        self.btn_clear_refs.clicked.connect(self.clear_references)
+        self.btn_clear_refs.setStyleSheet("QPushButton { padding: 8px; background-color: #F44336; color: white; }")
+        ref_top_layout.addWidget(self.btn_clear_refs)
+
+        ref_top_layout.addStretch()
+
+        ref_layout.addLayout(ref_top_layout)
+
+        # Referans listesi
+        self.list_refs = QListWidget()
+        self.list_refs.setViewMode(QListWidget.IconMode)
+        self.list_refs.setIconSize(QSize(100, 100))
+        self.list_refs.setResizeMode(QListWidget.Adjust)
+        self.list_refs.setSelectionMode(QAbstractItemView.MultiSelection)
+        self.list_refs.setStyleSheet("QListWidget { background-color: #f9f9f9; }")
+        ref_layout.addWidget(self.list_refs)
+
+        ref_group.setLayout(ref_layout)
+        main_layout.addWidget(ref_group)
+
+        # Sonuçlar bölümü
+        res_group = QGroupBox("Sorgu Sonuçları")
+        res_layout = QVBoxLayout()
+
+        # Kontroller
+        ctrl_layout = QHBoxLayout()
+        ctrl_layout.addWidget(QLabel("Benzerlik Eşiği:"))
+
+        self.spin_threshold = QSpinBox()
+        self.spin_threshold.setRange(1, 99)
+        self.spin_threshold.setValue(35)
+        self.spin_threshold.setSuffix("%")
+        self.spin_threshold.valueChanged.connect(self.update_threshold)
+        ctrl_layout.addWidget(self.spin_threshold)
+
+        self.lbl_threshold_value = QLabel(f"({self.sim_thresh:.2f})")
+        ctrl_layout.addWidget(self.lbl_threshold_value)
+
+        self.lbl_avg_quality = QLabel("Ort. Kalite: -")
+        ctrl_layout.addWidget(self.lbl_avg_quality)
+
+        self.btn_copy_matches = QPushButton('Eşleşenleri Kopyala')
+        self.btn_copy_matches.setEnabled(False)
+        self.btn_copy_matches.clicked.connect(self.copy_matches)
+        self.btn_copy_matches.setStyleSheet("QPushButton { padding: 5px; background-color: #9C27B0; color: white; }")
+        ctrl_layout.addWidget(self.btn_copy_matches)
+        ctrl_layout.addStretch()
+
+        res_layout.addLayout(ctrl_layout)
+
+        # Sonuç listesi
+        self.list_results = QListWidget()
+        self.list_results.setViewMode(QListWidget.IconMode)
+        self.list_results.setIconSize(QSize(150, 150))
+        self.list_results.setResizeMode(QListWidget.Adjust)
+        self.list_results.setStyleSheet("QListWidget { background-color: #f0f8ff; }")
+        self.list_results.itemClicked.connect(self.open_fullsize_image)
+        res_layout.addWidget(self.list_results)
+
+        res_group.setLayout(res_layout)
+        main_layout.addWidget(res_group)
+
+        # Durum çubuğu
+        self.status_bar = self.statusBar()
+        self.status_bar.showMessage("Hazır")
+
+        container = QWidget()
+        container.setLayout(main_layout)
+        self.setCentralWidget(container)
+
+        # Alt klasör tarama seçeneği
+        self.recursive = True
+
+    def update_threshold(self, value):
+        self.sim_thresh = value / 100
+        self.lbl_threshold_value.setText(f"({self.sim_thresh:.2f})")
+
+    def start_preprocessing(self):
+        folder = QFileDialog.getExistingDirectory(self, 'Ön İşlem için Klasör Seç')
+        if not folder:
+            return
+
+        self.status_bar.showMessage("Ön işlem başlatılıyor...")
+        QApplication.processEvents()
+
+        # Alt klasör tarama seçeneğini sor
+        reply = QMessageBox.question(self, 'Alt Klasörler',
+                                     'Alt klasörler de taranacak mı?',
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+        self.recursive = reply == QMessageBox.Yes
+
+        self.btn_scan_folder.setEnabled(False)
+        self.progress_db.setValue(0)
+
+        self.preprocess_worker = PreprocessWorker(folder, self.recursive)
+        self.preprocess_worker.progress.connect(self.update_db_progress)
+        self.preprocess_worker.finished.connect(self.preprocess_finished)
+        self.preprocess_worker.error.connect(self.handle_preprocess_error)
+        self.preprocess_worker.start()
+
+    def update_db_progress(self, filename, progress):
+        self.progress_db.setValue(progress)
+        self.status_bar.showMessage(f"İşleniyor: {filename}")
+
+    def preprocess_finished(self, face_database):
+        self.face_database = face_database
+        self.btn_scan_folder.setEnabled(True)
+        self.status_bar.showMessage(f"Ön işlem tamamlandı! {len(self.face_database)} yüz kaydedildi.")
+
+        # Veritabanını kaydet
+        self.save_database()
+
+        # Sorgulama butonunu etkinleştir
+        if self.ref_emb is not None:
+            self.btn_query.setEnabled(True)
+
+    def handle_preprocess_error(self, msg):
+        self.btn_scan_folder.setEnabled(True)
+        QMessageBox.critical(self, "Ön İşlem Hatası", msg)
+        
+    def clear_references(self):
+        """Referans listesini temizle"""
+        self.list_refs.clear()
+        self.ref_emb = None
+        self.btn_calc_avg.setEnabled(False)
+        self.btn_query.setEnabled(False)
+        self.lbl_avg_quality.setText("Ort. Kalite: -")
+        self.status_bar.showMessage("Referans listesi temizlendi")
+
+    def load_reference(self):
+        # Çoklu dosya seçimi
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, 
+            'Referans Resim Seç', 
+            filter='Resimler (*.jpg *.png)'
+        )
+        
+        if not paths:
+            return
+
+        for path in paths:
+            try:
+                with open(path, 'rb') as f:
+                    img_data = np.frombuffer(f.read(), np.uint8)
+                img = cv2.imdecode(img_data, cv2.IMREAD_COLOR)
+            except Exception as e:
+                print(f"Resim açılamadı: {path}: {str(e)}")
+                continue
+
+            if img is None:
+                print(f"Resim yüklenemedi: {path}")
+                continue
+
+            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+            try:
+                faces = face_app.get(rgb)
+            except Exception as e:
+                print(f"Yüz tespiti başarısız: {path}: {str(e)}")
+                continue
+
+            if not faces:
+                print(f"Resimde yüz bulunamadı: {path}")
+                continue
+
+            # Tüm yüzleri listeye ekle
+            for face_idx, face in enumerate(faces):
+                # Yüzü kırp
+                x1, y1, x2, y2 = map(int, face.bbox)
+                face_crop = img[y1:y2, x1:x2]
+
+                if face_crop.size == 0:
+                    continue
+
+                # Thumbnail oluştur
+                thumb = cv2.resize(face_crop, (100, 100))
+                thumb_rgb = cv2.cvtColor(thumb, cv2.COLOR_BGR2RGB)
+
+                qimg = QImage(thumb_rgb.data, thumb_rgb.shape[1], thumb_rgb.shape[0],
+                              thumb_rgb.strides[0], QImage.Format_RGB888)
+                icon = QIcon(QPixmap.fromImage(qimg))
+
+                # Item oluştur
+                item_text = f"{os.path.basename(path)} (Yüz {face_idx + 1})"
+                item = QListWidgetItem(icon, item_text)
+                item.setData(Qt.UserRole, face.normed_embedding.astype('float32'))
+                self.list_refs.addItem(item)
+
+        # Ortalama hesaplama butonunu etkinleştir
+        self.btn_calc_avg.setEnabled(True)
+        self.status_bar.showMessage(f"{len(paths)} resimden yüzler eklendi")
+
+    def calculate_average(self):
+        # Seçili yüzlerin embedding'lerini al
+        selected_embs = []
+        for i in range(self.list_refs.count()):
+            if self.list_refs.item(i).isSelected():
+                emb = self.list_refs.item(i).data(Qt.UserRole)
+                if emb is not None and isinstance(emb, np.ndarray) and emb.size > 0:
+                    selected_embs.append(emb)
+
+        if not selected_embs:
+            QMessageBox.warning(self, 'Uyarı', 'Geçerli embedding seçilmedi. Lütfen en az bir referans yüzü seçin.')
+            return
+
+        try:
+            # Ortalama embedding hesapla
+            avg_emb = np.mean(selected_embs, axis=0)
+            # Normalleştir
+            norm = np.linalg.norm(avg_emb)
+            if norm > 0:
+                avg_emb = avg_emb / norm
+            else:
+                QMessageBox.warning(self, 'Uyarı', 'Geçersiz embedding normu. Lütfen farklı referans yüzleri seçin.')
+                return
+
+            self.ref_emb = avg_emb
+
+            # Embedding kalitesini hesapla (seçili yüzler arası benzerlik)
+            similarities = []
+            for emb in selected_embs:
+                similarity = np.dot(emb, self.ref_emb)
+                similarities.append(similarity)
+
+            avg_similarity = np.mean(similarities) if similarities else 0
+            self.lbl_avg_quality.setText(f"Ort. Kalite: {avg_similarity:.3f}")
+
+            self.status_bar.showMessage(
+                f"{len(selected_embs)} yüzden birleştirilmiş referans oluşturuldu (Ort. benzerlik: {avg_similarity:.3f})")
+
+            # Sorgulama butonunu etkinleştir
+            if self.face_database:
+                self.btn_query.setEnabled(True)
+        except Exception as e:
+            error_msg = f"Ortalama hesaplanırken hata oluştu: {str(e)}"
+            QMessageBox.critical(self, "Hesaplama Hatası", error_msg)
+
+    def start_query(self):
+        if self.ref_emb is None:
+            QMessageBox.warning(self, 'Uyarı', 'Önce referans yüzü hesaplayın.')
+            return
+
+        if not self.face_database:
+            QMessageBox.warning(self, 'Uyarı', 'Önce bir veritabanı tarayın.')
+            return
+
+        self.list_results.clear()
+        self.btn_query.setEnabled(False)
+        self.status_bar.showMessage("Sorgulama başlatılıyor...")
+        QApplication.processEvents()
+
+        self.query_worker = QueryWorker(self.face_database, self.ref_emb, self.sim_thresh)
+        self.query_worker.progress.connect(self.update_query_progress)
+        self.query_worker.result.connect(self.query_results)
+        self.query_worker.finished.connect(self.query_finished)
+        self.query_worker.error.connect(self.handle_query_error)
+        self.query_worker.start()
+
+    def update_query_progress(self, filename, progress):
+        self.status_bar.showMessage(f"Sorgulanıyor: {filename}")
+
+    def query_results(self, results):
+        self.query_results_data = results
+
+        # Sonuçları listeye ekle
+        for path, data in results.items():
+            try:
+                with open(path, 'rb') as f:
+                    img_data = np.frombuffer(f.read(), np.uint8)
+                img = cv2.imdecode(img_data, cv2.IMREAD_COLOR)
+            except:
+                continue
+
+            if img is None:
+                continue
+
+            x1, y1, x2, y2 = map(int, data['bbox'])
+            face = img[y1:y2, x1:x2]
+
+            if face.size == 0:
+                continue
+
+            face = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
+            face = cv2.resize(face, (150, 150))
+            h, w, _ = face.shape
+            qimg = QImage(face.data, w, h, 3 * w, QImage.Format_RGB888)
+            icon = QIcon(QPixmap.fromImage(qimg))
+
+            # Benzerlik yüzdesi
+            similarity_percent = int(data['similarity'] * 100)
+
+            item = QListWidgetItem(icon, f"{os.path.basename(path)} ({similarity_percent}%)")
+            item.setData(Qt.UserRole, path)
+            self.list_results.addItem(item)
+
+        self.btn_copy_matches.setEnabled(len(results) > 0)
+
+    def query_finished(self):
+        self.btn_query.setEnabled(True)
+        self.status_bar.showMessage(f"Sorgulama tamamlandı! {len(self.query_results_data)} eşleşme bulundu.")
+
+    def handle_query_error(self, msg):
+        self.btn_query.setEnabled(True)
+        QMessageBox.critical(self, "Sorgulama Hatası", msg)
+
+    def open_fullsize_image(self, item):
+        path = item.data(Qt.UserRole)
+        if path and os.path.exists(path):
+            # Windows için varsayılan resim görüntüleyici ile aç
+            if sys.platform == 'win32':
+                os.startfile(path)
+            # MacOS için
+            elif sys.platform == 'darwin':
+                os.system(f'open "{path}"')
+            # Linux için
+            else:
+                os.system(f'xdg-open "{path}"')
+        else:
+            QMessageBox.warning(self, "Dosya Bulunamadı", "Seçilen resim dosyası bulunamadı.")
+
+    def copy_matches(self):
+        if not hasattr(self, 'query_results_data') or not self.query_results_data:
+            QMessageBox.warning(self, "Uyarı", "Kopyalanacak eşleşme bulunamadı.")
+            return
+
+        dest_folder = QFileDialog.getExistingDirectory(self, "Hedef Klasör Seç")
+        if not dest_folder:
+            return
+
+        try:
+            copied_count = 0
+            for path in self.query_results_data:
+                if os.path.exists(path):
+                    dest_path = os.path.join(dest_folder, os.path.basename(path))
+
+                    # Dosya adı çakışmasını önle
+                    counter = 1
+                    base, ext = os.path.splitext(dest_path)
+                    while os.path.exists(dest_path):
+                        dest_path = f"{base}_{counter}{ext}"
+                        counter += 1
+
+                    shutil.copy2(path, dest_path)
+                    copied_count += 1
+
+            self.status_bar.showMessage(f"{copied_count} resim kopyalandı")
+            QMessageBox.information(self, "Başarılı", f"{copied_count} resim başarıyla kopyalandı:\n{dest_folder}")
+        except Exception as e:
+            QMessageBox.critical(self, "Kopyalama Hatası", f"Resimler kopyalanırken hata oluştu:\n\n{str(e)}")
+
+    def save_database(self):
+        """Veritabanını diske kaydet"""
+        if not self.face_database:
+            return
+
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"face_database_{timestamp}.pkl"
+            with open(filename, 'wb') as f:
+                pickle.dump(self.face_database, f)
+
+            self.lbl_db_info.setText(f"Veritabanı: {filename}")
+        except Exception as e:
+            print(f"Veritabanı kaydedilemedi: {str(e)}")
+
+    def load_last_database(self):
+        """En son kaydedilmiş veritabanını yükle"""
+        try:
+            files = [f for f in os.listdir() if f.startswith("face_database_") and f.endswith(".pkl")]
+            if not files:
+                return
+
+            # En yeni dosyayı bul
+            files.sort(key=os.path.getmtime, reverse=True)
+            latest_file = files[0]
+
+            with open(latest_file, 'rb') as f:
+                self.face_database = pickle.load(f)
+
+            self.lbl_db_info.setText(f"Yüklenen veritabanı: {latest_file} ({len(self.face_database)} yüz)")
+            self.status_bar.showMessage(f"Veritabanı yüklendi: {len(self.face_database)} yüz")
+
+        except Exception as e:
+            print(f"Veritabanı yüklenemedi: {str(e)}")
+
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    win = MainWindow()
+    win.show()
+    sys.exit(app.exec_())
