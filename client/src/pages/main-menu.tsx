@@ -45,6 +45,19 @@ import akPartiLogo from "@assets/akpartilogo_1753719301210.png";
 import metinResmi from "@assets/metin_1754239817975.png";
 import { Checkbox } from "@/components/ui/checkbox";
 
+// Helper function to convert dataURL to Blob
+const dataURLtoBlob = (dataURL: string) => {
+  const arr = dataURL.split(',');
+  const mime = arr[0].match(/:(.*?);/)![1];
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+};
+
 interface MenuSettings {
   moderatorLoginEnabled: boolean;
   programFlowEnabled: boolean;
@@ -147,11 +160,28 @@ export default function MainMenuPage() {
     isSelected: boolean;
   }
 
-  // Initialize embedding extraction (server-side)
+  // Initialize face-api for detection and UI
   useEffect(() => {
-    // Server-side embedding extraction is always ready
-    setIsFaceDetectionReady(true);
-    console.log('Server-side face embedding extraction ready');
+    const initializeFaceAPI = async () => {
+      try {
+        const modelPath = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js-models@master';
+        
+        console.log('Loading face-api models...');
+        await faceapi.nets.tinyFaceDetector.loadFromUri(`${modelPath}/tiny_face_detector`);
+        console.log('Tiny face detector loaded');
+        
+        await faceapi.nets.faceLandmark68Net.loadFromUri(`${modelPath}/face_landmark_68`);
+        console.log('Face landmarks loaded');
+        
+        setIsFaceDetectionReady(true);
+        console.log('Face-API initialized successfully');
+      } catch (error) {
+        console.error('Face-API initialization error:', error);
+        setIsFaceDetectionReady(false);
+      }
+    };
+    
+    initializeFaceAPI();
   }, []);
   
   // Preload images
@@ -198,52 +228,35 @@ export default function MainMenuPage() {
       try {
         setFaceDetectionProgress(Math.round((fileIndex / files.length) * 100));
         
-        // Server-side face embedding extraction
-        const formData = new FormData();
-        formData.append('photo', file);
-        
-        const response = await fetch('/api/extract-embedding', {
-          method: 'POST',
-          body: formData,
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Server error: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        
-        if (result.error) {
-          console.error(`Face detection error for file ${file.name}:`, result.error);
-          continue;
-        }
-        
-        if (result.success && result.embedding) {
-          // Create a simple face detection result
+        // Use face-api.js for detection and UI
+        const img = await loadImageFromFile(file);
+        const detections = await faceapi
+          .detectAllFaces(img, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks();
+
+        for (let faceIndex = 0; faceIndex < detections.length; faceIndex++) {
+          const detection = detections[faceIndex];
+          const croppedFace = await cropFaceFromImage(img, detection.detection.box);
+          const quality = assessFaceQuality(detection);
+          
           const face: DetectedFace = {
-            id: `${fileIndex}-0-${Date.now()}`,
-            imageData: await fileToBase64(file), // Use original image as face crop
-            confidence: (result.confidence || 1.0) * 100,
-            quality: 'good', // Assume good quality from server
+            id: `${fileIndex}-${faceIndex}-${Date.now()}`,
+            imageData: croppedFace,
+            confidence: detection.detection.score * 100,
+            quality,
             boundingBox: {
-              x: 0,
-              y: 0, 
-              width: 100,
-              height: 100,
+              x: detection.detection.box.x,
+              y: detection.detection.box.y, 
+              width: detection.detection.box.width,
+              height: detection.detection.box.height,
             },
-            landmarks: null,
-            descriptor: result.embedding, // 512-dimensional embedding
+            landmarks: detection.landmarks,
+            descriptor: undefined, // Will be filled server-side during submission
             originalFile: file,
             isSelected: false,
           };
           
           allFaces.push(face);
-          
-          console.log(`✅ Face embedding extracted for ${file.name}:`, {
-            embeddingSize: result.embedding_size,
-            confidence: result.confidence,
-            facesCount: result.faces_count
-          });
         }
         
       } catch (error) {
@@ -254,16 +267,6 @@ export default function MainMenuPage() {
     setFaceDetectionProgress(100);
     setIsDetectingFaces(false);
     return allFaces;
-  };
-  
-  // Helper function to convert file to base64
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
   };
 
   const loadImageFromFile = (file: File): Promise<HTMLImageElement> => {
@@ -1244,12 +1247,38 @@ export default function MainMenuPage() {
                                 try {
                                   // Seçilen yüzlerin embedding verilerini hazırla
                                   const selectedFaces = detectedFaces.filter(face => selectedFaceIds.includes(face.id));
-                                  const faceData = selectedFaces.map(face => ({
-                                    id: face.id,
-                                    embedding: face.descriptor || [], // 512-dimensional embedding
-                                    confidence: face.confidence,
-                                    quality: face.quality
-                                  }));
+                                  // Seçilen yüzleri server'a gönderip 512 boyutlu embedding al
+                                  const faceData = [];
+                                  
+                                  for (const face of selectedFaces) {
+                                    try {
+                                      // Yüz crop'unu server'a gönder
+                                      const blob = await dataURLtoBlob(face.imageData);
+                                      const formData = new FormData();
+                                      formData.append('photo', blob, 'face.jpg');
+                                      
+                                      const response = await fetch('/api/extract-embedding', {
+                                        method: 'POST',
+                                        body: formData,
+                                      });
+                                      
+                                      if (response.ok) {
+                                        const result = await response.json();
+                                        if (result.success && result.embedding) {
+                                          faceData.push({
+                                            id: face.id,
+                                            embedding: result.embedding, // 512 boyutlu
+                                            confidence: face.confidence,
+                                            quality: face.quality
+                                          });
+                                          console.log('✅ 512 boyutlu embedding alındı:', result.embedding_size);
+                                        }
+                                      }
+                                    } catch (error) {
+                                      console.error('Embedding hatası:', error);
+                                    }
+                                  }
+                                  
 
                                   // Debug: Embedding çıkarıldı mı kontrol et
                                   console.log('🔬 Face embedding debug:');
