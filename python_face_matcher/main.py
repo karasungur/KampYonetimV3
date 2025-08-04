@@ -438,8 +438,26 @@ class PhotoMatchingWorker(QThread):
                     try:
                         with open(model_file, 'rb') as f:
                             model_data = pickle.load(f)
+                        
+                        # Model formatını kontrol et ve dönüştür
                         for photo_path, photo_data in model_data.items():
-                            all_photos[photo_path] = photo_data
+                            # Orijinal GUI formatı (direkt embedding) kontrolü
+                            if 'embedding' in photo_data and 'faces' not in photo_data:
+                                # Eski format: {'embedding': [...], 'path': ..., 'bbox': [...], 'kps': [...]}
+                                converted_data = {
+                                    'faces': [{
+                                        'embedding': photo_data['embedding'],
+                                        'bbox': photo_data.get('bbox', []),
+                                        'kps': photo_data.get('kps', []),
+                                        'confidence': 0.9  # Default confidence
+                                    }]
+                                }
+                                all_photos[photo_path] = converted_data
+                                print(f"✅ Eski format dönüştürüldü: {os.path.basename(photo_path)}")
+                            else:
+                                # Yeni format: {'faces': [{'embedding': [...], ...}]}
+                                all_photos[photo_path] = photo_data
+                        
                         self.progress.emit(f"Model yüklendi: {model_id}", 0, self.tc_number)
                     except Exception as e:
                         print(f"Model yükleme hatası - {model_id}: {str(e)}")
