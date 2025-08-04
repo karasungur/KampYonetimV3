@@ -1,0 +1,400 @@
+name: Deploy to VPS
+# AK Parti Gençlik Kolları - CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+        - staging
+
+env:
+  NODE_VERSION: '20.x'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # ==========================================
+  # TEST JOB - Run tests and quality checks
+  # ==========================================
+  test:
+    name: Test and Quality Checks
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: akparti_test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Install Node.js dependencies
+      run: npm ci
+
+    - name: Install Python dependencies
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip
+        pip install -r python-requirements.txt
+
+    - name: Create test environment file
+      run: |
+        cp .env.example .env.test
+        sed -i 's/your-database-url/postgresql:\/\/postgres:postgres@localhost:5432\/akparti_test_db/g' .env.test
+
+    - name: Run database migrations
+      run: |
+        export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/akparti_test_db"
+        npm run db:push
+      env:
+        NODE_ENV: test
+
+    - name: Run TypeScript type check
+      run: npm run check
+
+    - name: Run linting
+      run: npm run lint || true  # Don't fail on lint warnings
+
+    - name: Run tests
+      run: npm test || true  # Add tests when available
+      env:
+        NODE_ENV: test
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/akparti_test_db
+
+    - name: Build application
+      run: npm run build
+
+    - name: Test Python face recognition service
+      run: |
+        source venv/bin/activate
+        python -c "import cv2, numpy as np; print('OpenCV version:', cv2.__version__)"
+        # python -m pytest python_tests/ || true  # Add when tests available
+
+    - name: Run security audit
+      run: npm audit --audit-level moderate || true
+
+    - name: Archive build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: dist-files
+        path: dist/
+        retention-days: 7
+
+  # ==========================================
+  # DEPLOY TO STAGING
+  # ==========================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.8.0
+      with:
+        ssh-private-key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+
+    - name: Add staging server to known hosts
+      run: ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Deploy to staging server
+      run: |
+        ssh ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} << 'EOF'
+          cd /opt/akparti-genclik-staging
+          git fetch origin
+          git reset --hard origin/develop
+          
+          # Install dependencies
+          npm ci --production=false
+          source venv/bin/activate
+          pip install -r python-requirements.txt
+          
+          # Build application
+          npm run build
+          
+          # Run migrations
+          npm run db:push
+          
+          # Restart services
+          sudo systemctl restart akparti-genclik-staging
+          sudo systemctl reload nginx
+          
+          # Health check
+          sleep 10
+          curl -f http://localhost:5001/health || exit 1
+        EOF
+
+    - name: Notify staging deployment
+      run: |
+        echo "🚀 Staging deployment completed successfully!"
+        echo "URL: https://staging.akpartigenclik.yourdomain.com"
+
+  # ==========================================
+  # DEPLOY TO PRODUCTION
+  # ==========================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.8.0
+      with:
+        ssh-private-key: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+
+    - name: Add production server to known hosts
+      run: ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Create deployment backup
+      run: |
+        ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+          cd /opt/akparti-genclik
+          ./backup.sh
+        EOF
+
+    - name: Deploy to production server
+      run: |
+        ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+          cd /opt/akparti-genclik
+          
+          # Backup current version
+          BACKUP_NAME="pre-deploy-$(date +%Y%m%d-%H%M%S)"
+          cp -r /opt/akparti-genclik "/var/backups/akparti-genclik/$BACKUP_NAME"
+          
+          # Update code
+          git fetch origin
+          git reset --hard origin/main
+          
+          # Install dependencies
+          npm ci --production=false
+          source venv/bin/activate
+          pip install -r python-requirements.txt
+          
+          # Build application
+          npm run build
+          
+          # Run migrations (with backup)
+          pg_dump $DATABASE_URL > "/tmp/pre-migration-$(date +%Y%m%d-%H%M%S).sql"
+          npm run db:push
+          
+          # Restart services with zero-downtime
+          sudo systemctl reload akparti-genclik || sudo systemctl restart akparti-genclik
+          sudo systemctl reload nginx
+          
+          # Health check with retry
+          for i in {1..10}; do
+            if curl -f http://localhost:5000/health; then
+              echo "Health check passed on attempt $i"
+              break
+            elif [ $i -eq 10 ]; then
+              echo "Health check failed after 10 attempts"
+              exit 1
+            else
+              echo "Health check failed, retrying in 5 seconds..."
+              sleep 5
+            fi
+          done
+        EOF
+
+    - name: Run post-deployment tests
+      run: |
+        # External health check
+        curl -f https://akpartigenclik.yourdomain.com/health
+        
+        # API endpoint test
+        curl -f https://akpartigenclik.yourdomain.com/api/menu-settings
+
+    - name: Notify deployment success
+      run: |
+        echo "🎉 Production deployment completed successfully!"
+        echo "URL: https://akpartigenclik.yourdomain.com"
+        echo "Deployment time: $(date)"
+        echo "Commit: ${{ github.sha }}"
+
+  # ==========================================
+  # ROLLBACK JOB (Manual trigger only)
+  # ==========================================
+  rollback:
+    name: Rollback Production
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'rollback'
+    environment: production
+    
+    steps:
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.8.0
+      with:
+        ssh-private-key: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+
+    - name: Add production server to known hosts
+      run: ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Rollback to previous version
+      run: |
+        ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+          cd /var/backups/akparti-genclik
+          
+          # Find latest backup
+          LATEST_BACKUP=$(ls -t | grep "pre-deploy-" | head -1)
+          
+          if [ -z "$LATEST_BACKUP" ]; then
+            echo "No backup found for rollback!"
+            exit 1
+          fi
+          
+          echo "Rolling back to: $LATEST_BACKUP"
+          
+          # Stop services
+          sudo systemctl stop akparti-genclik
+          
+          # Restore backup
+          rm -rf /opt/akparti-genclik.old
+          mv /opt/akparti-genclik /opt/akparti-genclik.old
+          cp -r "$LATEST_BACKUP" /opt/akparti-genclik
+          
+          # Restore database
+          LATEST_DB_BACKUP=$(ls -t /tmp/pre-migration-*.sql | head -1)
+          if [ -n "$LATEST_DB_BACKUP" ]; then
+            psql $DATABASE_URL < "$LATEST_DB_BACKUP"
+          fi
+          
+          # Start services
+          sudo systemctl start akparti-genclik
+          sudo systemctl reload nginx
+          
+          # Health check
+          sleep 10
+          curl -f http://localhost:5000/health || exit 1
+        EOF
+
+    - name: Notify rollback
+      run: |
+        echo "⚠️ Production rollback completed"
+        echo "Please investigate the issue and fix before next deployment"
+
+  # ==========================================
+  # SECURITY SCANNING
+  # ==========================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: Run npm audit
+      run: |
+        npm ci
+        npm audit --audit-level high
+      continue-on-error: true
+
+  # ==========================================
+  # PERFORMANCE MONITORING
+  # ==========================================
+  performance:
+    name: Performance Check
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: deploy-production
+    
+    steps:
+    - name: Lighthouse CI
+      uses: treosh/lighthouse-ci-action@v10
+      with:
+        urls: |
+          https://akpartigenclik.yourdomain.com
+        uploadArtifacts: true
+        temporaryPublicStorage: true
+
+    - name: Check response times
+      run: |
+        # API response time check
+        RESPONSE_TIME=$(curl -o /dev/null -s -w '%{time_total}' https://akpartigenclik.yourdomain.com/api/health)
+        echo "API Response time: ${RESPONSE_TIME}s"
+        
+        # Fail if response time > 2 seconds
+        if (( $(echo "$RESPONSE_TIME > 2" | bc -l) )); then
+          echo "Response time too slow: ${RESPONSE_TIME}s"
+          exit 1
+        fi
+
+# ==========================================
+# NOTIFICATION SETUP
+# ==========================================
+  notify:
+    name: Notify Team
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: always()
+    
+    steps:
+    - name: Notify on success
+      if: needs.deploy-production.result == 'success'
+      run: |
+        echo "✅ Deployment successful!"
+        # Add your notification logic here (Slack, Discord, Email, etc.)
+        
+    - name: Notify on failure
+      if: needs.deploy-production.result == 'failure'
+      run: |
+        echo "❌ Deployment failed!"
+        # Add your notification logic here

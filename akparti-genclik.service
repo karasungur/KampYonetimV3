@@ -1,0 +1,49 @@
+[Unit]
+Description=AK Parti Gençlik Kolları Yönetim Sistemi
+Documentation=https://github.com/your-repo
+After=network.target postgresql.service nginx.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=akparti
+Group=akparti
+WorkingDirectory=/opt/akparti-genclik
+Environment=NODE_ENV=production
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/akparti
+
+# Ana uygulama
+ExecStart=/usr/bin/node /opt/akparti-genclik/dist/index.js
+ExecReload=/bin/kill -USR2 $MAINPID
+
+# Restart policy
+Restart=always
+RestartSec=5
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# Security
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/akparti-genclik /var/log/akparti-genclik /tmp
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=1G
+CPUQuota=200%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=akparti-genclik
+
+# Kill settings
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

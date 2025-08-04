@@ -1,0 +1,42 @@
+# Python Yüz Tanıma ve İmaj İşleme Bağımlılıkları
+# AK Parti Gençlik Kolları Yönetim Sistemi
+
+# Core Python paketi
+flask==3.0.0
+gunicorn==21.2.0
+
+# Google Cloud ve Kimlik Doğrulama
+google-api-python-client==2.110.0
+google-auth==2.24.0
+google-auth-httplib2==0.1.1
+google-auth-oauthlib==1.1.0
+
+# Yüz Tanıma ve Bilgisayar Görüşü
+insightface==0.7.3
+numpy==1.24.3
+opencv-python==4.8.1.78
+pillow==10.1.0
+
+# Makine Öğrenmesi
+torch==2.1.1
+torchvision==0.16.1
+onnxruntime==1.16.3
+
+# HTTP İstekleri ve Yardımcı Kütüphaneler
+requests==2.31.0
+python-dotenv==1.0.0
+
+# Sistem Monitörleme
+psutil==5.9.6
+
+# GUI Desteği (İsteğe bağlı - yerel test için)
+# PyQt5==5.15.10
+
+# Veritabanı ve ORM
+psycopg2-binary==2.9.9
+SQLAlchemy==2.0.23
+
+# Diğer yardımcı kütüphaneler
+schedule==1.2.0
+loguru==0.7.2
+pydantic==2.5.0
