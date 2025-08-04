@@ -241,10 +241,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Genel API rate limiting (auth hariç)
+  // Genel API rate limiting (belirli rotalar hariç)
   app.use('/api/', (req, res, next) => {
-    // Auth rotalarına rate limiting uygulanmasın (zaten kendi limitleri var)
-    if (req.path.startsWith('/api/auth/')) {
+    // Bu rotalar rate limiting'den muaf:
+    // - Auth rotaları (zaten kendi limitleri var)
+    // - Python API rotaları (otomatik polling için)
+    // - Fotoğraf işleme rotaları (büyük dosya yüklemeleri için)
+    if (req.path.startsWith('/api/auth/') || 
+        req.path.startsWith('/api/python/') ||
+        req.path.startsWith('/api/photo-requests') ||
+        req.path.startsWith('/api/extract-embedding')) {
       return next();
     }
     apiLimiter(req, res, next);
