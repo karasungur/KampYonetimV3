@@ -25,9 +25,9 @@ def extract_face_embedding(image_path):
         if len(faces) == 0:
             return {"error": "Hiç yüz bulunamadı"}
         
-        # İlk yüzün embedding'ini al
+        # İlk yüzün embedding'ini al (normalize edilmiş)
         face = faces[0]
-        embedding = face.embedding
+        embedding = face.normed_embedding
         
         # Numpy array'i Python list'e çevir ve float precision azalt
         embedding_list = [round(float(x), 6) for x in embedding.tolist()]
