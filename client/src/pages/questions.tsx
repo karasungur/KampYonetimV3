@@ -27,8 +27,15 @@ export default function QuestionsPage() {
 
   // Check if user has permission to access this page
   if (user?.role === 'moderator') {
-    window.location.href = '/questions'; // This will redirect to moderator questions
-    return null;
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Card>
+          <CardContent className="p-6">
+            <p className="ak-text">Moderatörler için ayrı soru sayfasına yönlendiriliyorsunuz...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   const { data: questions = [], isLoading } = useQuery<QuestionWithStats[]>({
