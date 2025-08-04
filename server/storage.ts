@@ -1121,6 +1121,7 @@ export class DatabaseStorage implements IStorage {
         status: photoRequests.status,
         referencePhotoPath: photoRequests.referencePhotoPath,
         selectedFaceId: photoRequests.selectedFaceId,
+        faceData: photoRequests.faceData,
         processedAt: photoRequests.processedAt,
         emailSentAt: photoRequests.emailSentAt,
         matchedPhotosCount: photoRequests.matchedPhotosCount,
