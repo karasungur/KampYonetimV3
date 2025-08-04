@@ -629,6 +629,7 @@ export type PhotoRequestWithDetails = PhotoRequest & {
   matchesCount?: number;
   queuePosition?: number;
   selectedDays?: CampDay[];
+  selectedCampDays?: string[]; // Seçilen kamp günü ID'leri (Python GUI için)
 };
 
 export type CampDayWithStats = CampDay & {

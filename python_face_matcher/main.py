@@ -1268,12 +1268,13 @@ class RequestProcessingSection(QWidget):
                 
             print(f"✅ Toplam {len(reference_embeddings)} yüz embedding'i hazır")
             
-            # Eşleştirme worker'ını başlat
+            # Eşleştirme worker'ını başlat - selectedCampDays kullan
+            selected_models = request_data.get('selectedCampDays', request_data.get('selectedModels', []))
             matching_worker = PhotoMatchingWorker(
                 tc_number, 
                 reference_embeddings, 
                 request_data['email'], 
-                request_data['selectedModels']
+                selected_models
             )
             
             matching_worker.progress.connect(

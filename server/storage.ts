@@ -1137,7 +1137,28 @@ export class DatabaseStorage implements IStorage {
       .groupBy(photoRequests.id, processingQueue.queuePosition)
       .orderBy(desc(photoRequests.createdAt));
     
-    return result;
+    // Her request için seçilen kamp günlerini ayrıca getir ve sonucu PhotoRequestWithDetails formatına çevir
+    const enhancedResult: PhotoRequestWithDetails[] = [];
+    
+    for (const request of result) {
+      const selectedDays = await db
+        .select({
+          campDayId: photoRequestDays.campDayId,
+        })
+        .from(photoRequestDays)
+        .where(eq(photoRequestDays.photoRequestId, request.id));
+      
+      // PhotoRequestWithDetails formatına çevir
+      const enhancedRequest: PhotoRequestWithDetails = {
+        ...request,
+        queuePosition: request.queuePosition ?? undefined,
+        selectedCampDays: selectedDays.map(day => day.campDayId),
+      };
+      
+      enhancedResult.push(enhancedRequest);
+    }
+    
+    return enhancedResult;
   }
 
   // Detected faces operations
