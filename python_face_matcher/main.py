@@ -35,6 +35,13 @@ import psutil
 import gc
 import platform
 
+# Google Drive API imports
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from google.auth.transport.requests import Request
+from google.oauth2.service_account import Credentials
+from google.oauth2 import service_account
+
 # Load environment variables
 load_dotenv()
 
@@ -738,8 +745,8 @@ class PhotoMatchingWorker(QThread):
             print(f"Similarity calculation error: {str(e)}")
             return 0.0
 
-class ObjectStorageSender(QThread):
-    """Bulut depolama ile fotoğraf gönderme worker thread'i"""
+class GoogleDriveSender(QThread):
+    """Google Drive ile fotoğraf gönderme worker thread'i"""
     progress = pyqtSignal(str, str)  # tc_number, message
     finished = pyqtSignal(str, bool)  # tc_number, success
     
@@ -750,69 +757,144 @@ class ObjectStorageSender(QThread):
         self.matched_photos = matched_photos
         self.uploaded_photos = []  # Yüklenen fotoğrafların listesi
     
-    def upload_to_object_storage(self, photo_path, photo_index):
-        """Fotoğrafı Object Storage'a yükle ve public URL döndür"""
+    def get_drive_service(self):
+        """Google Drive API servisini başlat"""
         try:
+            # Service account key dosyası yolu
+            service_account_file = os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE', 'service-account-key.json')
+            
+            if not os.path.exists(service_account_file):
+                raise Exception(f"Google Drive servis hesabı dosyası bulunamadı: {service_account_file}")
+            
+            # Credentials yükle
+            credentials = service_account.Credentials.from_service_account_file(
+                service_account_file,
+                scopes=['https://www.googleapis.com/auth/drive']
+            )
+            
+            # Drive servisi oluştur
+            service = build('drive', 'v3', credentials=credentials)
+            return service
+            
+        except Exception as e:
+            logger.error(f"Google Drive servisi başlatılamadı: {str(e)}")
+            raise e
+    
+    def create_drive_folder(self, service, folder_name, parent_folder_id=None):
+        """Google Drive'da klasör oluştur"""
+        try:
+            folder_metadata = {
+                'name': folder_name,
+                'mimeType': 'application/vnd.google-apps.folder'
+            }
+            
+            if parent_folder_id:
+                folder_metadata['parents'] = [parent_folder_id]
+            
+            folder = service.files().create(body=folder_metadata, fields='id').execute()
+            return folder.get('id')
+            
+        except Exception as e:
+            logger.error(f"Klasör oluşturma hatası: {str(e)}")
+            return None
+    
+    def upload_to_google_drive(self, photo_path, photo_index):
+        """Fotoğrafı Google Drive'a yükle ve paylaşım linki döndür"""
+        try:
+            # Google Drive servisi
+            service = self.get_drive_service()
+            
             # Dosya adı ve yolu hazırla
             original_name = os.path.basename(photo_path)
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            storage_filename = f"photos/{self.tc_number}/{timestamp}_{photo_index:03d}_{original_name}"
+            drive_filename = f"{timestamp}_{photo_index:03d}_{original_name}"
             
-            # Presigned URL al (yükleme için)
-            logger.info(f"📤 Upload URL alınıyor: {storage_filename}")
-            response = requests.post(
-                f"{CONFIG['WEB_API_URL']}/api/objects/upload",
-                json={'filename': storage_filename},
-                timeout=30
-            )
+            logger.info(f"📤 Google Drive'a yükleniyor: {drive_filename}")
             
-            if response.status_code != 200:
-                raise Exception(f"Upload URL alınamadı: {response.status_code}")
+            # Ana klasörü kontrol et/oluştur
+            main_folder_name = f"AKParti_Kamp_Fotograflari"
+            query = f"name='{main_folder_name}' and mimeType='application/vnd.google-apps.folder'"
+            results = service.files().list(q=query, fields='files(id, name)').execute()
+            items = results.get('files', [])
             
-            upload_data = response.json()
-            upload_url = upload_data['uploadURL']
+            if items:
+                main_folder_id = items[0]['id']
+                logger.info(f"📁 Ana klasör bulundu: {main_folder_id}")
+            else:
+                main_folder_id = self.create_drive_folder(service, main_folder_name)
+                logger.info(f"📁 Ana klasör oluşturuldu: {main_folder_id}")
             
-            # Fotoğrafı yükle
-            logger.info(f"📸 Fotoğraf yükleniyor: {original_name}")
-            with open(photo_path, 'rb') as f:
-                upload_response = requests.put(
-                    upload_url,
-                    data=f.read(),
-                    headers={'Content-Type': 'image/jpeg'},
-                    timeout=60
-                )
+            # TC numarası klasörünü kontrol et/oluştur
+            tc_folder_name = f"TC_{self.tc_number}"
+            query = f"name='{tc_folder_name}' and '{main_folder_id}' in parents and mimeType='application/vnd.google-apps.folder'"
+            results = service.files().list(q=query, fields='files(id, name)').execute()
+            items = results.get('files', [])
             
-            if upload_response.status_code not in [200, 201]:
-                raise Exception(f"Fotoğraf yükleme hatası: {upload_response.status_code}")
+            if items:
+                tc_folder_id = items[0]['id']
+                logger.info(f"📁 TC klasörü bulundu: {tc_folder_id}")
+            else:
+                tc_folder_id = self.create_drive_folder(service, tc_folder_name, main_folder_id)
+                logger.info(f"📁 TC klasörü oluşturuldu: {tc_folder_id}")
             
-            # Public download URL oluştur
-            download_url = f"{CONFIG['WEB_API_URL']}/objects/{storage_filename}"
+            # Dosyayı yükle
+            file_metadata = {
+                'name': drive_filename,
+                'parents': [tc_folder_id]
+            }
             
-            logger.info(f"✅ Fotoğraf yüklendi: {original_name}")
+            media = MediaFileUpload(photo_path, mimetype='image/jpeg')
+            file = service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields='id,webViewLink,webContentLink'
+            ).execute()
+            
+            file_id = file.get('id')
+            
+            # Dosyayı herkese açık yap
+            permission = {
+                'type': 'anyone',
+                'role': 'reader'
+            }
+            service.permissions().create(
+                fileId=file_id,
+                body=permission
+            ).execute()
+            
+            # İndirme linki oluştur
+            download_link = f"https://drive.google.com/uc?id={file_id}&export=download"
+            view_link = file.get('webViewLink')
+            
+            logger.info(f"✅ Google Drive'a yüklendi: {original_name}")
             return {
                 'original_name': original_name,
-                'download_url': download_url,
+                'download_url': download_link,
+                'view_url': view_link,
+                'file_id': file_id,
                 'upload_success': True
             }
             
         except Exception as e:
-            logger.error(f"❌ Fotoğraf yükleme hatası [{photo_index}]: {str(e)}")
+            logger.error(f"❌ Google Drive yükleme hatası [{photo_index}]: {str(e)}")
             return {
                 'original_name': os.path.basename(photo_path) if os.path.exists(photo_path) else 'unknown',
                 'download_url': None,
+                'view_url': None,
+                'file_id': None,
                 'upload_success': False,
                 'error': str(e)
             }
     
     def run(self):
         try:
-            logger.info(f"☁️ BULUT DEPOLAMA GÖNDERME BAŞLADI - TC: {self.tc_number}")
+            logger.info(f"☁️ GOOGLE DRIVE GÖNDERİMİ BAŞLADI - TC: {self.tc_number}")
             logger.info(f"   📊 Eşleşen fotoğraf: {len(self.matched_photos)}")
-            log_memory_usage("Bulut depolama başlangıç")
+            log_memory_usage("Google Drive başlangıç")
             
-            self.progress.emit(self.tc_number, "Fotoğraflar bulut depolamaya yükleniyor...")
+            self.progress.emit(self.tc_number, "Fotoğraflar Google Drive'a yükleniyor...")
             
-            # Tüm fotoğrafları bulut depolamaya yükle
+            # Tüm fotoğrafları Google Drive'a yükle
             successful_uploads = []
             failed_uploads = []
             
@@ -833,8 +915,8 @@ class ObjectStorageSender(QThread):
                         })
                         continue
                     
-                    # Fotoğrafı yükle
-                    upload_result = self.upload_to_object_storage(photo_path, idx + 1)
+                    # Fotoğrafı Google Drive'a yükle
+                    upload_result = self.upload_to_google_drive(photo_path, idx + 1)
                     
                     if upload_result['upload_success']:
                         successful_uploads.append(upload_result)
@@ -845,7 +927,7 @@ class ObjectStorageSender(QThread):
                     
                     # Her 5 fotoğrafta bellek durumu
                     if idx % 5 == 0:
-                        log_memory_usage(f"Bulut yükleme - {idx+1}/{len(self.matched_photos)}")
+                        log_memory_usage(f"Google Drive yükleme - {idx+1}/{len(self.matched_photos)}")
                         
                 except Exception as photo_error:
                     logger.error(f"❌ Fotoğraf yükleme hatası [{idx+1}]: {str(photo_error)}")
@@ -860,8 +942,8 @@ class ObjectStorageSender(QThread):
             if not successful_uploads:
                 raise Exception("Hiçbir fotoğraf yüklenemedi")
             
-            # E-posta ile indirme linklerini gönder
-            self.progress.emit(self.tc_number, "İndirme linkleri e-posta ile gönderiliyor...")
+            # E-posta ile Google Drive linklerini gönder
+            self.progress.emit(self.tc_number, "Google Drive linkleri e-posta ile gönderiliyor...")
             logger.info(f"📨 E-posta hazırlanıyor: {self.email}")
             
             try:
@@ -873,7 +955,7 @@ class ObjectStorageSender(QThread):
                 # E-posta içeriği hazırla
                 photo_links = ""
                 for idx, photo in enumerate(successful_uploads):
-                    photo_links += f"{idx+1:2d}. {photo['original_name']}\n    İndirme linki: {photo['download_url']}\n\n"
+                    photo_links += f"{idx+1:2d}. {photo['original_name']}\n    İndirme linki: {photo['download_url']}\n    Görüntüleme linki: {photo['view_url']}\n\n"
                 
                 failed_info = ""
                 if failed_uploads:
@@ -896,15 +978,17 @@ AK Parti Gençlik Kolları İrade, İstikamet ve İstişare Kampı fotoğraflar�
 🔗 FOTOĞRAF İNDİRME LİNKLERİ:
 
 {photo_links}
-💡 İPUCU: Linklere tıklayarak fotoğrafları yüksek kalitede indirebilirsiniz.
-   Her link 7 gün boyunca aktif kalacaktır.{failed_info}
+💡 İPUCU: 
+   • İndirme linkine tıklayarak fotoğrafı doğrudan indirebilirsiniz
+   • Görüntüleme linkine tıklayarak Google Drive'da görebilirsiniz
+   • Linkler kalıcı olarak aktif kalacaktır{failed_info}
 
 Saygılarımızla,
 AK Parti Gençlik Kolları Genel Sekreterliği
                 """
                 
                 msg.attach(MIMEText(body, 'plain', 'utf-8'))
-                logger.info(f"📝 E-posta metni hazırlandı ({len(successful_uploads)} indirme linki)")
+                logger.info(f"📝 E-posta metni hazırlandı ({len(successful_uploads)} Google Drive linki)")
                 
                 # SMTP güvenli gönderim
                 logger.info(f"📤 SMTP bağlantısı kuruluyor: {CONFIG['SMTP_SERVER']}:{CONFIG['SMTP_PORT']}")
@@ -933,25 +1017,25 @@ AK Parti Gençlik Kolları Genel Sekreterliği
                 logger.error(f"❌ E-posta hazırlama hatası: {str(email_error)}")
                 raise email_error
             
-            log_memory_usage("Bulut depolama tamamlandı")
-            logger.info(f"🎉 BULUT DEPOLAMA GÖNDERİMİ TAMAMLANDI - TC: {self.tc_number}")
+            log_memory_usage("Google Drive tamamlandı")
+            logger.info(f"🎉 GOOGLE DRIVE GÖNDERİMİ TAMAMLANDI - TC: {self.tc_number}")
             self.finished.emit(self.tc_number, True)
             
         except Exception as e:
             # Kritik hata durumunda detaylı log
-            logger.error(f"💥 BULUT DEPOLAMA KRİTİK HATA - TC: {self.tc_number}")
+            logger.error(f"💥 GOOGLE DRIVE KRİTİK HATA - TC: {self.tc_number}")
             logger.error(f"   Hata mesajı: {str(e)}")
             logger.error(f"   Stack trace: {traceback.format_exc()}")
-            log_memory_usage("Bulut depolama hata anında")
+            log_memory_usage("Google Drive hata anında")
             
             self.finished.emit(self.tc_number, False)
-            print(f"Bulut depolama gönderme hatası: {str(e)}")
+            print(f"Google Drive gönderme hatası: {str(e)}")
             
         finally:
             # Final cleanup
             try:
                 gc.collect()
-                logger.info(f"🧹 Bulut depolama worker cleanup tamamlandı - TC: {self.tc_number}")
+                logger.info(f"🧹 Google Drive worker cleanup tamamlandı - TC: {self.tc_number}")
             except:
                 pass
 
@@ -1690,7 +1774,7 @@ class RequestProcessingSection(QWidget):
             self.requests_table.setItem(table_row, 2, QTableWidgetItem("❌ E-posta adresi bulunamadı"))
             return
         
-        email_worker = ObjectStorageSender(tc_number, email, matched_photos)
+        email_worker = GoogleDriveSender(tc_number, email, matched_photos)
         email_worker.progress.connect(
             lambda tc, msg: self.update_email_progress(tc, msg, table_row)
         )
