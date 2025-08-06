@@ -130,6 +130,8 @@ export default function FaceModels() {
         return <Badge variant="default" className="bg-green-100 text-green-700"><CheckCircle2 className="w-3 h-3 mr-1" />Hazır</Badge>;
       case 'error':
         return <Badge variant="destructive"><AlertCircle className="w-3 h-3 mr-1" />Hata</Badge>;
+      case 'pending':
+        return <Badge variant="outline" className="bg-gray-100 text-gray-700">Beklemede</Badge>;
       default:
         return <Badge variant="secondary">Bilinmeyen</Badge>;
     }

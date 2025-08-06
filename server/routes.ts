@@ -1912,7 +1912,7 @@ oluşturulan fotoğraflar bu ZIP dosyasında yer alacaktır.
 
   async function extractZipAndMoveData(zipPath: string, modelName: string): Promise<{ faceCount: number; trainingDataPath: string }> {
     const tempDir = path.join('/tmp', modelName);
-    const targetDir = path.join('/opt/face_match/allmodels', modelName);
+    const targetDir = path.join('./models', modelName); // Replit ortamında erişilebilir klasör
     
     // Geçici ve hedef dizinleri oluştur
     if (!fs.existsSync(tempDir)) {
