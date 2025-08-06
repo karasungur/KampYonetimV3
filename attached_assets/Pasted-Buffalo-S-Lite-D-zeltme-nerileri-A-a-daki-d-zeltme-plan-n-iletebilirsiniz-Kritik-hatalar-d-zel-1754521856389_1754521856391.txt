@@ -1,0 +1,79 @@
+Buffalo-S Lite Düzeltme Önerileri
+Aşağıdaki düzeltme planını iletebilirsiniz. Kritik hataları düzeltecek ve sistemin gerçek yüz tanıma kabiliyetini kazanmasını sağlayacak çözümler içeriyor:
+
+markdown
+## 🚨 Buffalo-S Lite Düzeltme Planı
+
+### 1. **Hash-Based Embedding Kaldırılmalı**
+- **Problem**: Hash'ler yüz özelliklerini temsil edemez, sadece dosya parmak izi oluşturur
+- **Çözüm**: 
+  ```javascript
+  // Yerine gerçek Buffalo-S Lite ONNX modelini kullan
+  import { InferenceSession } from 'onnxruntime-web';
+
+  async function getRealEmbedding(imageTensor) {
+    const session = await InferenceSession.create('/models/buffalo_s_lite.onnx');
+    const results = await session.run({ input: imageTensor });
+    return normalizeEmbedding(results.embedding.data);
+  }
+2. Deterministik Çıkarım için Doğru Yaklaşım
+Problem: Platformlar arası tutarlılık hash ile sağlanamaz
+
+Çözüm:
+
+javascript
+// Tüm platformlarda aynı ön işleme
+function preprocess(image) {
+  // 1. Renk normalizasyonu (RGB 0-255 → -1-1)
+  // 2. 112x112 boyutlandırma (bilinear interpolation)
+  // 3. Histogram eşitleme
+  // 4. Aynı kırpma algoritması
+}
+
+// Quantizasyonla deterministik sonuçlar
+function quantizeEmbedding(embedding) {
+  return embedding.map(value => Math.round(value * 127));
+}
+3. Fallback Mekanizmasını Yeniden Tasarla
+Problem: Hash fallback'i işe yaramaz
+
+Çözüm:
+
+Diagram
+Code
+
+
+
+
+
+
+
+
+4. NaN-Safe Calculation Gereksizliği
+Problem: NaN oluşumu model hatasını gösterir
+
+Çözüm:
+
+javascript
+// Model çıktısını doğrulama
+function validateEmbedding(embedding) {
+  if (embedding.some(isNaN)) {
+    throw new Error('Invalid embedding: NaN detected');
+  }
+  return embedding;
+}
+5. Client-Server Unified Algoritma Düzeltmesi
+Problem: Hash tabanlı sistem algoritma birliği sağlamaz
+
+Çözüm:
+
+javascript
+// Client ve Server'da aynı ONNX modelini kullan
+// Client: Buffalo-S Lite (INT8 quantized)
+// Server: Buffalo-L (FP32)
+
+// Benzerlik karşılaştırması için kalibrasyon
+function calibrateEmbedding(sEmbedding, lEmbedding) {
+  // Buffalo-S çıktısını Buffalo-L uzayına dönüştür
+  return transformationModel.predict(sEmbedding);
+}
