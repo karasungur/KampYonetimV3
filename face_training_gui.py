@@ -548,15 +548,50 @@ class FaceTrainingGUI(QMainWindow):
         self.face_database = face_database
         
         try:
-            # Face database'i kaydet
-            database_path = "face_database.pkl"
+            # Önce training package oluştur ve fotoğrafları kopyala
+            package_dir = "training_package"
+            folder_name = os.path.basename(training_folder)
+            
+            # Training package klasörü oluştur
+            if os.path.exists(package_dir):
+                shutil.rmtree(package_dir)
+            os.makedirs(package_dir)
+            self.log_message(f"📦 Training package klasörü oluşturuldu: {package_dir}")
+            
+            # Eğitim klasörünü kopyala
+            dest_folder = os.path.join(package_dir, folder_name)
+            shutil.copytree(training_folder, dest_folder)
+            self.log_message(f"✅ Eğitim klasörü kopyalandı: {folder_name}")
+            
+            # Şimdi face_database'deki path'leri güncelleyelim
+            self.log_message("🔄 Fotoğraf yolları güncelleniyor...")
+            updated_face_database = {}
+            
+            for key, face_data in face_database.items():
+                # Orijinal yol
+                original_path = face_data['path']
+                
+                # Yeni yol: training_package içindeki kopya klasör
+                relative_path = os.path.relpath(original_path, training_folder)
+                new_path = os.path.join(package_dir, folder_name, relative_path)
+                
+                # Face data'yı kopyala ve path'i güncelle
+                updated_face_data = face_data.copy()
+                updated_face_data['path'] = new_path
+                
+                updated_face_database[key] = updated_face_data
+            
+            self.log_message(f"✅ {len(updated_face_database)} kayıt için yol güncellendi")
+            
+            # Güncellenmiş face database'i kaydet
+            database_path = os.path.join(package_dir, "face_database.pkl")
             with open(database_path, 'wb') as f:
-                pickle.dump(face_database, f)
+                pickle.dump(updated_face_database, f)
             
-            self.log_message(f"💾 Veritabanı kaydedildi: {database_path}")
+            self.log_message(f"💾 Güncellenmiş veritabanı kaydedildi: {database_path}")
             
-            # Training package oluştur
-            self.create_training_package(database_path, training_folder)
+            # Bilgi dosyası oluştur
+            self.create_info_file(package_dir, training_folder, folder_name, len(updated_face_database))
             
             # UI'yi resetle
             self.reset_ui()
@@ -566,10 +601,12 @@ class FaceTrainingGUI(QMainWindow):
                 self,
                 "🎉 Eğitim Tamamlandı!",
                 f"✅ Yüz tanıma veritabanı başarıyla oluşturuldu!\n\n"
-                f"📄 Veritabanı: face_database.pkl\n"
+                f"📄 Veritabanı: training_package/face_database.pkl\n"
                 f"📦 Paket: training_package/\n"
-                f"👥 Toplam yüz: {len(face_database)}\n\n"
-                f"Dosyalar çalışma dizininizde hazır!"
+                f"👥 Toplam yüz: {len(updated_face_database)}\n"
+                f"📁 Fotoğraflar: training_package/{folder_name}/\n\n"
+                f"Tüm dosyalar training_package klasöründe hazır!\n"
+                f"Artık PKL dosyası kendi klasöründeki fotoğrafları kullanacak."
             )
             
             status_bar = self.statusBar()
@@ -579,44 +616,28 @@ class FaceTrainingGUI(QMainWindow):
         except Exception as e:
             self.training_error(f"Dosya kaydetme hatası: {str(e)}")
     
-    def create_training_package(self, database_path, training_folder):
-        """Training package klasörü oluştur"""
+    def create_info_file(self, package_dir, training_folder, folder_name, face_count):
+        """Bilgi dosyası oluştur"""
         try:
-            package_dir = "training_package"
-            
-            # Klasör varsa sil
-            if os.path.exists(package_dir):
-                shutil.rmtree(package_dir)
-            
-            # Yeni klasör oluştur
-            os.makedirs(package_dir)
-            self.log_message(f"📦 Training package klasörü oluşturuldu: {package_dir}")
-            
-            # face_database.pkl'yi kopyala
-            shutil.copy2(database_path, os.path.join(package_dir, "face_database.pkl"))
-            self.log_message("✅ face_database.pkl kopyalandı")
-            
-            # Eğitim klasörünü kopyala
-            folder_name = os.path.basename(training_folder)
-            dest_folder = os.path.join(package_dir, folder_name)
-            shutil.copytree(training_folder, dest_folder)
-            self.log_message(f"✅ Eğitim klasörü kopyalandı: {folder_name}")
-            
-            # Bilgi dosyası oluştur
             info_file = os.path.join(package_dir, "training_info.txt")
             with open(info_file, 'w', encoding='utf-8') as f:
                 f.write("AI Yüz Tanıma Eğitim Paketi\n")
                 f.write("=" * 40 + "\n\n")
                 f.write(f"Eğitim Tarihi: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write(f"Kaynak Klasör: {training_folder}\n")
-                f.write(f"Toplam Yüz: {len(self.face_database)}\n")
+                f.write(f"Toplam Yüz: {face_count}\n")
                 f.write(f"Veritabanı Dosyası: face_database.pkl\n")
-                f.write(f"Eğitim Verisi: {folder_name}/\n")
+                f.write(f"Eğitim Verisi: {folder_name}/\n\n")
+                f.write("📝 ÖNEMLI NOTLAR:\n")
+                f.write("- face_database.pkl içindeki fotoğraf yolları artık bu klasördeki kopyaları gösteriyor\n")
+                f.write("- Model sorgu yaparken görüntüleri bu klasörden bulacak\n")
+                f.write("- Orijinal fotoğraflarınız değişmedi, sadece kopyalar kullanılıyor\n")
+                f.write("- Bu paket taşınabilir: tüm dosyalar bir arada\n")
                 
             self.log_message("📄 Bilgi dosyası oluşturuldu: training_info.txt")
             
         except Exception as e:
-            self.log_message(f"❌ Package oluşturma hatası: {str(e)}")
+            self.log_message(f"❌ Bilgi dosyası oluşturma hatası: {str(e)}")
     
     def training_error(self, error_message):
         """Eğitim hatası"""
