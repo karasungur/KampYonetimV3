@@ -306,7 +306,7 @@ export default function FaceModels() {
                     <TableCell>{formatDate(model.createdAt)}</TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
-                        {(model.status === 'pending' || model.status === 'created' || model.status === 'error') && (
+                        {(model.status === 'pending' || model.status === 'error') && (
                           <Button
                             size="sm"
                             variant="outline"

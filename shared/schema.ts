@@ -20,7 +20,7 @@ export const logActionEnum = pgEnum('log_action', ['login', 'logout', 'create_qu
 export const elementTypeEnum = pgEnum('element_type', ['text', 'button', 'logo', 'slogan']);
 export const photoRequestStatusEnum = pgEnum('photo_request_status', ['pending', 'face_detection', 'face_selection', 'queued', 'matching', 'completed', 'failed']);
 export const faceQualityEnum = pgEnum('face_quality', ['good', 'poor', 'blurry', 'profile']);
-export const faceModelStatusEnum = pgEnum('face_model_status', ['downloading', 'extracting', 'ready', 'error']);
+export const faceModelStatusEnum = pgEnum('face_model_status', ['pending', 'downloading', 'extracting', 'ready', 'error']);
 
 // Users table
 export const users = pgTable("users", {
@@ -303,7 +303,7 @@ export const faceModels = pgTable("face_models", {
   name: varchar("name").notNull().unique(), // Model adı (örn: "15 Ağustos Kampı")
   googleDriveLink: text("google_drive_link").notNull(), // Google Drive zip linki
   serverPath: varchar("server_path"), // /opt/face_match/allmodels/<modelAdi>/ dizini
-  status: faceModelStatusEnum("status").notNull().default('downloading'),
+  status: faceModelStatusEnum("status").notNull().default('pending'),
   downloadProgress: integer("download_progress").default(0), // 0-100 arası
   errorMessage: text("error_message"), // Hata durumunda mesaj
   fileSize: integer("file_size"), // ZIP dosyası boyutu (bytes)
