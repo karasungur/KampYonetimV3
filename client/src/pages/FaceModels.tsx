@@ -29,7 +29,6 @@ import type { FaceModel } from "@shared/schema";
 
 export default function FaceModels() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [modelName, setModelName] = useState("");
   const [googleDriveLink, setGoogleDriveLink] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -47,9 +46,9 @@ export default function FaceModels() {
     refetchInterval: 5000, // Refresh every 5 seconds to see status updates
   });
 
-  // Create face model mutation
+  // Create face model mutation - Sadece Google Drive linki gerekli
   const createModelMutation = useMutation({
-    mutationFn: async (data: { name: string; googleDriveLink: string }) => {
+    mutationFn: async (data: { googleDriveLink: string }) => {
       return apiRequest('/api/face-models', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -58,11 +57,10 @@ export default function FaceModels() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/face-models'] });
       setIsDialogOpen(false);
-      setModelName("");
       setGoogleDriveLink("");
       toast({
         title: "Başarılı",
-        description: "Yeni model oluşturuldu",
+        description: "Model oluşturuldu. İNDİR butonuna basarak ZIP'i indirin.",
       });
     },
     onError: (error: any) => {
@@ -143,15 +141,6 @@ export default function FaceModels() {
   };
 
   const handleCreateModel = () => {
-    if (!modelName.trim()) {
-      toast({
-        title: "Hata",
-        description: "Model adı gereklidir",
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (!googleDriveLink.trim()) {
       toast({
         title: "Hata", 
@@ -162,7 +151,6 @@ export default function FaceModels() {
     }
 
     createModelMutation.mutate({
-      name: modelName.trim(),
       googleDriveLink: googleDriveLink.trim(),
     });
   };
@@ -196,7 +184,7 @@ export default function FaceModels() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Yüz Tanıma Modelleri</h1>
           <p className="text-gray-600 mt-2">
-            Buffalo_l modeli ile eğitilmiş yüz tanıma veritabanlarını yönetin
+            InsightFace Buffalo_L modeli ile eğitilmiş yüz tanıma veritabanlarını yönetin. Model bilgileri ZIP'ten otomatik okunur.
           </p>
         </div>
         
@@ -212,15 +200,17 @@ export default function FaceModels() {
               <DialogTitle>Yeni Yüz Tanıma Modeli</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <div>
-                <Label htmlFor="modelName">Model Adı</Label>
-                <Input
-                  id="modelName"
-                  value={modelName}
-                  onChange={(e) => setModelName(e.target.value)}
-                  placeholder="Örn: 15 Ağustos Kampı"
-                />
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center space-x-2 mb-2">
+                  <CheckCircle2 className="w-5 h-5 text-blue-600" />
+                  <h3 className="font-medium text-blue-900">Otomatik Model Yapılandırması</h3>
+                </div>
+                <p className="text-sm text-blue-700">
+                  Model adı ve diğer bilgiler ZIP içindeki <code>model_info.json</code> dosyasından otomatik okunacak. 
+                  Sadece Google Drive linkini girin, gerisini sistem halleder.
+                </p>
               </div>
+              
               <div>
                 <Label htmlFor="googleDriveLink">Google Drive ZIP Linki</Label>
                 <Input
@@ -230,7 +220,7 @@ export default function FaceModels() {
                   placeholder="https://drive.google.com/file/d/..."
                 />
                 <p className="text-sm text-gray-500 mt-1">
-                  ZIP dosyası training_package/ klasörü içermelidir
+                  ZIP dosyası <strong>models/model_adı/</strong> klasör yapısında olmalı (face_training_gui.py ile oluşturulmuş)
                 </p>
               </div>
               <div className="flex justify-end space-x-2">
@@ -247,7 +237,7 @@ export default function FaceModels() {
                   {createModelMutation.isPending && (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   )}
-                  Oluştur
+                  ZIP Linkini Kaydet
                 </Button>
               </div>
             </div>

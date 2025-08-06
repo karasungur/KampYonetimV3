@@ -8,12 +8,14 @@ import cv2
 import torch
 import shutil
 import pickle
+import json
 from datetime import datetime
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QFileDialog, QMessageBox,
     QPushButton, QLabel, QVBoxLayout, QHBoxLayout,
     QWidget, QListWidget, QListWidgetItem, QAbstractItemView,
-    QProgressBar, QGroupBox, QTextEdit, QSizePolicy, QFrame
+    QProgressBar, QGroupBox, QTextEdit, QSizePolicy, QFrame,
+    QLineEdit
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
 from PyQt5.QtGui import QPixmap, QImage, QIcon, QFont
@@ -30,12 +32,13 @@ class TrainingWorker(QThread):
     """Yüz veritabanı eğitimi için worker thread"""
     progress = pyqtSignal(str, int)  # mesaj, yüzde
     log_message = pyqtSignal(str)
-    finished = pyqtSignal(dict, str)  # face_database, folder_path
+    finished = pyqtSignal(dict, str, str)  # face_database, folder_path, model_name
     error = pyqtSignal(str)
 
-    def __init__(self, folder_path, recursive=True):
+    def __init__(self, folder_path, model_name, recursive=True):
         super().__init__()
         self.folder_path = folder_path
+        self.model_name = model_name
         self.recursive = recursive
         self.face_app = None
         
@@ -168,7 +171,7 @@ class TrainingWorker(QThread):
                 return
                 
             self.progress.emit("Eğitim tamamlandı!", 100)
-            self.finished.emit(face_database, self.folder_path)
+            self.finished.emit(face_database, self.folder_path, self.model_name)
             
         except Exception as e:
             self.error.emit(f"Eğitim sırasında kritik hata: {str(e)}\n{traceback.format_exc()}")
@@ -186,6 +189,7 @@ class FaceTrainingGUI(QMainWindow):
         # Değişkenler
         self.face_database = {}
         self.training_folder = None
+        self.model_name = None
         self.training_worker = None
         
         self.init_ui()
@@ -214,6 +218,21 @@ class FaceTrainingGUI(QMainWindow):
         line.setFrameShape(QFrame.HLine)
         line.setFrameShadow(QFrame.Sunken)
         main_layout.addWidget(line)
+        
+        # Model adı girişi
+        model_group = QGroupBox("🏷️ Model Bilgileri")
+        model_layout = QVBoxLayout()
+        
+        model_name_layout = QHBoxLayout()
+        model_name_layout.addWidget(QLabel("Model Adı:"))
+        self.model_name_input = QLineEdit()
+        self.model_name_input.setPlaceholderText("örn: akparti_genclik_2025")
+        self.model_name_input.textChanged.connect(self.validate_inputs)
+        model_name_layout.addWidget(self.model_name_input)
+        model_layout.addLayout(model_name_layout)
+        
+        model_group.setLayout(model_layout)
+        main_layout.addWidget(model_group)
         
         # Eğitim klasörü seçimi
         folder_group = QGroupBox("📁 Eğitim Veri Klasörü")
@@ -427,7 +446,7 @@ class FaceTrainingGUI(QMainWindow):
         if folder:
             self.training_folder = folder
             self.label_folder_path.setText(f"📁 {folder}")
-            self.btn_start_training.setEnabled(True)
+            self.validate_inputs()
             status_bar = self.statusBar()
             if status_bar:
                 status_bar.showMessage(f"Klasör seçildi: {os.path.basename(folder)}")
@@ -435,6 +454,24 @@ class FaceTrainingGUI(QMainWindow):
             
             # Klasördeki dosya sayısını kontrol et
             self.check_folder_contents(folder)
+    
+    def validate_inputs(self):
+        """Girişleri kontrol et ve butonları etkinleştir"""
+        model_name = self.model_name_input.text().strip()
+        has_folder = bool(self.training_folder)
+        
+        # Model adı kontrolleri
+        if model_name and has_folder:
+            # Geçerli karakterler kontrol et
+            if model_name.replace('_', '').replace('-', '').replace('.', '').isalnum():
+                self.btn_start_training.setEnabled(True)
+                self.model_name = model_name
+            else:
+                self.btn_start_training.setEnabled(False)
+                if len(model_name) > 0:
+                    self.log_message("⚠️ Model adı sadece harf, rakam, _, - ve . içerebilir")
+        else:
+            self.btn_start_training.setEnabled(False)
     
     def check_folder_contents(self, folder):
         """Klasör içeriğini kontrol et"""
@@ -470,16 +507,33 @@ class FaceTrainingGUI(QMainWindow):
     
     def start_training(self):
         """Eğitimi başlat"""
-        if not self.training_folder:
-            QMessageBox.warning(self, "Hata", "Önce eğitim klasörü seçmelisiniz!")
+        if not self.training_folder or not self.model_name:
+            QMessageBox.warning(self, "Hata", "Model adı ve eğitim klasörü gerekli!")
             return
+        
+        # Models klasöründe aynı isimde model var mı kontrol et
+        models_dir = "models"
+        model_path = os.path.join(models_dir, self.model_name)
+        if os.path.exists(model_path):
+            reply = QMessageBox.question(
+                self,
+                "Model Mevcut",
+                f"'{self.model_name}' adında bir model zaten mevcut.\n\n"
+                f"Üzerine yazmak istiyor musunuz?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if reply != QMessageBox.Yes:
+                return
         
         # Kullanıcıdan onay al
         reply = QMessageBox.question(
             self,
             "Eğitimi Başlat",
             f"Eğitim başlatılacak:\n\n"
+            f"🏷️ Model Adı: {self.model_name}\n"
             f"📁 Klasör: {self.training_folder}\n"
+            f"📂 Hedef: models/{self.model_name}/\n"
             f"🔄 Alt klasörler dahil edilecek\n"
             f"⚡ GPU/CPU otomatik seçilecek\n\n"
             f"Eğitimi başlatmak istiyor musunuz?",
@@ -498,7 +552,7 @@ class FaceTrainingGUI(QMainWindow):
         self.log_text.clear()
         
         # Worker thread başlat
-        self.training_worker = TrainingWorker(self.training_folder, recursive=True)
+        self.training_worker = TrainingWorker(self.training_folder, self.model_name, recursive=True)
         self.training_worker.progress.connect(self.update_progress)
         self.training_worker.log_message.connect(self.log_message)
         self.training_worker.finished.connect(self.training_finished)
@@ -548,48 +602,61 @@ class FaceTrainingGUI(QMainWindow):
         # Uygulama güncellemesi
         QApplication.processEvents()
     
-    def training_finished(self, face_database, training_folder):
-        """Eğitim tamamlandığında"""
-        self.face_database = face_database
-        
+    def training_finished(self, face_database, training_folder, model_name):
+        """Eğitim tamamlandı - models klasörü yapısında kaydet"""
         try:
-            # Önce training package oluştur ve fotoğrafları kopyala
-            package_dir = "training_package"
-            folder_name = os.path.basename(training_folder)
+            self.face_database = face_database
+            self.log_message("💾 Models klasöründe model oluşturuluyor...")
             
-            # Training package klasörü oluştur
-            if os.path.exists(package_dir):
-                shutil.rmtree(package_dir)
-            os.makedirs(package_dir)
-            self.log_message(f"📦 Training package klasörü oluşturuldu: {package_dir}")
-            
-            # Eğitim klasörünü kopyala
-            dest_folder = os.path.join(package_dir, folder_name)
-            shutil.copytree(training_folder, dest_folder)
-            self.log_message(f"✅ Eğitim klasörü kopyalandı: {folder_name}")
-            
-            # Path'ler zaten relative, sadece folder_name ekle
-            self.log_message("🔄 Models klasörüne uyumlu path'ler hazırlanıyor...")
-            updated_face_database = {}
-            
-            for key, face_data in face_database.items():
-                # face_data['path'] zaten relative (denemelik/foto.jpg gibi)
-                relative_path = face_data['path']
+            # Models klasörünü oluştur
+            models_dir = "models"
+            if not os.path.exists(models_dir):
+                os.makedirs(models_dir)
                 
-                # Key'i de güncelle (relative path zaten var)
-                updated_face_database[key] = face_data
+            model_dir = os.path.join(models_dir, model_name)
             
-            self.log_message(f"✅ {len(updated_face_database)} kayıt models klasörü için hazırlandı")
+            # Model klasörünü temizle/oluştur
+            if os.path.exists(model_dir):
+                shutil.rmtree(model_dir)
+            os.makedirs(model_dir)
+            self.log_message(f"📂 Model klasörü oluşturuldu: models/{model_name}/")
+            
+            # Eğitim verilerini kopyala
+            folder_name = os.path.basename(training_folder.rstrip(os.sep))
+            dest_folder = os.path.join(model_dir, folder_name)
+            shutil.copytree(training_folder, dest_folder)
+            self.log_message(f"✅ Eğitim verileri kopyalandı: {folder_name}")
             
             # Models klasörü uyumlu PKL dosyasını kaydet
-            database_path = os.path.join(package_dir, "face_database.pkl")
+            database_path = os.path.join(model_dir, "face_database.pkl")
             with open(database_path, 'wb') as f:
-                pickle.dump(updated_face_database, f)
+                pickle.dump(face_database, f)
+            self.log_message(f"💾 PKL veritabanı kaydedildi: models/{model_name}/face_database.pkl")
             
-            self.log_message(f"💾 Models klasörü uyumlu veritabanı kaydedildi: {database_path}")
+            # JSON metadata oluştur
+            metadata = {
+                "name": model_name,
+                "created_at": datetime.now().isoformat(),
+                "total_faces": len(face_database),
+                "source_folder": os.path.basename(training_folder),
+                "status": "completed",
+                "description": f"InsightFace Buffalo_L modeli - {len(face_database)} yüz",
+                "type": "face_recognition",
+                "algorithm": "InsightFace Buffalo_L",
+                "threshold": 0.5,
+                "files": {
+                    "database": "face_database.pkl",
+                    "photos": folder_name
+                }
+            }
+            
+            metadata_path = os.path.join(model_dir, "model_info.json")
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2, ensure_ascii=False)
+            self.log_message(f"📄 Model metadata kaydedildi: model_info.json")
             
             # Bilgi dosyası oluştur
-            self.create_info_file(package_dir, training_folder, folder_name, len(updated_face_database))
+            self.create_model_info_file(model_dir, training_folder, model_name, len(face_database))
             
             # UI'yi resetle
             self.reset_ui()
@@ -597,44 +664,49 @@ class FaceTrainingGUI(QMainWindow):
             # Başarı mesajı
             QMessageBox.information(
                 self,
-                "🎉 Eğitim Tamamlandı!",
-                f"✅ Models klasörü uyumlu veritabanı oluşturuldu!\n\n"
-                f"📄 Veritabanı: training_package/face_database.pkl\n"
-                f"📦 Paket: training_package/\n"
-                f"👥 Toplam yüz: {len(updated_face_database)}\n"
-                f"📁 Fotoğraflar: training_package/{folder_name}/\n\n"
-                f"🦬 PKL dosyası artık relative path'ler kullanıyor!\n"
-                f"Models klasörüne yüklemeye hazır - mapper gereksiz!"
+                "🎉 Model Hazır!",
+                f"✅ Model başarıyla oluşturuldu!\n\n"
+                f"🏷️ Model: {model_name}\n"
+                f"📂 Konum: models/{model_name}/\n"
+                f"👥 Toplam yüz: {len(face_database)}\n"
+                f"📄 Veritabanı: face_database.pkl\n"
+                f"📊 Metadata: model_info.json\n\n"
+                f"🌐 Model web arayüzünden kullanıma hazır!\n"
+                f"Genel sekreterlik otomatik algılayacak."
             )
             
             status_bar = self.statusBar()
             if status_bar:
-                status_bar.showMessage("Eğitim başarıyla tamamlandı!")
+                status_bar.showMessage("Model başarıyla oluşturuldu!")
             
         except Exception as e:
-            self.training_error(f"Dosya kaydetme hatası: {str(e)}")
+            self.training_error(f"Model oluşturma hatası: {str(e)}")
     
-    def create_info_file(self, package_dir, training_folder, folder_name, face_count):
-        """Bilgi dosyası oluştur"""
+    def create_model_info_file(self, model_dir, training_folder, model_name, face_count):
+        """Model bilgi dosyası oluştur"""
         try:
-            info_file = os.path.join(package_dir, "training_info.txt")
+            info_file = os.path.join(model_dir, "README.txt")
             with open(info_file, 'w', encoding='utf-8') as f:
-                f.write("AI Yüz Tanıma Eğitim Paketi\n")
-                f.write("=" * 40 + "\n\n")
-                f.write(f"Eğitim Tarihi: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"AI Yüz Tanıma Modeli: {model_name}\n")
+                f.write("=" * 50 + "\n\n")
+                f.write(f"Model Adı: {model_name}\n")
+                f.write(f"Oluşturma Tarihi: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write(f"Kaynak Klasör: {training_folder}\n")
                 f.write(f"Toplam Yüz: {face_count}\n")
-                f.write(f"Veritabanı Dosyası: face_database.pkl\n")
-                f.write(f"Eğitim Verisi: {folder_name}/\n\n")
-                f.write("📝 ÖNEMLI NOTLAR:\n")
-                f.write("- face_database.pkl MODELS KLASÖRÜNE UYUMLU oluşturuldu\n")
-                f.write("- Path'ler relative format: denemelik/foto.jpg||face_0\n")
-                f.write("- Windows absolute path'leri temizlendi\n")
-                f.write("- Google Drive'dan direkt yüklenebilir\n")
-                f.write("- Ayrı path mapper gereksiz - direkt çalışır\n")
-                f.write("- Bu paket Replit models/ klasörüne uyumlu\n")
+                f.write(f"Algoritma: InsightFace Buffalo_L\n")
+                f.write(f"Threshold: 0.5\n\n")
+                f.write("📁 DOSYA YAPISI:\n")
+                f.write(f"- face_database.pkl   (PKL veritabanı)\n")
+                f.write(f"- model_info.json     (JSON metadata)\n")
+                f.write(f"- {os.path.basename(training_folder)}/         (Eğitim fotoğrafları)\n")
+                f.write(f"- README.txt          (Bu dosya)\n\n")
+                f.write("🌐 WEB ARAYÜZÜ KULLANIMI:\n")
+                f.write("- Model otomatik olarak web arayüzünde görünecek\n")
+                f.write("- Genel sekreterlik model_info.json'dan bilgileri okuyacak\n")
+                f.write("- Model adı girme gereksiz - JSON'dan alınacak\n")
+                f.write("- Direkt kullanıma hazır!\n")
                 
-            self.log_message("📄 Bilgi dosyası oluşturuldu: training_info.txt")
+            self.log_message("📄 Model bilgi dosyası oluşturuldu: README.txt")
             
         except Exception as e:
             self.log_message(f"❌ Bilgi dosyası oluşturma hatası: {str(e)}")
@@ -656,11 +728,12 @@ class FaceTrainingGUI(QMainWindow):
     
     def reset_ui(self):
         """UI'yi başlangıç durumuna getir"""
-        self.btn_start_training.setEnabled(bool(self.training_folder))
+        self.validate_inputs()  # Model adı ve klasör kontrolü yap
         self.btn_stop_training.setEnabled(False)
         self.btn_select_folder.setEnabled(True)
+        self.model_name_input.setEnabled(True)
         self.progress_bar.setValue(0)
-        self.status_label.setText("Eğitim için hazır")
+        self.status_label.setText("Model oluşturmaya hazır")
     
     def closeEvent(self, a0):
         """Pencere kapatılırken"""

@@ -638,20 +638,10 @@ export const insertPhotoRequestDaySchema = createInsertSchema(photoRequestDays).
   createdAt: true,
 });
 
-export const insertFaceModelSchema = createInsertSchema(faceModels).omit({
-  id: true,
-  serverPath: true,
-  status: true,
-  downloadProgress: true,
-  errorMessage: true,
-  fileSize: true,
-  extractedSize: true,
-  faceCount: true,
-  trainingDataPath: true,
-  createdBy: true, // Bu alanı auth middleware'den alıyoruz
-  processedAt: true,
-  createdAt: true,
-  updatedAt: true,
+// Basit model oluşturma schema'sı - sadece Google Drive linki gerekli
+// Model adı ve diğer bilgiler ZIP içindeki model_info.json'dan okunacak
+export const insertFaceModelSchema = z.object({
+  googleDriveLink: z.string().url("Geçerli bir Google Drive linki giriniz")
 });
 
 // Extended face model type including createdBy for internal use

@@ -2385,33 +2385,85 @@ Bu dosyalar şu anda yüz eşleştirme sisteminin çalıştığını doğrular.
     }
   }
 
-  async function extractZipAndMoveData(zipPath: string, modelName: string): Promise<{ faceCount: number; trainingDataPath: string }> {
-    const tempDir = path.join('/tmp', modelName);
-    const targetDir = path.join('./models', modelName); // Replit ortamında erişilebilir klasör
+  async function extractZipAndMoveData(zipPath: string, currentModelName: string): Promise<{ 
+    faceCount: number; 
+    trainingDataPath: string;
+    modelInfo?: {
+      name: string;
+      description: string;
+      algorithm: string;
+      threshold: number;
+      created_at: string;
+      source_folder: string;
+    };
+  }> {
+    const tempDir = path.join('/tmp', `extract_${Date.now()}`);
     
-    // Geçici ve hedef dizinleri oluştur
+    // Geçici dizin oluştur
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
     }
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
-    }
+    
+    let modelInfo: any = undefined;
+    let finalModelName = currentModelName; // Fallback olarak mevcut isim
     
     try {
       // ZIP dosyasını aç
       const zip = new AdmZip(zipPath);
       zip.extractAllTo(tempDir, true);
+      console.log(`ZIP extracted to: ${tempDir}`);
       
-      // training_package klasörünü bul
-      const trainingPackageDir = path.join(tempDir, 'training_package');
-      if (!fs.existsSync(trainingPackageDir)) {
-        throw new Error('ZIP dosyasında training_package klasörü bulunamadı');
+      // face_training_gui.py'nin yeni yapısına uygun model klasörünü bul
+      // Artık models/model_adı/ formatında direkt oluşturuyor
+      const modelsDir = path.join(tempDir, 'models');
+      let modelDir = '';
+      
+      if (fs.existsSync(modelsDir)) {
+        // Yeni yapı: models/model_adı/
+        const modelFolders = fs.readdirSync(modelsDir);
+        if (modelFolders.length > 0) {
+          modelDir = path.join(modelsDir, modelFolders[0]);
+          finalModelName = modelFolders[0]; // Gerçek model adını al
+          console.log(`New model structure found: models/${finalModelName}/`);
+        } else {
+          throw new Error('Models klasöründe model bulunamadı');
+        }
+      } else {
+        // Eski yapı için backward compatibility: training_package/
+        const trainingPackageDir = path.join(tempDir, 'training_package');
+        if (fs.existsSync(trainingPackageDir)) {
+          modelDir = trainingPackageDir;
+          console.log('Old training_package structure found (backward compatible)');
+        } else {
+          throw new Error('ZIP dosyasında ne models/ ne de training_package/ klasörü bulunamadı');
+        }
+      }
+      
+      // model_info.json dosyasını oku (varsa)
+      const modelInfoPath = path.join(modelDir, 'model_info.json');
+      if (fs.existsSync(modelInfoPath)) {
+        try {
+          const jsonContent = fs.readFileSync(modelInfoPath, 'utf-8');
+          modelInfo = JSON.parse(jsonContent);
+          finalModelName = modelInfo.name; // JSON'dan gerçek model adını al
+          console.log(`Model JSON metadata found: ${modelInfo.name} - ${modelInfo.description}`);
+        } catch (jsonError) {
+          console.warn('model_info.json okunamadı, devam ediliyor:', jsonError);
+        }
+      } else {
+        console.log('model_info.json bulunamadı, varsayılan bilgiler kullanılacak');
       }
       
       // face_database.pkl dosyasını kontrol et
-      const faceDbPath = path.join(trainingPackageDir, 'face_database.pkl');
+      const faceDbPath = path.join(modelDir, 'face_database.pkl');
       if (!fs.existsSync(faceDbPath)) {
         throw new Error('face_database.pkl dosyası bulunamadı');
+      }
+      
+      // Hedef dizin oluştur (gerçek model adıyla)
+      const targetDir = path.join('./models', finalModelName);
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
       }
       
       // Tüm dosya ve klasörleri hedef dizine kopyala (recursive)
@@ -2438,9 +2490,9 @@ Bu dosyalar şu anda yüz eşleştirme sisteminin çalıştığını doğrular.
         }
       };
       
-      const files = fs.readdirSync(trainingPackageDir);
+      const files = fs.readdirSync(modelDir);
       for (const file of files) {
-        const sourcePath = path.join(trainingPackageDir, file);
+        const sourcePath = path.join(modelDir, file);
         const targetPath = path.join(targetDir, file);
         copyRecursive(sourcePath, targetPath);
       }
@@ -2468,7 +2520,15 @@ Bu dosyalar şu anda yüz eşleştirme sisteminin çalıştığını doğrular.
       
       return {
         faceCount,
-        trainingDataPath: targetDir
+        trainingDataPath: targetDir,
+        modelInfo: modelInfo ? {
+          name: finalModelName,
+          description: modelInfo.description || 'Model açıklaması yok',
+          algorithm: modelInfo.algorithm || 'InsightFace Buffalo_L',
+          threshold: modelInfo.threshold || 0.5,
+          created_at: modelInfo.created_at || new Date().toISOString(),
+          source_folder: modelInfo.source_folder || 'Bilinmiyor'
+        } : undefined
       };
     } catch (error) {
       // Hata durumunda geçici dosyaları temizle
@@ -2599,31 +2659,34 @@ Bu dosyalar şu anda yüz eşleştirme sisteminin çalıştığını doğrular.
         return res.status(400).json({ message: 'Geçersiz Google Drive linki' });
       }
       
+      // Geçici model oluştur - bilgiler ZIP işlenirken güncellenecek
       const model = await storage.createFaceModel({
-        ...validatedData,
+        name: `Model-${Date.now()}`, // Geçici ad, JSON'dan güncellenecek
+        description: 'Model bilgileri yükleniyor...',
+        googleDriveLink: validatedData.googleDriveLink,
         status: 'pending', // Manuel indirme için pending başlat
         downloadProgress: 0,
         createdBy: req.user!.id,
+        algorithm: 'InsightFace Buffalo_L', // Default değer
+        threshold: 0.5 // Default değer
       } as any);
       
       // Log activity
       await storage.logActivity({
         userId: req.user!.id,
         action: 'create_user', // Using existing action type
-        details: `Yeni yüz tanıma modeli oluşturuldu: ${model.name}`,
-        metadata: { modelId: model.id },
+        details: `Yeni yüz tanıma modeli oluşturma başladı (ZIP'ten bilgiler okunacak)`,
+        metadata: { modelId: model.id, googleDriveLink: validatedData.googleDriveLink },
         ipAddress: req.ip,
       });
       
-      console.log(`Model created successfully: ${model.name}, ready for manual download`);
+      console.log(`Model created with temporary name: ${model.name}, ready for manual download and JSON processing`);
       
       res.status(201).json(model);
     } catch (error: any) {
       console.error('Error creating face model:', error);
       if (error.name === 'ZodError') {
-        res.status(400).json({ message: 'Geçersiz veri formatı', errors: error.errors });
-      } else if (error.code === '23505') {
-        res.status(400).json({ message: 'Bu model adı zaten kullanılıyor' });
+        res.status(400).json({ message: 'Geçersiz Google Drive linki giriniz', errors: error.errors });
       } else {
         res.status(500).json({ message: 'Model oluşturulurken hata oluştu' });
       }
@@ -2692,20 +2755,31 @@ Bu dosyalar şu anda yüz eşleştirme sisteminin çalıştığını doğrular.
           });
           console.log(`Model status updated to extracting`);
           
-          // Açma ve taşıma
-          const { faceCount, trainingDataPath } = await extractZipAndMoveData(tempZipPath, model.name);
+          // Açma ve taşıma - JSON metadata ile
+          const { faceCount, trainingDataPath, modelInfo } = await extractZipAndMoveData(tempZipPath, model.name);
           
-          // Tamamlama
-          await storage.updateFaceModel(id, {
+          // Model bilgilerini JSON'dan güncelle
+          const updateData: any = {
             status: 'ready',
             serverPath: trainingDataPath,
             faceCount,
             trainingDataPath,
             processedAt: new Date(),
             errorMessage: null
-          });
+          };
           
-          console.log(`Face model ${model.name} successfully processed`);
+          // JSON'dan okunan bilgiler varsa model'i güncelle
+          if (modelInfo) {
+            updateData.name = modelInfo.name;
+            updateData.description = modelInfo.description;
+            updateData.algorithm = modelInfo.algorithm;
+            updateData.threshold = modelInfo.threshold;
+            console.log(`Model JSON metadata applied: ${modelInfo.name} - ${modelInfo.description}`);
+          }
+          
+          await storage.updateFaceModel(id, updateData);
+          
+          console.log(`Face model processed: ${modelInfo?.name || model.name} (${faceCount} faces)`);
         } catch (error) {
           console.error(`Error processing face model ${model.name}:`, error);
           await storage.updateFaceModel(id, {
