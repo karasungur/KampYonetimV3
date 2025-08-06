@@ -1472,7 +1472,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Embedding çıkarma endpoint'i (InsightFace Buffalo_L için)
+  // Node.js InsightFace Buffalo_L Embedding Endpoint
   app.post('/api/extract-embedding', imageUpload.single('photo'), async (req, res) => {
     try {
       if (!req.file) {
@@ -1482,117 +1482,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      console.log('🦬 Embedding çıkarma isteği:', req.file.filename, req.file.size, 'bytes');
+      console.log('🦬 Node.js InsightFace embedding çıkarma:', req.file.filename, req.file.size, 'bytes');
       
-      // HİBRİT YAKLAŞIM: Python InsightFace Buffalo_L ile gerçek embedding çıkar
-      console.log('🦬 Python InsightFace Buffalo_L ile embedding çıkarılıyor...');
+      // Node.js InsightFace implementasyonu
+      const { nodeInsightFace } = await import('./insightface-onnx.js');
       
-      try {
-        // Python script'i çalıştır (Buffalo_L compatible extractor)
-        
-        // İlk önce gerçek InsightFace'i dene, başarısız olursa çalışan alternatif kullan
-        let pythonProcess = spawn('python3', ['buffalo_compatible_extractor.py', req.file.path]);
-        let usingFallback = false; // Buffalo_L compatible extractor kullanıyoruz
-        
-        let pythonOutput = '';
-        let pythonError = '';
-        
-        pythonProcess.stdout.on('data', (data: Buffer) => {
-          pythonOutput += data.toString();
-        });
-        
-        pythonProcess.stderr.on('data', (data: Buffer) => {
-          pythonError += data.toString();
-          console.log('🐍 Python:', data.toString().trim());
-        });
-        
-        await new Promise((resolve, reject) => {
-          pythonProcess.on('close', (code: number) => {
-            if (code === 0) {
-              resolve(code);
-            } else {
-              reject(new Error(`Python script çıkış kodu: ${code}`));
-            }
-          });
-        });
-        
-        // Python çıktısını parse et
-        const result = JSON.parse(pythonOutput.trim());
-        
-        // Dosyayı temizle
+      const result = await nodeInsightFace.extractEmbedding(req.file.path);
+      
+      // Dosyayı temizle
+      if (fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
-        
-        if (result.success) {
-          console.log(`✅ Buffalo_L embedding başarıyla çıkarıldı: ${result.embedding_size} boyut`);
-          res.json({
-            success: true,
-            embedding: result.embedding,
-            embedding_size: result.embedding_size,
-            model: result.model,
-            message: 'InsightFace Buffalo_L embedding çıkarıldı',
-            confidence: result.confidence,
-            normalized: result.normalized
-          });
-        } else {
-          console.log('⚠️ Python embedding hatası, fallback kullanılıyor');
-          throw new Error(result.error || 'Python embedding çıkarma başarısız');
-        }
-        
-      } catch (pythonError) {
-        console.error('❌ Python InsightFace hatası:', pythonError);
-        console.log('🔄 Fallback: Vladimir Mandic Face-API embedding kullanılıyor');
-        
-        // ONNX.js model dosyası olmadığı için gerçek Python import'u olmadan
-        // 512D deterministic embedding üret (model ile uyumlu boyut)
-        console.log('⚠️ Python InsightFace başarısız, Node.js deterministic embedding üretiliyor...');
-        
-        // Deterministic 512D embedding (model ile uyumlu)
-        const crypto = require('crypto');
-        const fileBuffer = fs.readFileSync(req.file.path);
-        
-        // Multiple hash'ler ile daha iyi dağılım
-        const sha256 = crypto.createHash('sha256').update(fileBuffer).digest('hex');
-        const md5 = crypto.createHash('md5').update(fileBuffer).digest('hex');
-        const sha1 = crypto.createHash('sha1').update(fileBuffer).digest('hex');
-        
-        console.log(`📱 Dosya hash'leri: SHA256:${sha256.substring(0,8)}... MD5:${md5.substring(0,8)}... SHA1:${sha1.substring(0,8)}...`);
-        
-        const normalizedEmbedding = Array.from({length: 512}, (_, i) => {
-          // 3 farklı hash'ten rotating pattern
-          const hashToUse = i % 3 === 0 ? sha256 : i % 3 === 1 ? md5 : sha1;
-          const hashIndex = (i * 2) % hashToUse.length;
-          const hashChunk = hashToUse.substring(hashIndex, hashIndex + 2);
-          const hexValue = parseInt(hashChunk, 16) || 128;
-          
-          // Gaussian distribution için Box-Muller transform
-          const u1 = hexValue / 255.0;
-          const u2 = (parseInt(hashToUse.charAt((i + 1) % hashToUse.length), 16) || 8) / 15.0;
-          const gaussian = Math.sqrt(-2 * Math.log(u1 + 0.001)) * Math.cos(2 * Math.PI * u2);
-          
-          return gaussian * 0.5; // Scale down for better distribution
-        });
-        
-        // L2 normalizasyonu uygula
-        const magnitude = Math.sqrt(normalizedEmbedding.reduce((sum, val) => sum + val * val, 0));
-        const normedEmbedding = normalizedEmbedding.map(val => val / magnitude);
-        
-        // Dosyayı temizle
-        if (fs.existsSync(req.file.path)) {
-          fs.unlinkSync(req.file.path);
-        }
-        
+      }
+      
+      if (result.success) {
+        console.log(`✅ Node.js embedding başarılı: ${result.embedding_size} boyut`);
         res.json({
           success: true,
-          embedding: normedEmbedding,
-          embedding_size: normedEmbedding.length,
-          model: 'InsightFace Compatible Fallback (512D)',
-          message: 'Fallback embedding kullanıldı',
-          warning: (pythonError as Error).message
+          embedding: result.embedding,
+          embedding_size: result.embedding_size,
+          model: result.model,
+          message: 'Node.js InsightFace embedding çıkarıldı',
+          confidence: result.confidence,
+          normalized: result.normalized,
+          method: result.method
+        });
+      } else {
+        console.error('❌ Node.js embedding hatası:', result.error);
+        res.status(500).json({ 
+          success: false, 
+          message: result.error || 'Node.js embedding çıkarımında hata'
         });
       }
       
     } catch (error) {
-      console.error('Embedding extraction error:', error);
+      console.error('❌ Embedding extraction error:', error);
       
       // Dosyayı temizle
       if (req.file && fs.existsSync(req.file.path)) {
@@ -1750,6 +1673,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Database-based yüz eşleştirmesi yap (PKL dependency olmadan)
           try {
+            // Face data kontrolü
+            if (!userFaceData || userFaceData.length === 0 || !userFaceData[0]?.embedding) {
+              console.log(`❌ ${model.name} için kullanıcı embedding'i bulunamadı`);
+              return res.status(400).json({ 
+                message: 'Yüz embedding\'i bulunamadı. Lütfen önce fotoğraf yükleyip yüz tespiti yapın.',
+                model: model.name
+              });
+            }
+            
             const userEmbedding = userFaceData[0].embedding;
             const threshold = 0.3; // Normal threshold (geri yükseltildi)
             
