@@ -7,7 +7,7 @@ import numpy as np
 import cv2
 import torch
 import shutil
-import pickle
+# import pickle  # PKL dependency kaldırıldı - artık JSON kullanıyoruz
 import json
 from datetime import datetime
 from PyQt5.QtWidgets import (
@@ -627,11 +627,28 @@ class FaceTrainingGUI(QMainWindow):
             shutil.copytree(training_folder, dest_folder)
             self.log_message(f"✅ Eğitim verileri kopyalandı: {folder_name}")
             
-            # Models klasörü uyumlu PKL dosyasını kaydet
-            database_path = os.path.join(model_dir, "face_database.pkl")
-            with open(database_path, 'wb') as f:
-                pickle.dump(face_database, f)
-            self.log_message(f"💾 PKL veritabanı kaydedildi: models/{model_name}/face_database.pkl")
+            # JSON veritabanını kaydet (PKL dependency olmadan)
+            database_path = os.path.join(model_dir, "face_database.json")
+            
+            # Face database'i JSON serializable formatına çevir
+            json_database = {}
+            for key, value in face_database.items():
+                # Key'i string'e çevir
+                str_key = key
+                
+                # Value'dan embedding'i çıkar ve listeye çevir
+                json_value = {
+                    "embedding": value["embedding"].tolist() if hasattr(value["embedding"], 'tolist') else list(value["embedding"]),
+                    "normed_embedding": value["normed_embedding"].tolist() if hasattr(value["normed_embedding"], 'tolist') else list(value["normed_embedding"]),
+                    "confidence": float(value.get("confidence", 0.95)),
+                    "quality": value.get("quality", "good")
+                }
+                json_database[str_key] = json_value
+            
+            # JSON dosyasını kaydet
+            with open(database_path, 'w', encoding='utf-8') as f:
+                json.dump(json_database, f, indent=2, ensure_ascii=False)
+            self.log_message(f"💾 JSON veritabanı kaydedildi: models/{model_name}/face_database.json")
             
             # JSON metadata oluştur
             metadata = {
@@ -645,7 +662,7 @@ class FaceTrainingGUI(QMainWindow):
                 "algorithm": "InsightFace Buffalo_L",
                 "threshold": 0.5,
                 "files": {
-                    "database": "face_database.pkl",
+                    "database": "face_database.json",
                     "photos": folder_name
                 }
             }
@@ -669,7 +686,7 @@ class FaceTrainingGUI(QMainWindow):
                 f"🏷️ Model: {model_name}\n"
                 f"📂 Konum: models/{model_name}/\n"
                 f"👥 Toplam yüz: {len(face_database)}\n"
-                f"📄 Veritabanı: face_database.pkl\n"
+                f"📄 Veritabanı: face_database.json\n"
                 f"📊 Metadata: model_info.json\n\n"
                 f"🌐 Model web arayüzünden kullanıma hazır!\n"
                 f"Genel sekreterlik otomatik algılayacak."
@@ -696,7 +713,7 @@ class FaceTrainingGUI(QMainWindow):
                 f.write(f"Algoritma: InsightFace Buffalo_L\n")
                 f.write(f"Threshold: 0.5\n\n")
                 f.write("📁 DOSYA YAPISI:\n")
-                f.write(f"- face_database.pkl   (PKL veritabanı)\n")
+                f.write(f"- face_database.json  (JSON veritabanı)\n")
                 f.write(f"- model_info.json     (JSON metadata)\n")
                 f.write(f"- {os.path.basename(training_folder)}/         (Eğitim fotoğrafları)\n")
                 f.write(f"- README.txt          (Bu dosya)\n\n")

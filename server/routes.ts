@@ -2318,55 +2318,14 @@ Bu dosyalar şu anda yüz eşleştirme sisteminin çalıştığını doğrular.
         console.log('model_info.json bulunamadı, varsayılan bilgiler kullanılacak');
       }
       
-      // face_database.pkl dosyasını kontrol et ve JSON'a çevir
-      const faceDbPath = path.join(modelDir, 'face_database.pkl');
+      // face_database.json dosyasını kontrol et (artık direkt JSON oluşuyor)
       const jsonDbPath = path.join(modelDir, 'face_database.json');
       
-      if (!fs.existsSync(faceDbPath)) {
-        throw new Error('face_database.pkl dosyası bulunamadı');
+      if (!fs.existsSync(jsonDbPath)) {
+        throw new Error('face_database.json dosyası bulunamadı - Güncel face training GUI kullanın');
       }
       
-      // PKL'den JSON'a çevirme işlemi (model indirme sırasında bir kez)
-      console.log('🔄 PKL dosyası JSON formatına çevriliyor...');
-      
-      try {
-        // Python script ile PKL'yi JSON'a çevir
-        const pythonProcess = spawn('python3', ['pkl_to_json_batch_converter.py', modelDir]);
-        
-        let pythonOutput = '';
-        let pythonError = '';
-        
-        pythonProcess.stdout.on('data', (data: Buffer) => {
-          pythonOutput += data.toString();
-          console.log('🐍 PKL to JSON:', data.toString().trim());
-        });
-        
-        pythonProcess.stderr.on('data', (data: Buffer) => {
-          pythonError += data.toString();
-          console.log('🐍 PKL to JSON Error:', data.toString().trim());
-        });
-        
-        await new Promise((resolve, reject) => {
-          pythonProcess.on('close', (code: number) => {
-            if (code === 0) {
-              resolve(code);
-            } else {
-              reject(new Error(`PKL to JSON conversion failed with code: ${code}`));
-            }
-          });
-        });
-        
-        // JSON dosyasının oluştuğunu kontrol et
-        if (fs.existsSync(jsonDbPath)) {
-          console.log('✅ PKL başarıyla JSON formatına çevrildi');
-        } else {
-          console.warn('⚠️ JSON dosyası oluşturulamadı, PKL dosyası korunacak');
-        }
-        
-      } catch (conversionError) {
-        console.warn('❌ PKL to JSON çevirme hatası:', conversionError);
-        console.log('📦 PKL dosyası korunacak, sistem JSON tercih edecek');
-      }
+      console.log('✅ JSON veritabanı dosyası bulundu (PKL dependency gerekmez)');
       
       // Hedef dizin oluştur (gerçek model adıyla)
       const targetDir = path.join('./models', finalModelName);
