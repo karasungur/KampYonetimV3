@@ -135,8 +135,9 @@ export default function FaceModels() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString('tr-TR');
+  const formatDate = (dateString: string | Date) => {
+    const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
+    return date.toLocaleString('tr-TR');
   };
 
   const handleCreateModel = () => {
