@@ -227,10 +227,10 @@ def extract_basic_fallback(image_path):
         
         print_debug(f"Dosya hash'leri: SHA256:{sha256_hash[:8]}... MD5:{md5_hash[:8]}... SHA1:{sha1_hash[:8]}...")
         
-        # Buffalo-S Lite compatible algorithm (unified with web/server)
+        # Web ile aynı algoritma
         features = []
         for i in range(512):
-            # 3 farklı hash'ten rotating pattern (Buffalo-S Lite unified)
+            # 3 farklı hash'ten rotating pattern (web ile aynı)
             if i % 3 == 0:
                 hash_to_use = sha256_hash
             elif i % 3 == 1:
@@ -245,27 +245,17 @@ def extract_basic_fallback(image_path):
             except:
                 hex_value = 128
             
-            # Buffalo-S Lite compatible Gaussian distribution with NaN protection
-            u1 = max(0.001, hex_value / 255.0)  # Ensure positive
+            # Gaussian distribution için Box-Muller transform (web ile aynı)
+            u1 = hex_value / 255.0
             try:
                 u2_char = hash_to_use[(i + 1) % len(hash_to_use)]
-                u2 = max(0.001, int(u2_char, 16) / 15.0)
+                u2 = int(u2_char, 16) / 15.0
             except:
                 u2 = 0.5
                 
-            # NaN validation (Buffalo-S Lite unified approach)
-            if math.isnan(u1) or math.isnan(u2) or u1 <= 0:
-                features.append((hex_value - 128) / 128.0)  # Simple normalization fallback
-                continue
-                
             import math
-            gaussian = math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2)
-            
-            # Validate output
-            if math.isnan(gaussian):
-                features.append((hex_value - 128) / 128.0)
-            else:
-                features.append(gaussian * 0.5)  # Scale down for better distribution
+            gaussian = math.sqrt(-2 * math.log(u1 + 0.001)) * math.cos(2 * math.pi * u2)
+            features.append(gaussian * 0.5)  # Scale down for better distribution
         
         # Hash'lerden sayısal özellikler çıkar
         for i in range(0, min(64, len(md5_hash)), 2):

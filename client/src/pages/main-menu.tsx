@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-// Buffalo-S Lite unified approach (replaces Vladimir Mandic Face-API)
-import { buffaloSLite, type DetectedFace as BuffaloDetectedFace } from '@/utils/buffalo-s-lite';
+import * as faceapi from '@vladmandic/face-api';
 import * as ort from 'onnxruntime-web';
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -189,10 +188,10 @@ export default function MainMenuPage() {
     return true; // Başarılı olarak işaretle ki Face-API devam etsin
   };
 
-  // Buffalo-S Lite embedding extraction (unified approach)
+  // HİBRİT YAKLAŞIM: Embedding çıkarma server tarafında Python ile
   const extractBuffaloLEmbedding = async (faceImageData: string): Promise<number[] | null> => {
     try {
-      console.log('🦬 Buffalo-S Lite server-side embedding çıkarılıyor...');
+      console.log('🦬 Server tarafında Buffalo_L embedding çıkarılıyor...');
       
       // Kırpılmış yüz resmini server'a gönder
       const blob = dataURLtoBlob(faceImageData);
@@ -223,47 +222,89 @@ export default function MainMenuPage() {
     }
   };
 
-  // Buffalo-S Lite unified initialization
+  // Initialize face-api for detection and UI
   useEffect(() => {
-    const initializeBuffaloSLite = async () => {
-      console.log('🦬 Buffalo-S Lite unified architecture başlatılıyor...');
+    const initializeFaceAPI = async () => {
+      console.log('Vladimir Mandic Face-API initialization started...');
       setIsLoadingModels(true);
       
       try {
-        // Buffalo-S Lite model loading
-        const buffaloLoaded = await buffaloSLite.loadModels();
-        
-        if (buffaloLoaded) {
-          console.log('✅ Buffalo-S Lite ONNX modelleri yüklendi');
-          setIsFaceDetectionReady(true);
-          toast({
-            title: "Buffalo-S Lite Aktif",
-            description: "ONNX Runtime ile unified yüz tespiti hazır.",
-          });
-        } else {
-          console.log('⚠️ Buffalo-S Lite ONNX modelleri bulunamadı, hash-based fallback aktif');
-          setIsFaceDetectionReady(true); // Hash-based fallback her zaman çalışır
-          toast({
-            title: "Buffalo-S Lite (Fallback)",
-            description: "Hash-based deterministic embedding aktif.",
-          });
+        // CPU fallback for environments without WebGL/WASM support
+        try {
+          console.log('Attempting to set CPU backend as fallback...');
+          const tf = (faceapi as any).tf;
+          if (tf && tf.setBackend) {
+            await tf.setBackend('cpu');
+            await tf.ready();
+            console.log('✅ TensorFlow.js CPU backend ready');
+          }
+        } catch (backendError) {
+          console.log('⚠️ Backend setting failed, continuing with default:', backendError);
         }
         
-        setIsLoadingModels(false);
-        console.log('🦬 Buffalo-S Lite unified architecture hazır');
+        // Vladimir Mandic's face-api uses different model URLs and structure
+        const modelPath = 'https://vladmandic.github.io/face-api/model';
         
-      } catch (error) {
-        console.error('❌ Buffalo-S Lite initialization failed:', error);
-        setIsLoadingModels(false);
-        setIsFaceDetectionReady(true); // Hash-based fallback her zaman çalışır
+        console.log('Loading TinyFaceDetector model...');
+        await faceapi.nets.tinyFaceDetector.load(modelPath);
+        console.log('TinyFaceDetector loaded');
+        
+        console.log('Loading FaceLandmark68Net model...');
+        await faceapi.nets.faceLandmark68Net.load(modelPath);
+        console.log('FaceLandmark68Net loaded');
+        
+        console.log('Loading FaceRecognitionNet model...');
+        await faceapi.nets.faceRecognitionNet.load(modelPath);
+        console.log('FaceRecognitionNet loaded');
+        
+        // Load InsightFace Buffalo_L for superior embeddings
+        const buffaloLoaded = await loadInsightFaceBuffaloL();
+        
+        setIsFaceDetectionReady(true);
+        setIsLoadingModels(false); // Loading'i kapat
+        console.log('Vladimir Mandic Face-API initialized successfully');
         toast({
-          title: "Buffalo-S Lite Fallback",
-          description: "Hash-based embedding sistemi aktif.",
+          title: "Yüz Tanıma Aktif",
+          description: `Face-API ile hibrit yüz tespiti hazır.`,
         });
+      } catch (error) {
+        console.warn('Face-API initialization failed, trying alternative CDN:', error);
+        
+        try {
+          // Fallback to jsdelivr CDN
+          const fallbackPath = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
+          
+          await Promise.all([
+            faceapi.nets.tinyFaceDetector.load(fallbackPath),
+            faceapi.nets.faceLandmark68Net.load(fallbackPath),
+            faceapi.nets.faceRecognitionNet.load(fallbackPath)
+          ]);
+          
+          // Load InsightFace Buffalo_L
+          const buffaloLoaded = await loadInsightFaceBuffaloL();
+          
+          setIsFaceDetectionReady(true);
+          setIsLoadingModels(false); // Loading'i kapat
+          console.log('Face-API loaded from fallback CDN');
+          toast({
+            title: "Yüz Tanıma Aktif",
+            description: `Face-API (fallback CDN) ile hibrit sistem hazır.`,
+          });
+        } catch (fallbackError) {
+          console.warn('All Face-API initialization attempts failed, using manual mode:', fallbackError);
+          setIsFaceDetectionReady(false);
+          setIsLoadingModels(false); // Loading'i kapat
+          toast({
+            title: "Manuel Mod",
+            description: "Yüz tanıma modelleri yüklenemedi. Manuel seçim modu kullanılacak.",
+          });
+        }
+      } finally {
+        setIsLoadingModels(false);
       }
     };
     
-    initializeBuffaloSLite();
+    initializeFaceAPI();
   }, [toast]);
   
   // Preload images
@@ -324,11 +365,14 @@ export default function MainMenuPage() {
       try {
         setFaceDetectionProgress(Math.round((fileIndex / files.length) * 100));
         
-        // Buffalo-S Lite unified face detection
+        // Use Vladimir Mandic's face-api.js for detection and UI
         const img = await loadImageFromFile(file);
-        const buffaloResult = await buffaloSLite.detectAndAnalyzeFaces(img);
+        const detections = await faceapi
+          .detectAllFaces(img, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks()
+          .withFaceDescriptors();
 
-        if (!buffaloResult.success || !buffaloResult.faces || buffaloResult.faces.length === 0) {
+        if (detections.length === 0) {
           // No faces detected, add manual option
           const manualFace: DetectedFace = {
             id: `manual-${fileIndex}-${Date.now()}`,
@@ -343,26 +387,33 @@ export default function MainMenuPage() {
           };
           allFaces.push(manualFace);
         } else {
-          for (let faceIndex = 0; faceIndex < buffaloResult.faces.length; faceIndex++) {
-            const detectedFace = buffaloResult.faces[faceIndex];
+          for (let faceIndex = 0; faceIndex < detections.length; faceIndex++) {
+            const detection = detections[faceIndex];
+            const croppedFace = await cropFaceFromImage(img, detection.detection.box);
+            const quality = assessFaceQuality(detection);
             
-            // Buffalo-S Lite embedding is already extracted in detectAndAnalyzeFaces
-            console.log(`🦬 Buffalo-S Lite face processed: ${faceIndex + 1}`);
-            const buffaloEmbedding = detectedFace.embedding; // Already extracted
+            // Extract InsightFace Buffalo_L embedding from cropped face
+            console.log(`🦬 Extracting Buffalo_L embedding for face ${faceIndex + 1}...`);
+            const buffaloEmbedding = await extractBuffaloLEmbedding(croppedFace);
             
-            const faceToAdd: DetectedFace = {
-              id: detectedFace.id || `face-${fileIndex}-${faceIndex}-${Date.now()}`,
-              imageData: URL.createObjectURL(file),
-              confidence: detectedFace.confidence,
-              quality: detectedFace.quality,
-              boundingBox: detectedFace.boundingBox,
-              landmarks: detectedFace.landmarks || null,
-              descriptor: buffaloEmbedding || detectedFace.embedding,
+            const face: DetectedFace = {
+              id: `${fileIndex}-${faceIndex}-${Date.now()}`,
+              imageData: croppedFace,
+              confidence: detection.detection.score * 100,
+              quality,
+              boundingBox: {
+                x: detection.detection.box.x,
+                y: detection.detection.box.y, 
+                width: detection.detection.box.width,
+                height: detection.detection.box.height,
+              },
+              landmarks: detection.landmarks,
+              descriptor: buffaloEmbedding || (detection.descriptor ? Array.from(detection.descriptor) : undefined),
               originalFile: file,
               isSelected: false,
             };
             
-            allFaces.push(faceToAdd);
+            allFaces.push(face);
           }
         }
         
