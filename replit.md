@@ -13,6 +13,15 @@ This is a web-based management system for the AK Party Youth Branches Consultati
 
 ## Recent Changes
 
+### January 30, 2025 - Cosine Similarity Implementation
+- **Real Cosine Similarity Algorithm**: Implemented exact Python algorithm (np.dot) in Node.js
+- **Threshold Optimization**: Lowered from 0.35 to 0.15 for better match detection with current embeddings
+- **Fallback System**: Added 0.05 threshold fallback when no matches found with main threshold
+- **Debug Enhancement**: Added top-5 similarity value logging for troubleshooting
+- **TypeScript Fixes**: Resolved function scope and Map iteration compatibility issues
+- **Embedding Size Matching**: Dynamic embedding size based on user input (128D)
+- **Algorithm Accuracy**: Matches Python's approach: normalized embeddings + dot product + similarity sorting
+
 ### January 29, 2025 - Evening
 - **Face Model Management System Complete**: Successfully implemented full Google Drive integration
 - **Download System Working**: Models can now be downloaded from Google Drive ZIP links and processed

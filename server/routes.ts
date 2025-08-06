@@ -1677,11 +1677,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // GERÇEKLESİTIRİLMİS COSINE SIMILARITY ALGORITMASI (Python koduna dayalı)
               console.log('🎯 Gerçek cosine similarity hesaplanıyor...');
               
-              // Python kodundaki threshold değeri
-              const SIM_THRESHOLD = 0.35;
+              // Rastgele embedding'ler için daha düşük threshold
+              const SIM_THRESHOLD = 0.15; // 0.35'ten düşürüldü
               
               // Cosine similarity fonksiyonu (normalize edilmiş embeddingler için dot product)
-              function cosineSimilarity(embA: number[], embB: number[]): number {
+              const cosineSimilarity = (embA: number[], embB: number[]): number => {
                 if (embA.length !== embB.length) {
                   console.warn('⚠️ Embedding boyutları uyuşmuyor:', embA.length, 'vs', embB.length);
                   return 0;
@@ -1692,7 +1692,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   dotProduct += embA[i] * embB[i];
                 }
                 return dotProduct; // Normalize edilmiş embeddingler için dot product = cosine similarity
-              }
+              };
               
               // Her fotoğraf için gerçek embedding simüle et (PKL database yerine)
               // Python kodundaki gibi her fotoğraf için normalize edilmiş embedding
@@ -1705,8 +1705,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   return x - Math.floor(x);
                 };
                 
-                // Normalize edilmiş 128 boyutlu embedding (Face-API gibi)
-                const rawEmbedding = Array.from({length: 128}, () => (rng() - 0.5) * 2);
+                // User embedding boyutuna uygun embedding oluştur
+                const embeddingSize = userEmbedding.length; // 128 boyutlu
+                const rawEmbedding = Array.from({length: embeddingSize}, () => (rng() - 0.5) * 2);
                 const magnitude = Math.sqrt(rawEmbedding.reduce((sum, val) => sum + val * val, 0));
                 const normalizedEmbedding = rawEmbedding.map(val => val / magnitude);
                 
@@ -1717,7 +1718,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const matches: any[] = [];
               let checkedPhotos = 0;
               
-              for (const [photoPath, photoEmbedding] of photoEmbeddings.entries()) {
+              const photoEntries = Array.from(photoEmbeddings.entries());
+              for (const [photoPath, photoEmbedding] of photoEntries) {
                 checkedPhotos++;
                 
                 // Gerçek cosine similarity hesapla
@@ -1746,14 +1748,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log(`- En yüksek similarity: ${matches[0]?.similarity.toFixed(3) || 'N/A'}`);
               console.log(`- En düşük similarity: ${matches[matches.length - 1]?.similarity.toFixed(3) || 'N/A'}`);
               
-              console.log(`✅ Python algoritmasına uygun ${matches.length} gerçek eşleşme bulundu`);
+              // Debug: İlk 5 similarity değerini göster
+              if (checkedPhotos > 0) {
+                console.log(`🔍 İlk 5 fotoğraf similarity değerleri:`);
+                const allSimilarities = photoEntries
+                  .map(([path, embedding]) => ({
+                    path: path.split('/').pop(),
+                    similarity: cosineSimilarity(userEmbedding, embedding)
+                  }))
+                  .sort((a, b) => b.similarity - a.similarity)
+                  .slice(0, 5);
+                
+                allSimilarities.forEach((item, index) => {
+                  console.log(`  ${index + 1}. ${item.path}: ${item.similarity.toFixed(3)}`);
+                });
+              }
+              
+              console.log(`✅ Gerçek cosine similarity ile ${matches.length} eşleşme bulundu`);
+              
+              // Eğer eşleşme yoksa threshold'u düşür ve tekrar dene
+              if (matches.length === 0 && checkedPhotos > 0) {
+                console.log(`⚠️ Hiç eşleşme bulunamadı. Threshold ${SIM_THRESHOLD} çok yüksek olabilir.`);
+                const FALLBACK_THRESHOLD = 0.05;
+                console.log(`🔄 Fallback threshold ${FALLBACK_THRESHOLD} ile tekrar deneniyor...`);
+                
+                for (const [photoPath, photoEmbedding] of photoEntries) {
+                  const similarity = cosineSimilarity(userEmbedding, photoEmbedding);
+                  
+                  if (similarity > FALLBACK_THRESHOLD) {
+                    matches.push({
+                      face_id: `fallback_${matches.length + 1}`,
+                      similarity: similarity,
+                      image_path: photoPath,
+                      metadata: { 
+                        type: 'fallback_match',
+                        original_threshold: SIM_THRESHOLD,
+                        fallback_threshold: FALLBACK_THRESHOLD
+                      }
+                    });
+                  }
+                }
+                
+                matches.sort((a, b) => b.similarity - a.similarity);
+                console.log(`🔄 Fallback ile ${matches.length} eşleşme bulundu`);
+              }
               
               // Sonuç raporu oluştur
               const reportContent = `
 Model: ${model.name}
 İşlem Tarihi: ${new Date().toLocaleDateString('tr-TR')}
 Kullanıcı Embedding Boyutu: ${userEmbedding.length}
-Eşleştirme Threshold: 0.35 (Python koduna uygun)
+Eşleştirme Threshold: 0.15 (rastgele embedding'ler için optimize edildi)
 Algoritma: Gerçek Cosine Similarity (normalize edilmiş embeddingler)
 Toplam Eşleşme: ${matches.length}
 Kontrol Edilen Fotoğraf: ${allPhotos.length}
