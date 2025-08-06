@@ -13,16 +13,17 @@ This is a web-based management system for the AK Party Youth Branches Consultati
 
 ## Recent Changes
 
-### January 30, 2025 - Models Klasörü Native PKL Integration ✅ COMPLETE
-- **face_training_gui.py Updated**: Now creates PKL files directly compatible with models/ folder structure
-- **Relative Path System**: PKL keys use format `denemelik/foto.jpg||face_0` instead of Windows absolute paths
-- **Cross-Platform Compatibility**: Automatic backslash to forward slash conversion
-- **Native Models Integration**: No separate path mapper needed - PKL files work directly
-- **Windows Training Compatible**: Train on Windows, use on Linux seamlessly
-- **Google Drive Ready**: Training packages can be uploaded directly via Google Drive ZIP
-- **Threshold 0.5 Maintained**: User-specified threshold value preserved
-- **InsightFace Buffalo_L Native**: Real InsightFace embeddings with L2 normalization
-- **Production Grade**: Eliminates mapping complexity - direct models/ folder compatibility
+### January 30, 2025 - Complete PKL Format Update & API Automation ✅ COMPLETE
+- **PKL Face Matching System Fully Updated**: All Python scripts support new `"IMG_2072.JPG||face_3"` key format
+- **API Automation Complete**: Model creation now reads `model_info.json` automatically from ZIP uploads
+- **Frontend Simplified**: Face Models interface only requires Google Drive link - all metadata read from ZIP
+- **pkl_face_matcher.py Enhanced**: Complete rewrite for new PKL format with proper type hints and error handling  
+- **python_face_matcher.py Updated**: New format support with optimized embedding extraction
+- **Server Endpoint Verified**: `/api/download-results/:tcNumber` uses exact 0.5 threshold as requested
+- **Threshold 0.5 Maintained**: User-specified threshold value preserved throughout system
+- **Cross-Platform Compatibility**: Windows training → Linux deployment seamless with relative paths
+- **InsightFace Buffalo_L Native**: Real InsightFace embeddings with L2 normalization throughout
+- **Production Ready**: End-to-end workflow from face_training_gui.py to web deployment fully automated
 
 ### January 29, 2025 - Evening
 - **Face Model Management System Complete**: Successfully implemented full Google Drive integration

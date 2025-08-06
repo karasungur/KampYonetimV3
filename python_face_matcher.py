@@ -34,35 +34,84 @@ def cosine_similarity_manual(vec1, vec2):
     
     return dot_product / (norm_vec1 * norm_vec2)
 
-def find_matching_faces(user_embedding, face_db, threshold=0.6):
-    """Kullanıcı embedding'i ile veritabanındaki yüzleri eşleştir"""
+def extract_embedding_from_dict(face_data):
+    """Yeni PKL format dict'inden embedding çıkar"""
+    try:
+        if isinstance(face_data, dict):
+            # Yaygın embedding key'leri
+            for key in ['embedding', 'normed_embedding', 'feat', 'face_embedding']:
+                if key in face_data:
+                    return np.array(face_data[key], dtype=np.float32)
+            
+            # Herhangi bir array/list ara
+            for key, value in face_data.items():
+                if isinstance(value, (list, np.ndarray)) and len(value) > 100:
+                    return np.array(value, dtype=np.float32)
+        
+        return np.array(face_data, dtype=np.float32) if not isinstance(face_data, dict) else None
+    except Exception as e:
+        print(f"⚠️ Embedding çıkarma hatası: {e}")
+        return None
+
+def parse_face_key_python(face_key):
+    """Yeni PKL formatını parse et: IMG_2072.JPG||face_3"""
+    if '||' in face_key:
+        filename, face_part = face_key.split('||', 1)
+        face_num = face_part.replace('face_', '')
+        return filename, face_num
+    return face_key, '0'
+
+def find_matching_faces(user_embedding, face_db, threshold=0.5):
+    """Yeni PKL formatı ile yüz eşleştirme (0.5 threshold user isteği)"""
     matches = []
     
-    # User embedding'ini numpy array'e çevir
-    user_emb = np.array(user_embedding, dtype=np.float32)
+    print(f"🦬 Python face matcher: {len(face_db)} yüz, threshold: {threshold}")
     
-    for face_id, face_data in face_db.items():
+    # User embedding'ini numpy array'e çevir ve normalize et
+    user_emb = np.array(user_embedding, dtype=np.float32)
+    user_emb = user_emb / np.linalg.norm(user_emb)  # L2 normalize
+    
+    processed_faces = 0
+    
+    for face_key, face_data in face_db.items():
+        processed_faces += 1
+        
         try:
-            # Face database'indeki embedding'i al
-            db_embedding = np.array(face_data['embedding'], dtype=np.float32)
+            # Yeni format için embedding çıkar
+            db_embedding = extract_embedding_from_dict(face_data)
+            if db_embedding is None:
+                continue
             
-            # Manuel cosine similarity hesapla
+            # Normalize et
+            db_embedding = db_embedding / np.linalg.norm(db_embedding)
+            
+            # Cosine similarity hesapla
             similarity = cosine_similarity_manual(user_emb, db_embedding)
             
             if similarity > threshold:
+                # Yeni formatı parse et
+                image_filename, face_number = parse_face_key_python(face_key)
+                
                 matches.append({
-                    'face_id': face_id,
+                    'face_key': face_key,
                     'similarity': float(similarity),
-                    'image_path': face_data.get('image_path', ''),
-                    'metadata': face_data.get('metadata', {})
+                    'image_filename': image_filename,
+                    'face_number': face_number,
+                    'image_path': image_filename,  # Backward compatibility
+                    'metadata': {
+                        'format': 'new_pkl_format',
+                        'embedding_dim': len(db_embedding)
+                    }
                 })
-                print(f"🎯 Match found: {face_id} (similarity: {similarity:.3f})")
+                print(f"🎯 MATCH: {image_filename} (face_{face_number}) -> {similarity:.3f}")
+                
         except Exception as e:
-            print(f"⚠️ Error processing face {face_id}: {e}")
+            print(f"⚠️ Error processing face {face_key}: {e}")
             continue
     
     # Similarity'ye göre sırala
     matches.sort(key=lambda x: x['similarity'], reverse=True)
+    print(f"✅ {processed_faces} yüz işlendi, {len(matches)} match bulundu")
     return matches
 
 def copy_matched_photos(matches, model_path, output_dir):
@@ -82,28 +131,26 @@ def copy_matched_photos(matches, model_path, output_dir):
             # Model dizinindeki fotoğraf yolunu oluştur
             source_photo = os.path.join(model_path, image_path)
             
-            # Eğer tam yol yoksa, denemelik klasörde ara
+            # Yeni PKL format için dosya arama - relative path zaten kullanıyor
             if not os.path.exists(source_photo):
-                # Denemelik klasöründe ara
-                denemelik_path = os.path.join(model_path, 'denemelik', os.path.basename(image_path))
-                if os.path.exists(denemelik_path):
-                    source_photo = denemelik_path
-                else:
-                    # Model dizininde tüm fotoğrafları ara
-                    photo_patterns = [
-                        os.path.join(model_path, '**', os.path.basename(image_path)),
-                        os.path.join(model_path, '**', f"*{os.path.basename(image_path)}*")
-                    ]
-                    found = False
-                    for pattern in photo_patterns:
-                        found_files = glob.glob(pattern, recursive=True)
-                        if found_files:
-                            source_photo = found_files[0]
-                            found = True
-                            break
-                    if not found:
-                        print(f"⚠️ Fotoğraf bulunamadı: {image_path}")
-                        continue
+                # Direkt models klasöründe ara (yeni format: models/model_adı/IMG.jpg)
+                alt_paths = [
+                    os.path.join(model_path, os.path.basename(image_path)),
+                    os.path.join(model_path, 'denemelik', os.path.basename(image_path)),
+                    # Recursive search
+                    *glob.glob(os.path.join(model_path, '**', os.path.basename(image_path)), recursive=True)
+                ]
+                
+                found = False
+                for alt_path in alt_paths:
+                    if os.path.exists(alt_path):
+                        source_photo = alt_path
+                        found = True
+                        break
+                
+                if not found:
+                    print(f"⚠️ Fotoğraf bulunamadı: {image_path} (modelin: {model_path})")
+                    continue
             
             if os.path.exists(source_photo):
                 # Hedef dosya adı oluştur

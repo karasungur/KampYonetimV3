@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-PKL Face Database Reader and Matcher
+PKL Face Database Reader and Matcher - Yeni Format Destekli
 Gerçek PKL dosyasından yüz embeddinglerini okur ve eşleştirme yapar
+Yeni format: "IMG_2072.JPG||face_3" keys, dict values
 """
 import sys
 import os
@@ -9,9 +10,9 @@ import json
 import pickle
 import torch
 import numpy as np
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 
-def load_pkl_database(pkl_path: str) -> Dict[str, Any]:
+def load_pkl_database(pkl_path: str) -> Optional[Dict[str, Any]]:
     """PKL veritabanını yükle"""
     try:
         # Önce torch.load dene
@@ -33,19 +34,17 @@ def load_pkl_database(pkl_path: str) -> Dict[str, Any]:
         print(f"❌ PKL yükleme hatası: {e}", file=sys.stderr)
         return None
 
-def extract_embedding_from_face_data(face_data: Any) -> np.ndarray:
+def extract_embedding_from_face_data(face_data: Any) -> Optional[np.ndarray]:
     """Yüz verisi dict'inden embedding çıkar"""
     try:
         if isinstance(face_data, dict):
-            # InsightFace formatı
-            if 'embedding' in face_data:
-                embedding = face_data['embedding']
-            elif 'normed_embedding' in face_data:
-                embedding = face_data['normed_embedding']
-            elif 'feat' in face_data:
-                embedding = face_data['feat']
+            # InsightFace formatı - yaygın key'leri dene
+            for key in ['embedding', 'normed_embedding', 'feat', 'face_embedding']:
+                if key in face_data:
+                    embedding = face_data[key]
+                    break
             else:
-                # İlk numpy array'i bul
+                # İlk numpy array/list'i bul
                 for key, value in face_data.items():
                     if isinstance(value, (np.ndarray, torch.Tensor, list)):
                         if isinstance(value, torch.Tensor):
@@ -80,7 +79,6 @@ def extract_embedding_from_face_data(face_data: Any) -> np.ndarray:
         if norm > 0:
             embedding = embedding / norm
             
-        print(f"✅ Embedding çıkarıldı: {embedding.shape} boyut, norm={norm:.3f}", file=sys.stderr)
         return embedding
         
     except Exception as e:
@@ -102,8 +100,24 @@ def cosine_similarity(emb1: np.ndarray, emb2: np.ndarray) -> float:
         print(f"❌ Similarity hesaplama hatası: {e}", file=sys.stderr)
         return 0.0
 
-def match_faces(user_embedding: List[float], pkl_path: str, threshold: float = 0.5, model_path: str = None) -> Dict:
-    """PKL veritabanında yüz eşleştirmesi yap"""
+def parse_face_key(face_key: str) -> Tuple[str, str]:
+    """
+    Yeni PKL formatı: "IMG_2072.JPG||face_3" -> ("IMG_2072.JPG", "3")
+    """
+    try:
+        if '||' in face_key:
+            image_filename, face_part = face_key.split('||', 1)
+            face_number = face_part.replace('face_', '')
+            return image_filename, face_number
+        else:
+            # Fallback: eski format
+            return face_key, '0'
+    except Exception as e:
+        print(f"⚠️ Face key parse hatası: {face_key} -> {e}", file=sys.stderr)
+        return face_key, '0'
+
+def match_faces(user_embedding: List[float], pkl_path: str, threshold: float = 0.5, model_path: Optional[str] = None) -> Dict:
+    """PKL veritabanında yüz eşleştirmesi yap - Yeni PKL formatı için optimize"""
     try:
         print(f"🦬 PKL yüz eşleştirmesi başlıyor...", file=sys.stderr)
         print(f"📁 PKL dosyası: {pkl_path}", file=sys.stderr)
@@ -116,17 +130,16 @@ def match_faces(user_embedding: List[float], pkl_path: str, threshold: float = 0
         
         print(f"📊 PKL veritabanı yüklendi: {len(pkl_data)} kayıt", file=sys.stderr)
         
-        # User embedding'i NumPy array'e çevir
+        # User embedding'i NumPy array'e çevir ve normalize et
         user_emb = np.array(user_embedding)
         if user_emb.ndim > 1:
             user_emb = user_emb.flatten()
         
-        # User embedding'i normalize et
         user_norm = np.linalg.norm(user_emb)
         if user_norm > 0:
             user_emb = user_emb / user_norm
             
-        print(f"👤 User embedding: {user_emb.shape} boyut", file=sys.stderr)
+        print(f"👤 User embedding: {user_emb.shape} boyut, norm: {user_norm:.3f}", file=sys.stderr)
         
         # Her PKL kaydı ile karşılaştır
         matches = []
@@ -144,52 +157,31 @@ def match_faces(user_embedding: List[float], pkl_path: str, threshold: float = 0
             similarity = cosine_similarity(user_emb, face_embedding)
             
             if similarity > threshold:
-                # Dosya yolunu temizle ve models klasörüne map et
-                image_path = face_key.split('||')[0] if '||' in face_key else face_key
-                image_name = os.path.basename(image_path).replace('\\', '/')
+                # Yeni PKL formatı key'lerini parse et
+                image_filename, face_number = parse_face_key(face_key)
+                image_name = os.path.basename(image_filename)
                 
-                # Windows path'inden klasör yapısını çıkar
-                # D:/Users/.../denemelik\IMG_0909.JPG -> denemelik/IMG_0909.JPG
-                windows_parts = image_path.replace('\\', '/').split('/')
-                relative_path = image_name  # Default: sadece dosya adı
-                
-                # denemelik, kişi_adı gibi klasörleri bul
-                for i, part in enumerate(windows_parts):
-                    if part in ['denemelik'] or (part != '' and not ':' in part and len(part) < 50):
-                        # Son 2 parçayı al (klasör/dosya.jpg)
-                        if i < len(windows_parts) - 1:
-                            relative_path = f"{part}/{windows_parts[-1]}"
-                            break
-                
-                # Model path'i varsa tam yolu oluştur
+                # Model path ile tam yolu bul (eğer varsa)
                 full_model_path = None
                 if model_path:
-                    potential_paths = [
-                        os.path.join(model_path, image_name),
-                        os.path.join(model_path, 'denemelik', image_name),
-                        os.path.join(model_path, relative_path),
-                    ]
-                    # İlk bulunan dosyayı kullan
-                    for potential_path in potential_paths:
-                        if os.path.exists(potential_path):
-                            full_model_path = potential_path
-                            relative_path = os.path.relpath(potential_path, model_path)
-                            break
+                    full_model_path = os.path.join(model_path, image_filename).replace('\\', '/')
                 
                 matches.append({
-                    "face_id": face_key,
+                    "face_key": face_key,
                     "similarity": similarity,
-                    "image_path": image_name,
-                    "relative_path": relative_path,
+                    "image_name": image_name,
+                    "image_filename": image_filename,
+                    "face_number": face_number,
                     "full_path": full_model_path,
-                    "original_path": image_path,
                     "metadata": {
                         "type": "pkl_real_match", 
                         "threshold": threshold,
-                        "embedding_dim": face_embedding.shape[0],
-                        "path_mapped": full_model_path is not None
+                        "embedding_dim": face_embedding.shape[0] if face_embedding is not None else 0,
+                        "format": "new_pkl_format"
                     }
                 })
+                
+                print(f"🎯 MATCH: {image_filename} (face_{face_number}) -> {similarity:.3f}", file=sys.stderr)
         
         # Similarity'ye göre sırala (yüksekten düşüğe)
         matches.sort(key=lambda x: x["similarity"], reverse=True)
@@ -201,27 +193,13 @@ def match_faces(user_embedding: List[float], pkl_path: str, threshold: float = 0
             print(f"- En yüksek similarity: {matches[0]['similarity']:.3f}", file=sys.stderr)
             print(f"- En düşük similarity: {matches[-1]['similarity']:.3f}", file=sys.stderr)
         
-        # Debug: Top 5 similarity
-        if checked_faces > 0:
-            print(f"🔍 İlk 5 yüz similarity değerleri:", file=sys.stderr)
-            temp_similarities = []
-            for face_key, face_data in list(pkl_data.items())[:5]:
-                face_embedding = extract_embedding_from_face_data(face_data)
-                if face_embedding is not None:
-                    similarity = cosine_similarity(user_emb, face_embedding)
-                    image_name = os.path.basename(face_key.split('||')[0])
-                    temp_similarities.append((image_name, similarity))
-            
-            temp_similarities.sort(key=lambda x: x[1], reverse=True)
-            for i, (name, sim) in enumerate(temp_similarities):
-                print(f"  {i+1}. {name}: {sim:.3f}", file=sys.stderr)
-        
         return {
             "success": True,
             "matches": matches,
             "total_faces": checked_faces,
             "threshold": threshold,
-            "algorithm": "Real PKL InsightFace Matching"
+            "algorithm": "Real PKL InsightFace Matching - New Format",
+            "format_info": "Keys: FILENAME.JPG||face_X, Values: dict with embeddings"
         }
         
     except Exception as e:
