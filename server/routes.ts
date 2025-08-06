@@ -2165,13 +2165,17 @@ oluşturulan fotoğraflar bu ZIP dosyasında yer alacaktır.
       (async () => {
         try {
           const tempZipPath = path.join('/tmp', `${model.name}_${Date.now()}.zip`);
+          console.log(`Starting Google Drive download to: ${tempZipPath}`);
           
           // İndirme
           await downloadFromGoogleDrive(fileId, tempZipPath);
+          console.log(`Download completed, file size: ${fs.statSync(tempZipPath).size} bytes`);
+          
           await storage.updateFaceModel(id, {
             status: 'extracting',
             downloadProgress: 100
           });
+          console.log(`Model status updated to extracting`);
           
           // Açma ve taşıma
           const { faceCount, trainingDataPath } = await extractZipAndMoveData(tempZipPath, model.name);
