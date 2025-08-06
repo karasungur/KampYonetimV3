@@ -4,6 +4,7 @@
  */
 
 import * as ort from 'onnxruntime-web';
+import * as faceapi from '@vladmandic/face-api';
 
 export interface DetectedFace {
   id: string;
@@ -28,6 +29,7 @@ class BuffaloSLite {
   private landmarkSession: ort.InferenceSession | null = null;
   private recognitionSession: ort.InferenceSession | null = null;
   private isLoaded = false;
+  private vladimirLoaded = false;
 
   constructor() {
     console.log('🦬 Buffalo-S Lite client-side başlatılıyor...');
@@ -37,17 +39,20 @@ class BuffaloSLite {
 
   async loadModels(): Promise<boolean> {
     try {
-      console.log('🦬 Buffalo-S Lite gerçek yüz algılama sistemi yükleniyor...');
+      console.log('🦬 Hibrit sistem yükleniyor: Vladimir Mandic Face-API + Buffalo-S Lite...');
       
-      // Real computer vision based face detection is always available
-      // No external ONNX models needed for basic face detection
-      console.log('✅ Buffalo-S Lite gerçek görüntü işleme algoritmaları hazır');
+      // Load Vladimir Mandic Face-API for face detection
+      await this.loadVladimirMandricFaceAPI();
+      
+      // Buffalo-S Lite embedding extraction is always available
+      console.log('✅ Buffalo-S Lite embedding çıkarma algoritmaları hazır');
+      console.log('✅ Hibrit sistem hazır: En iyi face detection + gerçek embeddings');
       
       this.isLoaded = true;
       return true;
       
     } catch (error) {
-      console.error('❌ Buffalo-S Lite initialization hatası:', error);
+      console.error('❌ Hibrit sistem yükleme hatası:', error);
       this.isLoaded = false;
       return false;
     }
@@ -57,8 +62,8 @@ class BuffaloSLite {
     const startTime = performance.now();
     
     try {
-      // Real face detection using Canvas API and computer vision
-      console.log('🔄 Buffalo-S Lite real face detection...');
+      // Hybrid approach: Vladimir Mandic Face-API for detection + Buffalo-S Lite for embedding
+      console.log('🔄 Hibrit yaklaşım: Vladimir Mandic Face detection + Buffalo-S Lite embedding...');
       
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d')!;
@@ -66,35 +71,142 @@ class BuffaloSLite {
       canvas.height = imageElement.height;
       ctx.drawImage(imageElement, 0, 0);
       
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      // Use Vladimir Mandic Face-API for accurate face detection
+      const vladimirDetections = await this.vladimirMandricFaceDetection(canvas);
+      console.log(`👤 Vladimir Mandic algıladı: ${vladimirDetections.length} yüz`);
       
-      // Real face detection using image analysis
-      const detectedFaces = await this.realFaceDetection(imageData, canvas);
-      
-      if (detectedFaces.length === 0) {
+      if (vladimirDetections.length === 0) {
         return {
           success: true,
           faces: [],
-          model: 'Buffalo-S Lite Real Detection',
+          model: 'Vladimir Mandic + Buffalo-S Lite',
           processing_time: performance.now() - startTime
         };
       }
       
-      console.log(`✅ ${detectedFaces.length} gerçek yüz algılandı`);
+      // Extract Buffalo-S Lite embeddings for each detected face
+      const buffaloFaces: DetectedFace[] = [];
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      
+      for (let i = 0; i < vladimirDetections.length; i++) {
+        const detection = vladimirDetections[i];
+        console.log(`🧠 Yüz ${i + 1} için Buffalo-S Lite embedding çıkarılıyor...`);
+        
+        // Extract Buffalo-S Lite embedding from detected face region
+        const embedding = await this.extractRealVisualFeatures(imageData, detection.boundingBox);
+        
+        const buffaloFace: DetectedFace = {
+          id: `hybrid_face_${i}`,
+          embedding: embedding,
+          confidence: detection.confidence,
+          boundingBox: detection.boundingBox,
+          landmarks: detection.landmarks,
+          quality: detection.confidence > 0.8 ? 'good' : detection.confidence > 0.5 ? 'poor' : 'blurry',
+          isSelected: true
+        };
+        
+        buffaloFaces.push(buffaloFace);
+        console.log(`✅ Yüz ${i + 1} hibrit işlem tamamlandı (Vladimir detection + Buffalo embedding)`);
+      }
+      
+      console.log(`🎉 Hibrit yaklaşım tamamlandı: ${buffaloFaces.length} yüz`);
       
       return {
         success: true,
-        faces: detectedFaces,
-        model: 'Buffalo-S Lite Real Detection',
+        faces: buffaloFaces,
+        model: 'Vladimir Mandic + Buffalo-S Lite',
         processing_time: performance.now() - startTime
       };
       
     } catch (error) {
-      console.error('❌ Buffalo-S Lite detection hatası:', error);
+      console.error('❌ Hibrit yaklaşım hatası:', error);
       return {
         success: false,
-        error: `Buffalo-S Lite detection failed: ${error}`
+        error: `Hybrid detection failed: ${error}`
       };
+    }
+  }
+
+  private async loadVladimirMandricFaceAPI(): Promise<void> {
+    try {
+      console.log('🔧 Vladimir Mandic Face-API yükleniyor...');
+      
+      // CDN model path'i
+      const modelPath = 'https://vladmandic.github.io/face-api/model/';
+      
+      // Load the models from CDN
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(modelPath),
+        faceapi.nets.faceLandmark68Net.loadFromUri(modelPath)
+      ]);
+      
+      this.vladimirLoaded = true;
+      console.log('✅ Vladimir Mandic Face-API CDN\'den yüklendi');
+      
+    } catch (error) {
+      console.log('⚠️ Vladimir Mandic CDN yüklenemedi, local detection kullanılacak');
+      this.vladimirLoaded = false;
+      // Don't throw error, continue with Buffalo-S Lite detection
+    }
+  }
+
+  private async vladimirMandricFaceDetection(canvas: HTMLCanvasElement): Promise<Array<{
+    boundingBox: { x: number; y: number; width: number; height: number };
+    confidence: number;
+    landmarks: { x: number; y: number }[] | null;
+  }>> {
+    try {
+      if (!this.vladimirLoaded) {
+        console.log('⚠️ Vladimir Mandic yüklü değil, Buffalo-S Lite detection kullanılacak');
+        // Fall back to Buffalo-S Lite detection
+        const imageData = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
+        const grayData = this.convertToGrayscale(imageData);
+        const regions = this.detectFaceRegions(grayData, canvas.width, canvas.height);
+        
+        return regions.map(region => ({
+          boundingBox: region,
+          confidence: 0.7,
+          landmarks: null
+        }));
+      }
+
+      // Use TinyFaceDetector for better performance
+      const detections = await faceapi
+        .detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+        .withFaceLandmarks();
+
+      console.log(`👤 Vladimir Mandic algıladı: ${detections.length} yüz`);
+
+      const results = detections.map((detection, index) => {
+        const box = detection.detection.box;
+        const landmarks = detection.landmarks?.positions.map(pos => ({ x: pos.x, y: pos.y })) || null;
+        
+        return {
+          boundingBox: {
+            x: Math.floor(box.x),
+            y: Math.floor(box.y),
+            width: Math.floor(box.width),
+            height: Math.floor(box.height)
+          },
+          confidence: detection.detection.score,
+          landmarks: landmarks
+        };
+      });
+
+      return results;
+
+    } catch (error) {
+      console.error('❌ Vladimir Mandic detection hatası:', error);
+      // Fall back to Buffalo-S Lite detection
+      const imageData = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
+      const grayData = this.convertToGrayscale(imageData);
+      const regions = this.detectFaceRegions(grayData, canvas.width, canvas.height);
+      
+      return regions.map(region => ({
+        boundingBox: region,
+        confidence: 0.6,
+        landmarks: null
+      }));
     }
   }
 
