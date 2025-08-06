@@ -188,57 +188,36 @@ export default function MainMenuPage() {
     return true; // Başarılı olarak işaretle ki Face-API devam etsin
   };
 
-  // Extract embeddings using InsightFace Buffalo_L
+  // HİBRİT YAKLAŞIM: Embedding çıkarma server tarafında Python ile
   const extractBuffaloLEmbedding = async (faceImageData: string): Promise<number[] | null> => {
-    if (!insightFaceSession) {
-      console.warn('InsightFace Buffalo_L session not available');
-      return null;
-    }
-
     try {
-      console.log('🔍 Extracting Buffalo_L embedding...');
+      console.log('🦬 Server tarafında Buffalo_L embedding çıkarılıyor...');
       
-      // Create image element from data URL
-      const img = new Image();
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-        img.src = faceImageData;
+      // Kırpılmış yüz resmini server'a gönder
+      const blob = dataURLtoBlob(faceImageData);
+      const formData = new FormData();
+      formData.append('photo', blob, `face_${Date.now()}.jpg`);
+
+      const response = await fetch('/api/extract-embedding', {
+        method: 'POST',
+        body: formData,
       });
 
-      // Create canvas and resize image to 112x112 (InsightFace input size)
-      const canvas = document.createElement('canvas');
-      canvas.width = 112;
-      canvas.height = 112;
-      const ctx = canvas.getContext('2d')!;
-      ctx.drawImage(img, 0, 0, 112, 112);
-
-      // Get image data and normalize for Buffalo_L
-      const imageData = ctx.getImageData(0, 0, 112, 112);
-      const pixels = imageData.data;
-      
-      // Convert to RGB and normalize to [0, 1] then to [-1, 1]
-      const input = new Float32Array(3 * 112 * 112);
-      for (let i = 0; i < 112 * 112; i++) {
-        input[i] = (pixels[i * 4] / 255.0 - 0.5) / 0.5; // R
-        input[i + 112 * 112] = (pixels[i * 4 + 1] / 255.0 - 0.5) / 0.5; // G  
-        input[i + 2 * 112 * 112] = (pixels[i * 4 + 2] / 255.0 - 0.5) / 0.5; // B
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
       }
 
-      // Run inference with Buffalo_L
-      const inputTensor = new ort.Tensor('float32', input, [1, 3, 112, 112]);
-      const feeds: Record<string, ort.Tensor> = { data: inputTensor };
+      const result = await response.json();
       
-      const results = await insightFaceSession.run(feeds);
-      
-      // Get embedding from Buffalo_L (512-dimensional)
-      const outputName = Object.keys(results)[0];
-      const embedding = results[outputName].data as Float32Array;
-      
-      console.log(`✅ Buffalo_L embedding extracted: ${embedding.length} dimensions`);
-      return Array.from(embedding);
+      if (result.success && result.embedding) {
+        console.log(`✅ Buffalo_L embedding çıkarıldı: ${result.embedding.length} boyut`);
+        return result.embedding;
+      } else {
+        console.error('❌ Embedding çıkarma başarısız:', result.error);
+        return null;
+      }
     } catch (error) {
-      console.error('❌ Buffalo_L embedding extraction failed:', error);
+      console.error('❌ BuffaloL embedding hatası:', error);
       return null;
     }
   };
@@ -526,7 +505,7 @@ export default function MainMenuPage() {
   };
 
   const { data: menuSettings } = useQuery<MenuSettings>({
-    queryKey: ["/api/menu-settings"],
+    queryKey: ['/api/menu-settings'],
   });
 
   const { data: programEvents } = useQuery<ProgramEvent[]>({

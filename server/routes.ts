@@ -1467,7 +1467,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Python script'i çalıştır (Buffalo_L compatible extractor)
         
         // İlk önce gerçek InsightFace'i dene, başarısız olursa çalışan alternatif kullan
-        let pythonProcess = spawn('python3', ['buffalo_compatible_extractor.py', req.file.path]);
+        let pythonProcess = spawn('python3', ['buffalo_l_real_extractor.py', req.file.path]);
         let usingFallback = false; // Buffalo_L compatible extractor kullanıyoruz
         
         let pythonOutput = '';
