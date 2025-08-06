@@ -1713,19 +1713,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
             continue;
           }
           
-          // face_database.pkl dosyasını kontrol et
+          // JSON ve PKL dosyalarını kontrol et (JSON'u tercih et)
+          const jsonDbPath = path.join(modelPath, 'face_database.json');
           const faceDbPath = path.join(modelPath, 'face_database.pkl');
-          if (!fs.existsSync(faceDbPath)) {
-            console.log(`Face database bulunamadı: ${faceDbPath}`);
+          
+          if (!fs.existsSync(jsonDbPath) && !fs.existsSync(faceDbPath)) {
+            console.log(`Ne JSON ne PKL face database bulunamadı: ${modelPath}`);
             continue;
           }
           
-          console.log(`🗃️ PKL veritabanı bulundu: ${faceDbPath}`);
+          if (fs.existsSync(jsonDbPath)) {
+            console.log(`🎯 JSON veritabanı bulundu: ${jsonDbPath}`);
+          } else {
+            console.log(`🗃️ PKL veritabanı bulundu: ${faceDbPath} (JSON tercih edilir)`);
+          }
           
           // Database-based yüz eşleştirmesi yap (PKL dependency olmadan)
           try {
             const userEmbedding = userFaceData[0].embedding;
-            const threshold = 0.5; // Benzerlik eşiği
+            const threshold = 0.3; // Benzerlik eşiği (düşürüldü)
             
             console.log(`🎯 Database-based face matching başlatılıyor...`);
             console.log(`📐 User embedding boyutu: ${userEmbedding.length}`);
@@ -1734,20 +1740,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             let modelFaces: any[] = [];
             let dataSource = 'Database';
             
-            // 1. JSON backup dosyası varsa onu kullan
-            const jsonBackupPath = path.join(modelPath, 'face_database.json');
-            if (fs.existsSync(jsonBackupPath)) {
+            // 1. JSON dosyası varsa onu kullan (tercih edilen format)
+            const jsonDbPath = path.join(modelPath, 'face_database.json');
+            if (fs.existsSync(jsonDbPath)) {
               try {
-                const jsonData = JSON.parse(fs.readFileSync(jsonBackupPath, 'utf8'));
+                const jsonData = JSON.parse(fs.readFileSync(jsonDbPath, 'utf8'));
                 modelFaces = Object.entries(jsonData).map(([imagePath, faceData]: [string, any]) => ({
                   imagePath,
                   embedding: faceData.embedding || faceData.normed_embedding,
                   ...faceData
                 }));
-                dataSource = 'JSON backup';
-                console.log(`✅ JSON backup bulundu: ${modelFaces.length} yüz`);
+                dataSource = 'JSON database';
+                console.log(`✅ JSON database bulundu: ${modelFaces.length} yüz`);
               } catch (jsonError) {
-                console.log(`❌ JSON backup okunamadı: ${jsonError}`);
+                console.log(`❌ JSON database okunamadı: ${jsonError}`);
               }
             }
             
@@ -1862,7 +1868,7 @@ Model: ${model.name}
 İşlem Tarihi: ${new Date().toLocaleDateString('tr-TR')}
 Durum: Yüz verisi bulunamadı
 Kontrol Edilenler:
-- JSON backup: ${fs.existsSync(jsonBackupPath) ? 'VAR (okunamadı)' : 'YOK'}
+- JSON database: ${fs.existsSync(jsonDbPath) ? 'VAR (okunamadı)' : 'YOK'}
 - PKL dosyası: ${fs.existsSync(faceDbPath) ? 'VAR (numpy hatası)' : 'YOK'}
 
 Bu model için yüz eşleştirmesi yapılamadı.
@@ -1890,6 +1896,8 @@ Bu hata yüz eşleştirme sırasında oluştu.
         } catch (error) {
           console.error(`❌ Model ${modelId} işleme hatası:`, error);
         }
+        
+        processedModels++;
       }
       
       // Özet oluştur  
@@ -2310,10 +2318,54 @@ Bu dosyalar şu anda yüz eşleştirme sisteminin çalıştığını doğrular.
         console.log('model_info.json bulunamadı, varsayılan bilgiler kullanılacak');
       }
       
-      // face_database.pkl dosyasını kontrol et
+      // face_database.pkl dosyasını kontrol et ve JSON'a çevir
       const faceDbPath = path.join(modelDir, 'face_database.pkl');
+      const jsonDbPath = path.join(modelDir, 'face_database.json');
+      
       if (!fs.existsSync(faceDbPath)) {
         throw new Error('face_database.pkl dosyası bulunamadı');
+      }
+      
+      // PKL'den JSON'a çevirme işlemi (model indirme sırasında bir kez)
+      console.log('🔄 PKL dosyası JSON formatına çevriliyor...');
+      
+      try {
+        // Python script ile PKL'yi JSON'a çevir
+        const pythonProcess = spawn('python3', ['pkl_to_json_batch_converter.py', modelDir]);
+        
+        let pythonOutput = '';
+        let pythonError = '';
+        
+        pythonProcess.stdout.on('data', (data: Buffer) => {
+          pythonOutput += data.toString();
+          console.log('🐍 PKL to JSON:', data.toString().trim());
+        });
+        
+        pythonProcess.stderr.on('data', (data: Buffer) => {
+          pythonError += data.toString();
+          console.log('🐍 PKL to JSON Error:', data.toString().trim());
+        });
+        
+        await new Promise((resolve, reject) => {
+          pythonProcess.on('close', (code: number) => {
+            if (code === 0) {
+              resolve(code);
+            } else {
+              reject(new Error(`PKL to JSON conversion failed with code: ${code}`));
+            }
+          });
+        });
+        
+        // JSON dosyasının oluştuğunu kontrol et
+        if (fs.existsSync(jsonDbPath)) {
+          console.log('✅ PKL başarıyla JSON formatına çevrildi');
+        } else {
+          console.warn('⚠️ JSON dosyası oluşturulamadı, PKL dosyası korunacak');
+        }
+        
+      } catch (conversionError) {
+        console.warn('❌ PKL to JSON çevirme hatası:', conversionError);
+        console.log('📦 PKL dosyası korunacak, sistem JSON tercih edecek');
       }
       
       // Hedef dizin oluştur (gerçek model adıyla)
