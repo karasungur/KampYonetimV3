@@ -154,6 +154,7 @@ export default function MainMenuPage() {
   const [detectedFaces, setDetectedFaces] = useState<DetectedFace[]>([]);
   const [faceDetectionProgress, setFaceDetectionProgress] = useState(0);
   const [isFaceDetectionReady, setIsFaceDetectionReady] = useState(false);
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
   const [isDetectingFaces, setIsDetectingFaces] = useState(false);
   const [selectedFaceIds, setSelectedFaceIds] = useState<string[]>([]);
   const [faceQualityScores, setFaceQualityScores] = useState<{[key: string]: number}>({});
@@ -174,30 +175,48 @@ export default function MainMenuPage() {
 
   // Initialize face-api for detection and UI
   useEffect(() => {
-    // Face-API initialization disabled for model management mode
-    // The actual face detection is done via Python GUI tool
-    // const initializeFaceAPI = async () => {
-    //   try {
-    //     const modelPath = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js-models@master';
-    //     
-    //     console.log('Loading face-api models...');
-    //     await faceapi.nets.tinyFaceDetector.loadFromUri(`${modelPath}/tiny_face_detector`);
-    //     console.log('Tiny face detector loaded');
-    //     
-    //     await faceapi.nets.faceLandmark68Net.loadFromUri(`${modelPath}/face_landmark_68`);
-    //     console.log('Face landmarks loaded');
-    //     
-    //     setIsFaceDetectionReady(true);
-    //     console.log('Face-API initialized successfully');
-    //   } catch (error) {
-    //     console.error('Face-API initialization error:', error);
-    //     setIsFaceDetectionReady(false);
-    //   }
-    // };
-    // 
-    // initializeFaceAPI();
-    setIsFaceDetectionReady(true); // Set to true for model management mode
-  }, []);
+    const initializeFaceAPI = async () => {
+      console.log('Face-API initialization started...');
+      setIsLoadingModels(true);
+      
+      // Timeout after 10 seconds
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout')), 10000);
+      });
+      
+      try {
+        const modelPath = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js-models@master';
+        
+        // Try to load models with timeout
+        await Promise.race([
+          Promise.all([
+            faceapi.nets.tinyYolov2.loadFromUri(modelPath),
+            faceapi.nets.faceLandmark68Net.loadFromUri(modelPath),
+            faceapi.nets.faceRecognitionNet.loadFromUri(modelPath)
+          ]),
+          timeoutPromise
+        ]);
+        
+        setIsFaceDetectionReady(true);
+        console.log('Face-API initialized successfully');
+        toast({
+          title: "Yüz Tanıma Aktif",
+          description: "Otomatik yüz tespiti kullanılabilir.",
+        });
+      } catch (error) {
+        console.warn('Face-API initialization failed, using manual mode:', error);
+        setIsFaceDetectionReady(false);
+        toast({
+          title: "Manuel Mod",
+          description: "Yüz tanıma modelleri yüklenemedi. Manuel seçim modu kullanılacak.",
+        });
+      } finally {
+        setIsLoadingModels(false);
+      }
+    };
+    
+    initializeFaceAPI();
+  }, [toast]);
   
   // Preload images
   useEffect(() => {
@@ -225,12 +244,26 @@ export default function MainMenuPage() {
   // Face detection functions
   const detectFacesInFiles = async (files: File[]) => {
     if (!isFaceDetectionReady) {
+      // Fallback: Create manual face selection from uploaded images
+      const manualFaces: DetectedFace[] = files.map((file, index) => ({
+        id: `manual-${index}-${Date.now()}`,
+        imageData: URL.createObjectURL(file),
+        confidence: 95, // Default confidence for manual selection
+        quality: 'good' as const,
+        boundingBox: { x: 0, y: 0, width: 100, height: 100 },
+        landmarks: null,
+        descriptor: undefined,
+        originalFile: file,
+        isSelected: false,
+      }));
+      
       toast({
-        title: "Uyarı", 
-        description: "Yüz tanıma sistemi henüz hazır değil. Fotoğraflar yüklendi ancak yüz tespiti yapılamadı.",
-        variant: "destructive",
+        title: "Manuel Seçim Modu", 
+        description: `${files.length} fotoğraf yüklendi. Otomatik yüz tespiti yapılamadığı için fotoğrafları manuel olarak seçebilirsiniz.`,
+        variant: "default",
       });
-      return [];
+      
+      return manualFaces;
     }
 
     setIsDetectingFaces(true);
@@ -246,36 +279,65 @@ export default function MainMenuPage() {
         // Use face-api.js for detection and UI
         const img = await loadImageFromFile(file);
         const detections = await faceapi
-          .detectAllFaces(img, new faceapi.TinyFaceDetectorOptions())
+          .detectAllFaces(img, new faceapi.TinyYolov2Options())
           .withFaceLandmarks();
 
-        for (let faceIndex = 0; faceIndex < detections.length; faceIndex++) {
-          const detection = detections[faceIndex];
-          const croppedFace = await cropFaceFromImage(img, detection.detection.box);
-          const quality = assessFaceQuality(detection);
-          
-          const face: DetectedFace = {
-            id: `${fileIndex}-${faceIndex}-${Date.now()}`,
-            imageData: croppedFace,
-            confidence: detection.detection.score * 100,
-            quality,
-            boundingBox: {
-              x: detection.detection.box.x,
-              y: detection.detection.box.y, 
-              width: detection.detection.box.width,
-              height: detection.detection.box.height,
-            },
-            landmarks: detection.landmarks,
-            descriptor: undefined, // Will be filled server-side during submission
+        if (detections.length === 0) {
+          // No faces detected, add manual option
+          const manualFace: DetectedFace = {
+            id: `manual-${fileIndex}-${Date.now()}`,
+            imageData: URL.createObjectURL(file),
+            confidence: 95,
+            quality: 'good' as const,
+            boundingBox: { x: 0, y: 0, width: 100, height: 100 },
+            landmarks: null,
+            descriptor: undefined,
             originalFile: file,
             isSelected: false,
           };
-          
-          allFaces.push(face);
+          allFaces.push(manualFace);
+        } else {
+          for (let faceIndex = 0; faceIndex < detections.length; faceIndex++) {
+            const detection = detections[faceIndex];
+            const croppedFace = await cropFaceFromImage(img, detection.detection.box);
+            const quality = assessFaceQuality(detection);
+            
+            const face: DetectedFace = {
+              id: `${fileIndex}-${faceIndex}-${Date.now()}`,
+              imageData: croppedFace,
+              confidence: detection.detection.score * 100,
+              quality,
+              boundingBox: {
+                x: detection.detection.box.x,
+                y: detection.detection.box.y, 
+                width: detection.detection.box.width,
+                height: detection.detection.box.height,
+              },
+              landmarks: detection.landmarks,
+              descriptor: undefined, // Will be filled server-side during submission
+              originalFile: file,
+              isSelected: false,
+            };
+            
+            allFaces.push(face);
+          }
         }
         
       } catch (error) {
         console.error(`Face detection error for file ${file.name}:`, error);
+        // Fallback to manual selection for this file
+        const manualFace: DetectedFace = {
+          id: `manual-${fileIndex}-${Date.now()}`,
+          imageData: URL.createObjectURL(file),
+          confidence: 95,
+          quality: 'good' as const,
+          boundingBox: { x: 0, y: 0, width: 100, height: 100 },
+          landmarks: null,
+          descriptor: undefined,
+          originalFile: file,
+          isSelected: false,
+        };
+        allFaces.push(manualFace);
       }
     }
 
@@ -933,8 +995,39 @@ export default function MainMenuPage() {
                           <Label className="text-gray-700 font-medium mb-2 block">
                             Referans Fotoğraflarınız
                           </Label>
+                          
+                          {/* Model Loading Indicator */}
+                          {isLoadingModels && (
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                              <div className="flex items-center gap-3">
+                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                                <div>
+                                  <p className="text-sm font-medium text-blue-800">Yüz tanıma modelleri yükleniyor...</p>
+                                  <p className="text-xs text-blue-600">Bu işlem birkaç saniye sürebilir</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Model Loading Failed */}
+                          {!isLoadingModels && !isFaceDetectionReady && (
+                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                              <div className="flex items-center gap-3">
+                                <AlertCircle className="h-5 w-5 text-yellow-600" />
+                                <div>
+                                  <p className="text-sm font-medium text-yellow-800">Yüz tanıma sistemi kullanılamıyor</p>
+                                  <p className="text-xs text-yellow-600">Fotoğraflar yüklenecek ancak otomatik yüz tespiti yapılamayacak</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          
                           <div 
-                            className="border-2 border-dashed border-orange-300 rounded-lg p-8 text-center bg-orange-50/50 hover:bg-orange-50 transition-colors"
+                            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                              isLoadingModels 
+                                ? 'border-gray-300 bg-gray-50/50 cursor-not-allowed' 
+                                : 'border-orange-300 bg-orange-50/50 hover:bg-orange-50 cursor-pointer'
+                            }`}
                             onDrop={async (e) => {
                               e.preventDefault();
                               const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
