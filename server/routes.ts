@@ -1510,12 +1510,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Geçersiz TC kimlik numarası' });
       }
       
-      // Önceki talep kontrolü
-      const existingRequest = await storage.getPhotoRequestByTc(requestData.tcNumber);
-      if (existingRequest) {
+      // Önceki session kontrolü
+      const existingSession = await storage.getPhotoMatchingSessionByTc(requestData.tcNumber);
+      if (existingSession) {
         return res.status(400).json({ 
-          message: 'Bu TC kimlik numarası için zaten bir talep mevcut',
-          existingRequest 
+          message: 'Bu TC kimlik numarası için zaten bir yüz eşleştirme session\'ı mevcut',
+          existingSession 
         });
       }
       
@@ -1526,26 +1526,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('- Face Data (parsed):', requestData.faceData ? `${Array.isArray(requestData.faceData) ? requestData.faceData.length : 'VAR'} adet` : 'YOK (KAYBOLDU!)');
       console.log('- Selected Camp Days:', selectedCampDays);
       
-      // İsteği veritabanına kaydet (Python GUI ayrı çalışacak)
-      console.log('Fotoğraf isteği veritabanına kaydediliyor...');
-      const photoRequest = await storage.createPhotoRequest(requestData);
-      
-      // Seçilen kamp günlerini kaydet
-      if (selectedCampDays && Array.isArray(selectedCampDays) && selectedCampDays.length > 0) {
-        for (const campDayId of selectedCampDays) {
-          await storage.createPhotoRequestDay({
-            photoRequestId: photoRequest.id,
-            campDayId: campDayId
-          });
-        }
-      }
+      // Photo matching session oluştur (doğru veri modeli)
+      console.log('Photo matching session oluşturuluyor...');
+      const matchingSession = await storage.createPhotoMatchingSession({
+        tcNumber: requestData.tcNumber,
+        uploadedPhotoPath: requestData.uploadedPhotoPath,
+        selectedFaceData: requestData.faceData,
+        selectedModelIds: selectedCampDays || [], // Face model IDs
+        timeoutAt: new Date(Date.now() + 3 * 60 * 60 * 1000), // 3 saat
+        status: 'face_detection'
+      });
       
       res.status(201).json({
-        ...photoRequest,
-        selectedCampDaysCount: selectedCampDays?.length || 0,
+        ...matchingSession,
+        selectedModelCount: selectedCampDays?.length || 0,
         uploadedFilesCount: uploadedFilesCount || 0,
-        downloadUrl: `/api/download-results/${photoRequest.tcNumber}`,
-        message: 'İsteğiniz başarıyla kaydedildi. ZIP dosyası hazırlandığında indirebilirsiniz.'
+        downloadUrl: `/api/download-results/${matchingSession.tcNumber}`,
+        message: 'Yüz eşleştirme işlemi başlatıldı. Sonuçlar hazırlandığında indirebilirsiniz.'
       });
     } catch (error) {
       console.error('Photo request creation error:', error);
@@ -1565,10 +1562,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Geçersiz TC kimlik numarası' });
       }
 
-      // Photo request kontrolü
-      const photoRequest = await storage.getPhotoRequestByTc(tcNumber);
-      if (!photoRequest) {
-        return res.status(404).json({ message: 'Bu TC için fotoğraf isteği bulunamadı' });
+      // Photo matching session kontrolü
+      const matchingSession = await storage.getPhotoMatchingSessionByTc(tcNumber);
+      if (!matchingSession) {
+        return res.status(404).json({ message: 'Bu TC için yüz eşleştirme session\'ı bulunamadı' });
       }
 
       // Şu an mock ZIP dosyası oluşturuyoruz

@@ -654,6 +654,11 @@ export const insertFaceModelSchema = createInsertSchema(faceModels).omit({
   updatedAt: true,
 });
 
+// Extended face model type including createdBy for internal use
+export const createFaceModelSchema = insertFaceModelSchema.extend({
+  createdBy: z.string(),
+});
+
 export const insertPhotoMatchingSessionSchema = createInsertSchema(photoMatchingSessions).omit({
   id: true,
   queuePosition: true,
@@ -724,6 +729,7 @@ export type PhotoRequestDay = typeof photoRequestDays.$inferSelect;
 export type InsertPhotoRequestDay = z.infer<typeof insertPhotoRequestDaySchema>;
 export type FaceModel = typeof faceModels.$inferSelect;
 export type InsertFaceModel = z.infer<typeof insertFaceModelSchema>;
+export type CreateFaceModel = z.infer<typeof createFaceModelSchema>;
 export type PhotoMatchingSession = typeof photoMatchingSessions.$inferSelect;
 export type InsertPhotoMatchingSession = z.infer<typeof insertPhotoMatchingSessionSchema>;
 export type FaceModelMatchingResult = typeof faceModelMatchingResults.$inferSelect;

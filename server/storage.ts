@@ -65,6 +65,7 @@ import {
   type InsertPhotoRequestDay,
   type FaceModel,
   type InsertFaceModel,
+  type CreateFaceModel,
   type PhotoMatchingSession,
   type InsertPhotoMatchingSession,
   type FaceModelMatchingResult,
@@ -1456,10 +1457,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Face models operations
-  async createFaceModel(insertModel: InsertFaceModel): Promise<FaceModel> {
+  async createFaceModel(insertModel: CreateFaceModel): Promise<FaceModel> {
     const [model] = await db
       .insert(faceModels)
-      .values(insertModel)
+      .values([insertModel])
       .returning();
     return model;
   }
@@ -1493,6 +1494,11 @@ export class DatabaseStorage implements IStorage {
       .values(insertSession)
       .returning();
     return session;
+  }
+
+  async getPhotoMatchingSessionByTc(tcNumber: string): Promise<PhotoMatchingSession | undefined> {
+    const [session] = await db.select().from(photoMatchingSessions).where(eq(photoMatchingSessions.tcNumber, tcNumber));
+    return session || undefined;
   }
 
   async getPhotoMatchingSession(id: string): Promise<PhotoMatchingSession | undefined> {
