@@ -17,10 +17,23 @@ export async function apiRequest(
 ): Promise<Response> {
   const method = options?.method || 'GET';
   const body = options?.body;
-  const headers = {
-    ...(body ? { "Content-Type": "application/json" } : {}),
-    ...(options?.headers || {})
-  };
+  
+  // Auth token ekle
+  const token = localStorage.getItem('auth_token');
+  
+  const headers: Record<string, string> = {};
+  
+  if (body) {
+    headers["Content-Type"] = "application/json";
+  }
+  
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  
+  if (options?.headers) {
+    Object.assign(headers, options.headers);
+  }
 
   const res = await fetch(url, {
     method,
