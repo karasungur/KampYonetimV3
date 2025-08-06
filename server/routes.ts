@@ -1736,8 +1736,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // GERÇEKLESİTIRİLMİS COSINE SIMILARITY ALGORITMASI (Python koduna dayalı)
               console.log('🎯 Gerçek cosine similarity hesaplanıyor...');
               
-              // Rastgele embedding'ler için daha düşük threshold
-              const SIM_THRESHOLD = 0.15; // 0.35'ten düşürüldü
+              // Kullanıcı tarafından ayarlanan threshold
+              const SIM_THRESHOLD = 0.5; // Kullanıcı talebi ile 0.5'e ayarlandı
               
               // Cosine similarity fonksiyonu (normalize edilmiş embeddingler için dot product)
               const cosineSimilarity = (embA: number[], embB: number[]): number => {
@@ -1828,7 +1828,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Eğer eşleşme yoksa threshold'u düşür ve tekrar dene
               if (matches.length === 0 && checkedPhotos > 0) {
                 console.log(`⚠️ Hiç eşleşme bulunamadı. Threshold ${SIM_THRESHOLD} çok yüksek olabilir.`);
-                const FALLBACK_THRESHOLD = 0.05;
+                const FALLBACK_THRESHOLD = 0.3; // Fallback threshold da yükseltildi
                 console.log(`🔄 Fallback threshold ${FALLBACK_THRESHOLD} ile tekrar deneniyor...`);
                 
                 for (const [photoPath, photoEmbedding] of photoEntries) {
@@ -1857,7 +1857,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 Model: ${model.name}
 İşlem Tarihi: ${new Date().toLocaleDateString('tr-TR')}
 Kullanıcı Embedding Boyutu: ${userEmbedding.length}
-Eşleştirme Threshold: 0.15 (rastgele embedding'ler için optimize edildi)
+Eşleştirme Threshold: ${SIM_THRESHOLD} (kullanıcı talebi ile ayarlandı)
 Algoritma: Gerçek Cosine Similarity (normalize edilmiş embeddingler)
 Toplam Eşleşme: ${matches.length}
 Kontrol Edilen Fotoğraf: ${allPhotos.length}
