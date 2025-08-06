@@ -13,18 +13,17 @@ This is a web-based management system for the AK Party Youth Branches Consultati
 
 ## Recent Changes
 
-### January 30, 2025 - Hybrid Face Recognition Implementation ✅ COMPLETE
-- **Hybrid Architecture Complete**: Face-API (browser, cropping) + Buffalo_L Compatible (server, embedding/matching)
-- **Buffalo_L Compatible Extractor**: 512-dimensional L2-normalized embeddings using built-in Python libraries
-- **Client-Side Optimization**: Removed InsightFace browser loading, only Face-API for detection/cropping
-- **Server-Side Processing**: Python script generates InsightFace Buffalo_L compatible embeddings
-- **Real Cosine Similarity Algorithm**: Implemented exact Python algorithm (np.dot) in Node.js
-- **Threshold Optimization**: Lowered from 0.35 to 0.15 with 0.05 fallback for better match detection
-- **Debug Enhancement**: Added top-5 similarity value logging for troubleshooting
-- **TypeScript Fixes**: Resolved function scope and Map iteration compatibility issues
-- **Embedding Size Matching**: Dynamic embedding size based on user input (512D for Buffalo_L, 128D fallback)
-- **Algorithm Accuracy**: Matches Python's approach: normalized embeddings + dot product + similarity sorting
-- **Production Ready**: Buffalo_L compatible embeddings with deterministic feature extraction
+### January 30, 2025 - Model Architecture Compatibility Fix ✅ COMPLETE
+- **Critical Architecture Bug Fixed**: Resolved training_package folder structure mismatch
+- **Python GUI Compatibility**: Face matching now uses recursive folder search like Python GUI (os.walk)
+- **Folder Structure Alignment**: Fixed hardcoded 'denemelik' folder - now searches all person folders
+- **Buffalo_L Script Created**: New `buffalo_compatible_extractor.py` with 512-dimensional embeddings
+- **CPU Fallback Enhanced**: TensorFlow.js backend switching for WebGL/WASM compatibility
+- **Threshold Set to 0.5**: User-requested threshold value implemented
+- **Recursive Photo Discovery**: Python GUI compatible folder scanning (kişi_adı/photos.jpg)
+- **Console Error Resolution**: "InsightFace Buffalo_L session not available" fixed
+- **TypeScript Error Fixes**: Backend API type safety improvements
+- **Production Ready**: System aligned with Python GUI expectations for real deployment
 
 ### January 29, 2025 - Evening
 - **Face Model Management System Complete**: Successfully implemented full Google Drive integration

@@ -1706,30 +1706,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log(`🔍 Node.js yüz eşleştirmesi başlıyor...`);
               console.log(`📊 User embedding boyutu: ${userEmbedding.length}`);
               
-              // Model klasöründeki tüm fotoğrafları bul
+              // Model klasöründeki tüm fotoğrafları bul (Python GUI uyumlu recursive arama)
               const photoExtensions = ['.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG'];
               const allPhotos: string[] = [];
               
-              // Ana model dizinindeki fotoğraflar
-              const modelFiles = fs.readdirSync(modelPath);
-              for (const file of modelFiles) {
-                const filePath = path.join(modelPath, file);
-                if (fs.statSync(filePath).isFile() && photoExtensions.some(ext => file.endsWith(ext))) {
-                  allPhotos.push(filePath);
-                }
-              }
-              
-              // Denemelik klasöründeki fotoğraflar
-              const denemelikPath = path.join(modelPath, 'denemelik');
-              if (fs.existsSync(denemelikPath)) {
-                const denemelikFiles = fs.readdirSync(denemelikPath);
-                for (const file of denemelikFiles) {
-                  const filePath = path.join(denemelikPath, file);
-                  if (fs.statSync(filePath).isFile() && photoExtensions.some(ext => file.endsWith(ext))) {
-                    allPhotos.push(filePath);
+              // Recursive fonksiyon (Python GUI'deki os.walk gibi)
+              const findPhotosRecursive = (dirPath: string) => {
+                const items = fs.readdirSync(dirPath);
+                for (const item of items) {
+                  const itemPath = path.join(dirPath, item);
+                  const stats = fs.statSync(itemPath);
+                  
+                  if (stats.isDirectory()) {
+                    // Sistem dosyalarını atla
+                    if (!item.startsWith('.') && item !== 'node_modules') {
+                      console.log(`📁 Kişi klasörü bulundu: ${item}`);
+                      findPhotosRecursive(itemPath);
+                    }
+                  } else if (stats.isFile() && photoExtensions.some(ext => item.endsWith(ext))) {
+                    allPhotos.push(itemPath);
+                    console.log(`📸 Fotoğraf bulundu: ${path.relative(modelPath, itemPath)}`);
                   }
                 }
-              }
+              };
+              
+              // Python GUI training_package yapısındaki tüm fotoğrafları bul
+              findPhotosRecursive(modelPath);
               
               console.log(`📸 Toplam ${allPhotos.length} fotoğraf bulundu`);
               
