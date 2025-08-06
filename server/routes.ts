@@ -2199,7 +2199,8 @@ Bu dosyalar şu anda yüz eşleştirme sisteminin çalıştığını doğrular.
       console.log(`Auto-starting download for new model: ${model.name}, file ID: ${fileId}`);
       
       // Otomatik indirme işlemini başlat (background process)
-      (async () => {
+      setImmediate(async () => {
+        console.log(`Background process started for model: ${model.name}`);
         try {
           const tempZipPath = path.join('/tmp', `${model.name}_${Date.now()}.zip`);
           console.log(`Starting automatic Google Drive download to: ${tempZipPath}`);
@@ -2235,7 +2236,7 @@ Bu dosyalar şu anda yüz eşleştirme sisteminin çalıştığını doğrular.
             errorMessage: (error as Error).message
           });
         }
-      })();
+      });
       
       res.status(201).json(model);
     } catch (error: any) {
