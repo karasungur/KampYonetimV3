@@ -2118,18 +2118,38 @@ oluşturulan fotoğraflar bu ZIP dosyasında yer alacaktır.
   app.post('/api/face-models/:id/download', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
+      console.log(`Download request for model: ${id}`);
+      
       const model = await storage.getFaceModel(id);
       
       if (!model) {
+        console.log(`Model not found: ${id}`);
         return res.status(404).json({ message: 'Model bulunamadı' });
       }
       
+      console.log(`Model status: ${model.status}, Google Drive link: ${model.googleDriveLink}`);
+      
       if (model.status === 'downloading' || model.status === 'extracting') {
+        console.log(`Model already processing: ${model.status}`);
         return res.status(400).json({ message: 'Model zaten işleniyor' });
       }
       
       if (model.status === 'ready') {
+        console.log(`Model already ready: ${model.status}`);
         return res.status(400).json({ message: 'Model zaten hazır durumda' });
+      }
+      
+      // Google Drive link kontrolü
+      const fileId = extractGoogleDriveFileId(model.googleDriveLink);
+      console.log(`Extracted file ID: ${fileId} from link: ${model.googleDriveLink}`);
+      
+      if (!fileId) {
+        console.log(`Invalid Google Drive link: ${model.googleDriveLink}`);
+        await storage.updateFaceModel(id, {
+          status: 'error',
+          errorMessage: 'Geçersiz Google Drive linki'
+        });
+        return res.status(400).json({ message: 'Geçersiz Google Drive linki' });
       }
       
       // İndirme işlemini başlat
@@ -2139,15 +2159,7 @@ oluşturulan fotoğraflar bu ZIP dosyasında yer alacaktır.
         errorMessage: null
       });
       
-      // Async olarak indirme işlemini başlat
-      const fileId = extractGoogleDriveFileId(model.googleDriveLink);
-      if (!fileId) {
-        await storage.updateFaceModel(id, {
-          status: 'error',
-          errorMessage: 'Geçersiz Google Drive linki'
-        });
-        return res.status(400).json({ message: 'Geçersiz Google Drive linki' });
-      }
+      console.log(`Starting download for model: ${model.name}, file ID: ${fileId}`);
       
       // Background process olarak çalıştır
       (async () => {
