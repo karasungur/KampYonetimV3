@@ -2091,7 +2091,7 @@ oluşturulan fotoğraflar bu ZIP dosyasında yer alacaktır.
       const model = await storage.createFaceModel({
         ...validatedData,
         createdBy: req.user!.id,
-      });
+      } as any);
       
       // Log activity
       await storage.logActivity({
