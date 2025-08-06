@@ -321,7 +321,7 @@ export const faceModels = pgTable("face_models", {
 export const photoMatchingSessions = pgTable("photo_matching_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tcNumber: varchar("tc_number", { length: 11 }).notNull(),
-  uploadedPhotoPath: varchar("uploaded_photo_path").notNull(), // Yüklenen fotoğraf yolu
+  uploadedPhotoPath: varchar("uploaded_photo_path"), // Yüklenen fotoğraf yolu (nullable - daha sonra doldurulur)
   selectedFaceData: jsonb("selected_face_data"), // Kullanıcının seçtiği yüz verileri
   selectedModelIds: jsonb("selected_model_ids").notNull(), // Seçilen model ID'leri array
   status: photoRequestStatusEnum("status").notNull().default('face_detection'),

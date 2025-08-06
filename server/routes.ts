@@ -1530,7 +1530,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('Photo matching session oluşturuluyor...');
       const matchingSession = await storage.createPhotoMatchingSession({
         tcNumber: requestData.tcNumber,
-        uploadedPhotoPath: requestData.uploadedPhotoPath,
+        uploadedPhotoPath: null, // Daha sonra doldurulacak
         selectedFaceData: requestData.faceData,
         selectedModelIds: selectedCampDays || [], // Face model IDs
         timeoutAt: new Date(Date.now() + 3 * 60 * 60 * 1000), // 3 saat
