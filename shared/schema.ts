@@ -648,6 +648,7 @@ export const insertFaceModelSchema = createInsertSchema(faceModels).omit({
   extractedSize: true,
   faceCount: true,
   trainingDataPath: true,
+  createdBy: true, // Bu alanı auth middleware'den alıyoruz
   processedAt: true,
   createdAt: true,
   updatedAt: true,
