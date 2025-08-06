@@ -21,21 +21,41 @@ def extract_real_insightface_embedding(image_path):
     Gerçek InsightFace Buffalo_L ile embedding çıkarımı
     """
     try:
-        # Önce typing_extensions'ı kontrol et
-        try:
-            import typing_extensions
-        except ImportError:
-            # typing_extensions yok, sistem ile dene
-            import sys
-            sys.path.insert(0, '/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages')
-            import typing_extensions
+        # Environment path'lerini düzelt
+        import sys
+        import os
+        
+        # Replit environment paths
+        additional_paths = [
+            '/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages',
+            '/nix/store/yaps09f01jp3fd1405qlr0qz6haf6z03-python3.11-pip-25.0.1/lib/python3.11/site-packages'
+        ]
+        
+        for path in additional_paths:
+            if path not in sys.path:
+                sys.path.insert(0, path)
+        
+        # Environment variable olarak da set et
+        current_pythonpath = os.environ.get('PYTHONPATH', '')
+        new_paths = ':'.join(additional_paths)
+        os.environ['PYTHONPATH'] = f"{new_paths}:{current_pythonpath}"
+        
+        print_debug(f"Python paths updated: {additional_paths}")
+        
+        import typing_extensions  # Bu artık çalışmalı
+        print_debug("✅ typing_extensions import başarılı")
         
         # Kütüphaneleri import et
         import numpy as np
+        print_debug("✅ numpy import başarılı")
         import cv2
+        print_debug("✅ cv2 import başarılı")
         import torch
+        print_debug("✅ torch import başarılı")
         import onnxruntime
+        print_debug("✅ onnxruntime import başarılı")
         from insightface.app import FaceAnalysis
+        print_debug("✅ insightface import başarılı")
         
         print_debug("InsightFace Buffalo_L başlatılıyor...")
         
@@ -90,13 +110,9 @@ def extract_real_insightface_embedding(image_path):
             raise RuntimeError(f"typing_extensions modülü eksik: {e}")
         
     except Exception as e:
-        print_debug(f"Gerçek InsightFace hatası: {e}")
+        print_debug(f"InsightFace hatası: {e}")
         print_debug(f"Hata türü: {type(e).__name__}")
         traceback.print_exc(file=sys.stderr)
-        # Fallback'e geç
-        return extract_fallback_embedding(image_path)
-    except Exception as e:
-        print_debug(f"InsightFace hatası: {e}")
         # Fallback'e geç
         return extract_fallback_embedding(image_path)
 
@@ -201,12 +217,45 @@ def extract_basic_fallback(image_path):
         file_size = len(image_data)
         print_debug(f"Dosya boyutu: {file_size} bytes")
         
-        # Hash tabanlı özellikler
-        features = []
+        # IMPROVED: Web ile aynı hash-based embedding algoritması
+        import hashlib
         
-        # 1. MD5 ve SHA1 hash'lerinden özellikler
+        # Multiple hash'ler ile daha iyi dağılım (web ile aynı)
+        sha256_hash = hashlib.sha256(image_data).hexdigest()
         md5_hash = hashlib.md5(image_data).hexdigest()
         sha1_hash = hashlib.sha1(image_data).hexdigest()
+        
+        print_debug(f"Dosya hash'leri: SHA256:{sha256_hash[:8]}... MD5:{md5_hash[:8]}... SHA1:{sha1_hash[:8]}...")
+        
+        # Web ile aynı algoritma
+        features = []
+        for i in range(512):
+            # 3 farklı hash'ten rotating pattern (web ile aynı)
+            if i % 3 == 0:
+                hash_to_use = sha256_hash
+            elif i % 3 == 1:
+                hash_to_use = md5_hash
+            else:
+                hash_to_use = sha1_hash
+                
+            hash_index = (i * 2) % len(hash_to_use)
+            hash_chunk = hash_to_use[hash_index:hash_index + 2]
+            try:
+                hex_value = int(hash_chunk, 16)
+            except:
+                hex_value = 128
+            
+            # Gaussian distribution için Box-Muller transform (web ile aynı)
+            u1 = hex_value / 255.0
+            try:
+                u2_char = hash_to_use[(i + 1) % len(hash_to_use)]
+                u2 = int(u2_char, 16) / 15.0
+            except:
+                u2 = 0.5
+                
+            import math
+            gaussian = math.sqrt(-2 * math.log(u1 + 0.001)) * math.cos(2 * math.pi * u2)
+            features.append(gaussian * 0.5)  # Scale down for better distribution
         
         # Hash'lerden sayısal özellikler çıkar
         for i in range(0, min(64, len(md5_hash)), 2):
@@ -271,16 +320,16 @@ def extract_basic_fallback(image_path):
         else:
             normalized_embedding = embedding
         
-        print_debug(f"Basic fallback embedding oluşturuldu: boyut={len(normalized_embedding)}, norm={norm:.6f}")
+        print_debug(f"Web-compatible embedding oluşturuldu: boyut={len(normalized_embedding)}, norm={norm:.6f}")
         
         return {
             'success': True,
             'embedding': normalized_embedding,
             'embedding_size': len(normalized_embedding),
-            'model': 'Basic Fallback (Built-in Python)',
+            'model': 'Web-Compatible Hash-based (512D)',
             'confidence': 0.5,
             'normalized': True,
-            'method': 'Hash + Binary Analysis',
+            'method': 'Multi-Hash Gaussian (Web Compatible)',
             'fallback': True
         }
         
@@ -310,15 +359,9 @@ def main():
     
     print_debug(f"Embedding çıkarımı başlıyor: {image_path}")
     
-    # typing_extensions sorunu var, direkt basic fallback kullan
-    print_debug("InsightFace'e geçmeden önce typing_extensions test...")
-    try:
-        import typing_extensions
-        print_debug("typing_extensions OK, gerçek InsightFace deneniyor...")
-        result = extract_real_insightface_embedding(image_path)
-    except ImportError:
-        print_debug("typing_extensions yok, direkt basic fallback kullanılıyor...")
-        result = extract_basic_fallback(image_path)
+    # Gerçek InsightFace'i dene (path düzeltme ile)
+    print_debug("Gerçek InsightFace Buffalo_L deneniyor...")
+    result = extract_real_insightface_embedding(image_path)
     
     print(json.dumps(result))
 
