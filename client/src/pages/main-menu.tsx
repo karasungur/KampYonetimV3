@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import * as faceapi from '@vladmandic/face-api';
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -155,6 +156,7 @@ export default function MainMenuPage() {
   const [faceDetectionProgress, setFaceDetectionProgress] = useState(0);
   const [isFaceDetectionReady, setIsFaceDetectionReady] = useState(false);
   const [isLoadingModels, setIsLoadingModels] = useState(true);
+
   const [isDetectingFaces, setIsDetectingFaces] = useState(false);
   const [selectedFaceIds, setSelectedFaceIds] = useState<string[]>([]);
   const [faceQualityScores, setFaceQualityScores] = useState<{[key: string]: number}>({});
@@ -173,43 +175,62 @@ export default function MainMenuPage() {
     isSelected: boolean;
   }
 
+
   // Initialize face-api for detection and UI
   useEffect(() => {
     const initializeFaceAPI = async () => {
-      console.log('Face-API initialization started...');
+      console.log('Vladimir Mandic Face-API initialization started...');
       setIsLoadingModels(true);
       
-      // Timeout after 10 seconds
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Timeout')), 10000);
-      });
-      
       try {
-        const modelPath = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js-models@master';
+        // Vladimir Mandic's face-api uses different model URLs and structure
+        const modelPath = 'https://vladmandic.github.io/face-api/model';
         
-        // Try to load models with timeout
-        await Promise.race([
-          Promise.all([
-            faceapi.nets.tinyYolov2.loadFromUri(modelPath),
-            faceapi.nets.faceLandmark68Net.loadFromUri(modelPath),
-            faceapi.nets.faceRecognitionNet.loadFromUri(modelPath)
-          ]),
-          timeoutPromise
-        ]);
+        console.log('Loading TinyFaceDetector model...');
+        await faceapi.nets.tinyFaceDetector.load(modelPath);
+        console.log('TinyFaceDetector loaded');
+        
+        console.log('Loading FaceLandmark68Net model...');
+        await faceapi.nets.faceLandmark68Net.load(modelPath);
+        console.log('FaceLandmark68Net loaded');
+        
+        console.log('Loading FaceRecognitionNet model...');
+        await faceapi.nets.faceRecognitionNet.load(modelPath);
+        console.log('FaceRecognitionNet loaded');
         
         setIsFaceDetectionReady(true);
-        console.log('Face-API initialized successfully');
+        console.log('Vladimir Mandic Face-API initialized successfully');
         toast({
           title: "Yüz Tanıma Aktif",
-          description: "Otomatik yüz tespiti kullanılabilir.",
+          description: "Vladimir Mandic Face-API ile yüz tespiti hazır.",
         });
       } catch (error) {
-        console.warn('Face-API initialization failed, using manual mode:', error);
-        setIsFaceDetectionReady(false);
-        toast({
-          title: "Manuel Mod",
-          description: "Yüz tanıma modelleri yüklenemedi. Manuel seçim modu kullanılacak.",
-        });
+        console.warn('Face-API initialization failed, trying alternative CDN:', error);
+        
+        try {
+          // Fallback to jsdelivr CDN
+          const fallbackPath = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
+          
+          await Promise.all([
+            faceapi.nets.tinyFaceDetector.load(fallbackPath),
+            faceapi.nets.faceLandmark68Net.load(fallbackPath),
+            faceapi.nets.faceRecognitionNet.load(fallbackPath)
+          ]);
+          
+          setIsFaceDetectionReady(true);
+          console.log('Face-API loaded from fallback CDN');
+          toast({
+            title: "Yüz Tanıma Aktif",
+            description: "Otomatik yüz tespiti hazır (fallback CDN).",
+          });
+        } catch (fallbackError) {
+          console.warn('All Face-API initialization attempts failed, using manual mode:', fallbackError);
+          setIsFaceDetectionReady(false);
+          toast({
+            title: "Manuel Mod",
+            description: "Yüz tanıma modelleri yüklenemedi. Manuel seçim modu kullanılacak.",
+          });
+        }
       } finally {
         setIsLoadingModels(false);
       }
@@ -276,11 +297,12 @@ export default function MainMenuPage() {
       try {
         setFaceDetectionProgress(Math.round((fileIndex / files.length) * 100));
         
-        // Use face-api.js for detection and UI
+        // Use Vladimir Mandic's face-api.js for detection and UI
         const img = await loadImageFromFile(file);
         const detections = await faceapi
-          .detectAllFaces(img, new faceapi.TinyYolov2Options())
-          .withFaceLandmarks();
+          .detectAllFaces(img, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks()
+          .withFaceDescriptors();
 
         if (detections.length === 0) {
           // No faces detected, add manual option
@@ -314,7 +336,7 @@ export default function MainMenuPage() {
                 height: detection.detection.box.height,
               },
               landmarks: detection.landmarks,
-              descriptor: undefined, // Will be filled server-side during submission
+              descriptor: detection.descriptor ? Array.from(detection.descriptor) : undefined,
               originalFile: file,
               isSelected: false,
             };
