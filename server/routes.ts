@@ -1713,20 +1713,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             continue;
           }
           
-          // JSON ve PKL dosyalarını kontrol et (JSON'u tercih et)
+          // JSON veritabanını kontrol et (sadece JSON format destekleniyor)
           const jsonDbPath = path.join(modelPath, 'face_database.json');
-          const faceDbPath = path.join(modelPath, 'face_database.pkl');
           
-          if (!fs.existsSync(jsonDbPath) && !fs.existsSync(faceDbPath)) {
-            console.log(`Ne JSON ne PKL face database bulunamadı: ${modelPath}`);
+          if (!fs.existsSync(jsonDbPath)) {
+            console.log(`JSON face database bulunamadı: ${modelPath} - Güncel face training GUI kullanın`);
             continue;
           }
           
-          if (fs.existsSync(jsonDbPath)) {
-            console.log(`🎯 JSON veritabanı bulundu: ${jsonDbPath}`);
-          } else {
-            console.log(`🗃️ PKL veritabanı bulundu: ${faceDbPath} (JSON tercih edilir)`);
-          }
+          console.log(`🎯 JSON veritabanı bulundu: ${jsonDbPath}`);
           
           // Database-based yüz eşleştirmesi yap (PKL dependency olmadan)
           try {
@@ -1740,21 +1735,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             let modelFaces: any[] = [];
             let dataSource = 'Database';
             
-            // 1. JSON dosyası varsa onu kullan (tercih edilen format)
-            const jsonDbPath = path.join(modelPath, 'face_database.json');
-            if (fs.existsSync(jsonDbPath)) {
-              try {
-                const jsonData = JSON.parse(fs.readFileSync(jsonDbPath, 'utf8'));
-                modelFaces = Object.entries(jsonData).map(([imagePath, faceData]: [string, any]) => ({
-                  imagePath,
-                  embedding: faceData.embedding || faceData.normed_embedding,
-                  ...faceData
-                }));
-                dataSource = 'JSON database';
-                console.log(`✅ JSON database bulundu: ${modelFaces.length} yüz`);
-              } catch (jsonError) {
-                console.log(`❌ JSON database okunamadı: ${jsonError}`);
-              }
+            // JSON veritabanını yükle
+            try {
+              const jsonData = JSON.parse(fs.readFileSync(jsonDbPath, 'utf8'));
+              modelFaces = Object.entries(jsonData).map(([imagePath, faceData]: [string, any]) => ({
+                imagePath,
+                embedding: faceData.embedding || faceData.normed_embedding,
+                ...faceData
+              }));
+              dataSource = 'JSON database';
+              console.log(`✅ JSON database yüklendi: ${modelFaces.length} yüz`);
+            } catch (jsonError) {
+              console.log(`❌ JSON database okunamadı: ${jsonError}`);
             }
             
             // 2. Model'e ait database kayıtlarını kontrol et (future enhancement)
@@ -1869,7 +1861,7 @@ Model: ${model.name}
 Durum: Yüz verisi bulunamadı
 Kontrol Edilenler:
 - JSON database: ${fs.existsSync(jsonDbPath) ? 'VAR (okunamadı)' : 'YOK'}
-- PKL dosyası: ${fs.existsSync(faceDbPath) ? 'VAR (numpy hatası)' : 'YOK'}
+- Sistem: JSON-only format (PKL desteği kaldırıldı)
 
 Bu model için yüz eşleştirmesi yapılamadı.
 `;
