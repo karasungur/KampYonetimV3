@@ -21,8 +21,11 @@ def extract_real_insightface_embedding(image_path):
     Gerçek InsightFace Buffalo_L ile embedding çıkarımı
     """
     try:
-        import torch
+        # Kütüphaneleri import et
+        import numpy as np
         import cv2
+        import torch
+        import onnxruntime
         from insightface.app import FaceAnalysis
         
         print_debug("InsightFace Buffalo_L başlatılıyor...")
@@ -73,6 +76,14 @@ def extract_real_insightface_embedding(image_path):
         
     except ImportError as e:
         print_debug(f"InsightFace import hatası: {e}")
+        # typing_extensions eksikse direkt hata ver
+        if "typing_extensions" in str(e):
+            raise RuntimeError(f"typing_extensions modülü eksik: {e}")
+        
+    except Exception as e:
+        print_debug(f"Gerçek InsightFace hatası: {e}")
+        print_debug(f"Hata türü: {type(e).__name__}")
+        traceback.print_exc(file=sys.stderr)
         # Fallback'e geç
         return extract_fallback_embedding(image_path)
     except Exception as e:

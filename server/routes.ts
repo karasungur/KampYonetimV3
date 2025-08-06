@@ -1726,7 +1726,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Database-based yüz eşleştirmesi yap (PKL dependency olmadan)
           try {
             const userEmbedding = userFaceData[0].embedding;
-            const threshold = 0.1; // Test için çok düşük threshold
+            const threshold = 0.3; // Normal threshold (geri yükseltildi)
             
             console.log(`🎯 Database-based face matching başlatılıyor...`);
             console.log(`📐 User embedding boyutu: ${userEmbedding.length}`);
@@ -1821,7 +1821,13 @@ ${matches.map((match: any, i: number) =>
               
               // Eşleşen yüzlerin kopyalarını ekle (varsa)
               for (const match of matches.slice(0, 10)) { // İlk 10 eşleşme
-                const imageName = match.image_path;
+                let imageName = match.image_path;
+                
+                // JSON key'den gerçek dosya adını çıkar (||face_X kısmını temizle)
+                if (imageName.includes('||')) {
+                  imageName = imageName.split('||')[0];
+                }
+                console.log(`🔍 Aranan resim: ${imageName}`);
                 let imageFound = false;
                 
                 // Full path'i kontrol et
@@ -1837,11 +1843,11 @@ ${matches.map((match: any, i: number) =>
                   }
                 }
                 
-                // Alternatif yolları dene
+                // Alternatif yolları dene (denemelik klasörü öncelikli)
                 if (!imageFound) {
                   const possiblePaths = [
+                    path.join(modelPath, 'denemelik', imageName), // İlk denemelik
                     path.join(modelPath, imageName),
-                    path.join(modelPath, 'denemelik', imageName),
                     path.join(modelPath, 'photos', imageName),
                     path.join(modelPath, 'images', imageName),
                     path.join('./public/uploads', imageName)
