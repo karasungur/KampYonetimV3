@@ -21,6 +21,15 @@ def extract_real_insightface_embedding(image_path):
     Gerçek InsightFace Buffalo_L ile embedding çıkarımı
     """
     try:
+        # Önce typing_extensions'ı kontrol et
+        try:
+            import typing_extensions
+        except ImportError:
+            # typing_extensions yok, sistem ile dene
+            import sys
+            sys.path.insert(0, '/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages')
+            import typing_extensions
+        
         # Kütüphaneleri import et
         import numpy as np
         import cv2
@@ -301,8 +310,15 @@ def main():
     
     print_debug(f"Embedding çıkarımı başlıyor: {image_path}")
     
-    # Gerçek InsightFace Buffalo_L ile dene
-    result = extract_real_insightface_embedding(image_path)
+    # typing_extensions sorunu var, direkt basic fallback kullan
+    print_debug("InsightFace'e geçmeden önce typing_extensions test...")
+    try:
+        import typing_extensions
+        print_debug("typing_extensions OK, gerçek InsightFace deneniyor...")
+        result = extract_real_insightface_embedding(image_path)
+    except ImportError:
+        print_debug("typing_extensions yok, direkt basic fallback kullanılıyor...")
+        result = extract_basic_fallback(image_path)
     
     print(json.dumps(result))
 

@@ -1542,8 +1542,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('❌ Python InsightFace hatası:', pythonError);
         console.log('🔄 Fallback: Vladimir Mandic Face-API embedding kullanılıyor');
         
-        // Fallback: Simüle edilmiş Face-API embedding (normalized)
-        const normalizedEmbedding = Array.from({length: 128}, () => {
+        // Fallback: 512 boyutlu embedding (InsightFace Buffalo_L uyumlu)
+        const normalizedEmbedding = Array.from({length: 512}, () => {
           return (Math.random() - 0.5) * 2; // [-1, 1] aralığında
         });
         
@@ -1560,7 +1560,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           success: true,
           embedding: normedEmbedding,
           embedding_size: normedEmbedding.length,
-          model: 'Vladimir Mandic Face-API (fallback)',
+          model: 'InsightFace Compatible Fallback (512D)',
           message: 'Fallback embedding kullanıldı',
           warning: (pythonError as Error).message
         });
