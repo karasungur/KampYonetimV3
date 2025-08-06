@@ -1726,10 +1726,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Database-based yüz eşleştirmesi yap (PKL dependency olmadan)
           try {
             const userEmbedding = userFaceData[0].embedding;
-            const threshold = 0.3; // Benzerlik eşiği (düşürüldü)
+            const threshold = 0.1; // Test için çok düşük threshold
             
             console.log(`🎯 Database-based face matching başlatılıyor...`);
             console.log(`📐 User embedding boyutu: ${userEmbedding.length}`);
+            console.log(`📐 User embedding örnek değerler:`, userEmbedding.slice(0, 5));
+            console.log(`🎯 Threshold: ${threshold}`);
             
             // Model klasöründeki yardımcı JSON dosyalarını kontrol et
             let modelFaces: any[] = [];
@@ -1759,10 +1761,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             if (modelFaces.length > 0) {
               // JavaScript cosine similarity ile eşleştirme yap
+              let maxSimilarity = 0;
+              let minSimilarity = 1;
+              let similarityCount = 0;
+              
               for (const face of modelFaces) {
                 if (!face.embedding) continue;
                 
                 const similarity = calculateCosineSimilarity(userEmbedding, face.embedding);
+                similarityCount++;
+                
+                // İstatistikler için
+                if (similarity > maxSimilarity) maxSimilarity = similarity;
+                if (similarity < minSimilarity) minSimilarity = similarity;
+                
+                // İlk 3 sonucu debug için göster
+                if (similarityCount <= 3) {
+                  console.log(`🔍 Debug similarity ${similarityCount}: ${face.imagePath} = ${similarity.toFixed(4)}`);
+                  console.log(`   DB embedding örnek:`, face.embedding.slice(0, 5));
+                }
                 
                 if (similarity >= threshold) {
                   matches.push({
@@ -1772,6 +1789,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   });
                 }
               }
+              
+              console.log(`📊 Similarity istatistikleri: Min: ${minSimilarity.toFixed(4)}, Max: ${maxSimilarity.toFixed(4)}, Kontrol edilen: ${similarityCount}`);
               
               // Benzerlik oranına göre sırala
               matches.sort((a, b) => b.similarity - a.similarity);

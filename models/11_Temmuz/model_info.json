@@ -1,0 +1,15 @@
+{
+  "name": "11_Temmuz",
+  "created_at": "2025-08-07T00:49:45.447735",
+  "total_faces": 127,
+  "source_folder": "denemelik",
+  "status": "completed",
+  "description": "InsightFace Buffalo_L modeli - 127 yüz",
+  "type": "face_recognition",
+  "algorithm": "InsightFace Buffalo_L",
+  "threshold": 0.5,
+  "files": {
+    "database": "face_database.json",
+    "photos": "denemelik"
+  }
+}
