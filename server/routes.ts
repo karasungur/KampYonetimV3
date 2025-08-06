@@ -1573,7 +1573,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Session'dan kullanıcının face embedding'ini al
       const userFaceData = matchingSession.selectedFaceData as any[];
-      const selectedModelIds = JSON.parse(matchingSession.selectedModelIds as string) as string[];
+      
+      // selectedModelIds'i güvenli şekilde parse et
+      let selectedModelIds: string[] = [];
+      try {
+        console.log('📋 selectedModelIds raw data:', matchingSession.selectedModelIds);
+        console.log('📋 selectedModelIds type:', typeof matchingSession.selectedModelIds);
+        
+        if (typeof matchingSession.selectedModelIds === 'string') {
+          selectedModelIds = JSON.parse(matchingSession.selectedModelIds);
+        } else if (Array.isArray(matchingSession.selectedModelIds)) {
+          selectedModelIds = matchingSession.selectedModelIds;
+        } else {
+          console.error('❌ selectedModelIds invalid format:', matchingSession.selectedModelIds);
+          return res.status(400).json({ message: 'Geçersiz model seçimi formatı' });
+        }
+        console.log('✅ Parsed selectedModelIds:', selectedModelIds);
+      } catch (parseError) {
+        console.error('❌ JSON parse error for selectedModelIds:', parseError);
+        console.error('❌ Raw data:', matchingSession.selectedModelIds);
+        return res.status(400).json({ message: 'Model seçimi verisi parse edilemedi' });
+      }
       
       let totalMatches = 0;
       let processedModels = 0;
