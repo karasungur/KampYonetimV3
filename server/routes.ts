@@ -2182,6 +2182,8 @@ Bu dosyalar şu anda yüz eşleştirme sisteminin çalıştığını doğrular.
       
       const model = await storage.createFaceModel({
         ...validatedData,
+        status: 'downloading', // Otomatik indirme başlat
+        downloadProgress: 0,
         createdBy: req.user!.id,
       } as any);
       
@@ -2193,6 +2195,47 @@ Bu dosyalar şu anda yüz eşleştirme sisteminin çalıştığını doğrular.
         metadata: { modelId: model.id },
         ipAddress: req.ip,
       });
+      
+      console.log(`Auto-starting download for new model: ${model.name}, file ID: ${fileId}`);
+      
+      // Otomatik indirme işlemini başlat (background process)
+      (async () => {
+        try {
+          const tempZipPath = path.join('/tmp', `${model.name}_${Date.now()}.zip`);
+          console.log(`Starting automatic Google Drive download to: ${tempZipPath}`);
+          
+          // İndirme
+          await downloadFromGoogleDrive(fileId, tempZipPath);
+          console.log(`Auto-download completed, file size: ${fs.statSync(tempZipPath).size} bytes`);
+          
+          await storage.updateFaceModel(model.id, {
+            status: 'extracting',
+            downloadProgress: 100
+          });
+          console.log(`Auto-download: Model status updated to extracting`);
+          
+          // Açma ve taşıma
+          const { faceCount, trainingDataPath } = await extractZipAndMoveData(tempZipPath, model.name);
+          
+          // Tamamlama
+          await storage.updateFaceModel(model.id, {
+            status: 'ready',
+            serverPath: trainingDataPath,
+            faceCount,
+            trainingDataPath,
+            processedAt: new Date(),
+            errorMessage: null
+          });
+          
+          console.log(`Auto-download: Face model ${model.name} successfully processed with ${faceCount} faces`);
+        } catch (error) {
+          console.error(`Auto-download failed for model ${model.name}:`, error);
+          await storage.updateFaceModel(model.id, {
+            status: 'error',
+            errorMessage: (error as Error).message
+          });
+        }
+      })();
       
       res.status(201).json(model);
     } catch (error: any) {
