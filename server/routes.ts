@@ -1696,6 +1696,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
             continue;
           }
           
+          console.log(`🗃️ PKL veritabanı bulundu: ${faceDbPath}`);
+          
+          // PKL ile gerçek yüz eşleştirmesi yap
+          try {
+            const userEmbedding = userFaceData[0].embedding;
+            const userEmbeddingJson = JSON.stringify(userEmbedding);
+            const threshold = 0.5; // Kullanıcı talebi
+            
+            console.log(`🦬 PKL eşleştirmesi başlatılıyor...`);
+            
+            const pythonProcess = spawn('python3', [
+              'pkl_face_matcher.py',
+              faceDbPath,
+              userEmbeddingJson,
+              threshold.toString()
+            ]);
+            
+            let pythonOutput = '';
+            let pythonError = '';
+            
+            pythonProcess.stdout.on('data', (data: Buffer) => {
+              pythonOutput += data.toString();
+            });
+            
+            pythonProcess.stderr.on('data', (data: Buffer) => {
+              pythonError += data.toString();
+              console.log('🐍 PKL Python:', data.toString().trim());
+            });
+            
+            await new Promise((resolve, reject) => {
+              pythonProcess.on('close', (code: number) => {
+                if (code === 0) {
+                  resolve(code);
+                } else {
+                  reject(new Error(`PKL Python script çıkış kodu: ${code}`));
+                }
+              });
+            });
+            
+            // Python çıktısını parse et
+            const pklResult = JSON.parse(pythonOutput.trim());
+            
+            if (pklResult.success) {
+              console.log(`✅ PKL eşleştirmesi başarılı: ${pklResult.matches.length} eşleşme`);
+              
+              // PKL sonuçlarını ZIP'e ekle
+              const reportContent = `
+PKL Face Database Eşleştirme Raporu
+Model: ${model.name}
+İşlem Tarihi: ${new Date().toLocaleDateString('tr-TR')}
+PKL Dosyası: ${path.basename(faceDbPath)}
+Toplam Yüz Sayısı: ${pklResult.total_faces}
+Threshold: ${pklResult.threshold}
+Algoritma: ${pklResult.algorithm}
+Toplam Eşleşme: ${pklResult.matches.length}
+
+EŞLEŞEN YÜZLER:
+${pklResult.matches.map((match: any, i: number) => 
+  `${i+1}. ${match.image_path} - Similarity: ${match.similarity.toFixed(3)}`
+).join('\n')}
+
+⚡ Bu sonuçlar gerçek InsightFace PKL veritabanından alınmıştır.
+`;
+              
+              zip.addFile(`${model.name}_PKL_eşleştirme_raporu.txt`, Buffer.from(reportContent, 'utf8'));
+              
+              // Eşleşen yüzlerin kopyalarını ekle (varsa)
+              for (const match of pklResult.matches.slice(0, 10)) { // İlk 10 eşleşme
+                const originalImagePath = match.original_path;
+                const imageName = match.image_path;
+                
+                // Göreli yoldan dosyayı bulmaya çalış
+                const possiblePaths = [
+                  path.join(modelPath, imageName),
+                  path.join(modelPath, 'denemelik', imageName),
+                  path.join(modelPath, '..', imageName)
+                ];
+                
+                for (const possiblePath of possiblePaths) {
+                  if (fs.existsSync(possiblePath)) {
+                    try {
+                      const imageBuffer = fs.readFileSync(possiblePath);
+                      const zipFileName = `eşleşen_${match.similarity.toFixed(3)}_${imageName}`;
+                      zip.addFile(zipFileName, imageBuffer);
+                      console.log(`📸 Eşleşen görsel eklendi: ${zipFileName}`);
+                      break;
+                    } catch (imgError) {
+                      console.log(`⚠️ Görsel eklenemedi: ${possiblePath}`);
+                    }
+                  }
+                }
+              }
+              
+              // Ana akıştan çık - PKL işlemi tamamlandı
+              processedModels++;
+              continue;
+              
+            } else {
+              console.log(`❌ PKL eşleştirmesi başarısız: ${pklResult.error}`);
+              // Fallback'e geç
+            }
+            
+          } catch (pklError) {
+            console.log(`❌ PKL işlemi başarısız: ${pklError}`);
+            console.log(`🔄 Fallback algoritma'ya geçiliyor...`);
+            // Fallback'e geç
+          }
+          
           processedModels++;
           console.log(`✅ Model işleniyor: ${model.name}`);
           
