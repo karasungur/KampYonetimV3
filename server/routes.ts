@@ -1939,12 +1939,19 @@ oluşturulan fotoğraflar bu ZIP dosyasında yer alacaktır.
         throw new Error('face_database.pkl dosyası bulunamadı');
       }
       
-      // Dosyaları hedef dizine kopyala
+      // Dosyaları hedef dizine kopyala (klasörleri atla)
       const files = fs.readdirSync(trainingPackageDir);
       for (const file of files) {
         const sourcePath = path.join(trainingPackageDir, file);
         const targetPath = path.join(targetDir, file);
-        fs.copyFileSync(sourcePath, targetPath);
+        
+        // Eğer klasörse atla, sadece dosyaları kopyala
+        if (fs.statSync(sourcePath).isFile()) {
+          fs.copyFileSync(sourcePath, targetPath);
+          console.log(`Copied file: ${file}`);
+        } else {
+          console.log(`Skipped directory: ${file}`);
+        }
       }
       
       // Yüz sayısını hesapla (basit bir yaklaşım - dosya sayısı)
