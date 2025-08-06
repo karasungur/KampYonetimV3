@@ -21,6 +21,7 @@ import ProgramEventsPage from "@/pages/program-events";
 import SocialMediaPage from "@/pages/social-media";
 import TeamMembersPage from "@/pages/team-members";
 import PhotosPage from "@/pages/photos";
+import FaceModelsPage from "@/pages/FaceModels";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -54,6 +55,7 @@ function Router() {
       <Route path="/social-media" component={SocialMediaPage} />
       <Route path="/team-members" component={TeamMembersPage} />
       <Route path="/photos" component={PhotosPage} />
+      <Route path="/face-models" component={FaceModelsPage} />
       <Route component={NotFound} />
     </Switch>
   );

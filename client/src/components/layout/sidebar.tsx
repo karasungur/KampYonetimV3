@@ -14,6 +14,7 @@ import {
   Settings,
   Calendar,
   Share2,
+  ScanFace,
 } from "lucide-react";
 import akPartiLogo from "@assets/akpartilogo_1753719301210.png";
 
@@ -40,6 +41,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       { path: "/program-events", label: "Program Etkinlikleri", icon: Calendar },
       { path: "/social-media", label: "Sosyal Medya", icon: Share2 },
       { path: "/team-members", label: "Ekip Üyeleri", icon: Users },
+      { path: "/face-models", label: "Yüz Tanıma Modelleri", icon: ScanFace },
     ],
     genelbaskan: [
       { path: "/", label: "Ana Panel", icon: LayoutDashboard },

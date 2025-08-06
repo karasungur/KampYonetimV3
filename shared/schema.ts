@@ -20,6 +20,7 @@ export const logActionEnum = pgEnum('log_action', ['login', 'logout', 'create_qu
 export const elementTypeEnum = pgEnum('element_type', ['text', 'button', 'logo', 'slogan']);
 export const photoRequestStatusEnum = pgEnum('photo_request_status', ['pending', 'processing', 'completed', 'failed']);
 export const faceQualityEnum = pgEnum('face_quality', ['good', 'poor', 'blurry', 'profile']);
+export const faceModelStatusEnum = pgEnum('face_model_status', ['downloading', 'extracting', 'ready', 'error']);
 
 // Users table
 export const users = pgTable("users", {
@@ -296,6 +297,26 @@ export const photoRequestDays = pgTable("photo_request_days", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Face models - Yüz tanıma modelleri (buffalo_l modeli ile eğitilmiş veritabanları)
+export const faceModels = pgTable("face_models", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull().unique(), // Model adı (örn: "15 Ağustos Kampı")
+  googleDriveLink: text("google_drive_link").notNull(), // Google Drive zip linki
+  serverPath: varchar("server_path"), // /opt/face_match/allmodels/<modelAdi>/ dizini
+  status: faceModelStatusEnum("status").notNull().default('downloading'),
+  downloadProgress: integer("download_progress").default(0), // 0-100 arası
+  errorMessage: text("error_message"), // Hata durumunda mesaj
+  fileSize: integer("file_size"), // ZIP dosyası boyutu (bytes)
+  extractedSize: integer("extracted_size"), // Açılmış klasör boyutu (bytes)
+  faceCount: integer("face_count").default(0), // face_database.pkl'deki yüz sayısı
+  trainingDataPath: varchar("training_data_path"), // Eğitim verisi klasör yolu
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'cascade' }), // Genel Sekreterlik kullanıcısı
+  processedAt: timestamp("processed_at"), // İşlem tamamlanma zamanı
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   questions: many(questions),
@@ -423,6 +444,13 @@ export const photoRequestDaysRelations = relations(photoRequestDays, ({ one }) =
   }),
 }));
 
+export const faceModelsRelations = relations(faceModels, ({ one }) => ({
+  createdBy: one(users, {
+    fields: [faceModels.createdBy],
+    references: [users.id],
+  }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -541,6 +569,21 @@ export const insertPhotoRequestDaySchema = createInsertSchema(photoRequestDays).
   createdAt: true,
 });
 
+export const insertFaceModelSchema = createInsertSchema(faceModels).omit({
+  id: true,
+  serverPath: true,
+  status: true,
+  downloadProgress: true,
+  errorMessage: true,
+  fileSize: true,
+  extractedSize: true,
+  faceCount: true,
+  trainingDataPath: true,
+  processedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -582,6 +625,8 @@ export type CampDay = typeof campDays.$inferSelect;
 export type InsertCampDay = z.infer<typeof insertCampDaySchema>;
 export type PhotoRequestDay = typeof photoRequestDays.$inferSelect;
 export type InsertPhotoRequestDay = z.infer<typeof insertPhotoRequestDaySchema>;
+export type FaceModel = typeof faceModels.$inferSelect;
+export type InsertFaceModel = z.infer<typeof insertFaceModelSchema>;
 
 // Additional types for API responses
 export type UserWithStats = User & {

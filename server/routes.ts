@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { requireAuth, requireRole, generateToken, comparePassword, hashPassword, type AuthenticatedRequest } from "./auth";
-import { insertUserSchema, insertQuestionSchema, insertAnswerSchema, insertFeedbackSchema, insertProgramEventSchema, insertUploadedFileSchema, insertPageLayoutSchema, insertPageElementSchema, insertPhotoRequestSchema, insertDetectedFaceSchema, insertPhotoDatabaseSchema, insertPhotoMatchSchema, insertProcessingQueueSchema, insertCampDaySchema, insertPhotoRequestDaySchema } from "@shared/schema";
+import { insertUserSchema, insertQuestionSchema, insertAnswerSchema, insertFeedbackSchema, insertProgramEventSchema, insertUploadedFileSchema, insertPageLayoutSchema, insertPageElementSchema, insertPhotoRequestSchema, insertDetectedFaceSchema, insertPhotoDatabaseSchema, insertPhotoMatchSchema, insertProcessingQueueSchema, insertCampDaySchema, insertPhotoRequestDaySchema, insertFaceModelSchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import * as XLSX from "xlsx";
@@ -10,6 +10,8 @@ import rateLimit from "express-rate-limit";
 import path from "path";
 import fs from "fs";
 import { nanoid } from "nanoid";
+import axios from "axios";
+import AdmZip from "adm-zip";
 
 
 // Object Storage için gerekli importlar
@@ -1777,6 +1779,267 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Mock image response
     res.status(404).json({ message: 'Görsel bulunamadı (mock mode)' });
   });
+  // Google Drive Download Helper Functions
+  function extractGoogleDriveFileId(url: string): string | null {
+    // Google Drive link formatları:
+    // https://drive.google.com/file/d/FILE_ID/view?usp=sharing
+    // https://drive.google.com/open?id=FILE_ID
+    // https://drive.google.com/uc?id=FILE_ID
+    
+    const patterns = [
+      /\/file\/d\/([a-zA-Z0-9_-]+)/,
+      /[?&]id=([a-zA-Z0-9_-]+)/,
+      /\/d\/([a-zA-Z0-9_-]+)/
+    ];
+    
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match) {
+        return match[1];
+      }
+    }
+    
+    return null;
+  }
+
+  async function downloadFromGoogleDrive(fileId: string, outputPath: string): Promise<void> {
+    const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+    
+    try {
+      const response = await axios.get(downloadUrl, {
+        responseType: 'stream',
+        maxRedirects: 5,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+      
+      const writer = fs.createWriteStream(outputPath);
+      response.data.pipe(writer);
+      
+      return new Promise((resolve, reject) => {
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+      });
+    } catch (error) {
+      throw new Error(`Google Drive'dan indirme hatası: ${(error as Error).message}`);
+    }
+  }
+
+  async function extractZipAndMoveData(zipPath: string, modelName: string): Promise<{ faceCount: number; trainingDataPath: string }> {
+    const tempDir = path.join('/tmp', modelName);
+    const targetDir = path.join('/opt/face_match/allmodels', modelName);
+    
+    // Geçici ve hedef dizinleri oluştur
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    
+    try {
+      // ZIP dosyasını aç
+      const zip = new AdmZip(zipPath);
+      zip.extractAllTo(tempDir, true);
+      
+      // training_package klasörünü bul
+      const trainingPackageDir = path.join(tempDir, 'training_package');
+      if (!fs.existsSync(trainingPackageDir)) {
+        throw new Error('ZIP dosyasında training_package klasörü bulunamadı');
+      }
+      
+      // face_database.pkl dosyasını kontrol et
+      const faceDbPath = path.join(trainingPackageDir, 'face_database.pkl');
+      if (!fs.existsSync(faceDbPath)) {
+        throw new Error('face_database.pkl dosyası bulunamadı');
+      }
+      
+      // Dosyaları hedef dizine kopyala
+      const files = fs.readdirSync(trainingPackageDir);
+      for (const file of files) {
+        const sourcePath = path.join(trainingPackageDir, file);
+        const targetPath = path.join(targetDir, file);
+        fs.copyFileSync(sourcePath, targetPath);
+      }
+      
+      // Yüz sayısını hesapla (basit bir yaklaşım - dosya sayısı)
+      const imageFiles = files.filter(f => f.match(/\.(jpg|jpeg|png)$/i));
+      const faceCount = imageFiles.length;
+      
+      // Geçici dosyaları temizle
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.unlinkSync(zipPath);
+      
+      return {
+        faceCount,
+        trainingDataPath: targetDir
+      };
+    } catch (error) {
+      // Hata durumunda geçici dosyaları temizle
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+      throw error;
+    }
+  }
+
+  // Face Models API Endpoints
+  app.get('/api/face-models', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const models = await storage.getAllFaceModels();
+      res.json(models);
+    } catch (error) {
+      console.error('Error fetching face models:', error);
+      res.status(500).json({ message: 'Modeller getirilirken hata oluştu' });
+    }
+  });
+
+  app.post('/api/face-models', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const validatedData = insertFaceModelSchema.parse(req.body);
+      
+      // Google Drive linkini doğrula
+      const fileId = extractGoogleDriveFileId(validatedData.googleDriveLink);
+      if (!fileId) {
+        return res.status(400).json({ message: 'Geçersiz Google Drive linki' });
+      }
+      
+      const model = await storage.createFaceModel({
+        ...validatedData,
+        createdBy: req.user!.id,
+      });
+      
+      // Log activity
+      await storage.logActivity({
+        userId: req.user!.id,
+        action: 'create_user', // Using existing action type
+        details: `Yeni yüz tanıma modeli oluşturuldu: ${model.name}`,
+        metadata: { modelId: model.id },
+        ipAddress: req.ip,
+      });
+      
+      res.status(201).json(model);
+    } catch (error: any) {
+      console.error('Error creating face model:', error);
+      if (error.name === 'ZodError') {
+        res.status(400).json({ message: 'Geçersiz veri formatı', errors: error.errors });
+      } else if (error.code === '23505') {
+        res.status(400).json({ message: 'Bu model adı zaten kullanılıyor' });
+      } else {
+        res.status(500).json({ message: 'Model oluşturulurken hata oluştu' });
+      }
+    }
+  });
+
+  app.post('/api/face-models/:id/download', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const model = await storage.getFaceModel(id);
+      
+      if (!model) {
+        return res.status(404).json({ message: 'Model bulunamadı' });
+      }
+      
+      if (model.status === 'downloading' || model.status === 'extracting') {
+        return res.status(400).json({ message: 'Model zaten işleniyor' });
+      }
+      
+      if (model.status === 'ready') {
+        return res.status(400).json({ message: 'Model zaten hazır durumda' });
+      }
+      
+      // İndirme işlemini başlat
+      await storage.updateFaceModel(id, {
+        status: 'downloading',
+        downloadProgress: 0,
+        errorMessage: null
+      });
+      
+      // Async olarak indirme işlemini başlat
+      const fileId = extractGoogleDriveFileId(model.googleDriveLink);
+      if (!fileId) {
+        await storage.updateFaceModel(id, {
+          status: 'error',
+          errorMessage: 'Geçersiz Google Drive linki'
+        });
+        return res.status(400).json({ message: 'Geçersiz Google Drive linki' });
+      }
+      
+      // Background process olarak çalıştır
+      (async () => {
+        try {
+          const tempZipPath = path.join('/tmp', `${model.name}_${Date.now()}.zip`);
+          
+          // İndirme
+          await downloadFromGoogleDrive(fileId, tempZipPath);
+          await storage.updateFaceModel(id, {
+            status: 'extracting',
+            downloadProgress: 100
+          });
+          
+          // Açma ve taşıma
+          const { faceCount, trainingDataPath } = await extractZipAndMoveData(tempZipPath, model.name);
+          
+          // Tamamlama
+          await storage.updateFaceModel(id, {
+            status: 'ready',
+            serverPath: trainingDataPath,
+            faceCount,
+            trainingDataPath,
+            processedAt: new Date(),
+            errorMessage: null
+          });
+          
+          console.log(`Face model ${model.name} successfully processed`);
+        } catch (error) {
+          console.error(`Error processing face model ${model.name}:`, error);
+          await storage.updateFaceModel(id, {
+            status: 'error',
+            errorMessage: (error as Error).message
+          });
+        }
+      })();
+      
+      res.json({ message: 'İndirme işlemi başlatıldı' });
+    } catch (error) {
+      console.error('Error starting face model download:', error);
+      res.status(500).json({ message: 'İndirme başlatılırken hata oluştu' });
+    }
+  });
+
+  app.delete('/api/face-models/:id', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const model = await storage.getFaceModel(id);
+      
+      if (!model) {
+        return res.status(404).json({ message: 'Model bulunamadı' });
+      }
+      
+      // Sunucudaki dosyaları temizle
+      if (model.serverPath && fs.existsSync(model.serverPath)) {
+        fs.rmSync(model.serverPath, { recursive: true, force: true });
+      }
+      
+      await storage.deleteFaceModel(id);
+      
+      // Log activity
+      await storage.logActivity({
+        userId: req.user!.id,
+        action: 'delete_user', // Using existing action type
+        details: `Yüz tanıma modeli silindi: ${model.name}`,
+        metadata: { modelId: id },
+        ipAddress: req.ip,
+      });
+      
+      res.json({ message: 'Model başarıyla silindi' });
+    } catch (error) {
+      console.error('Error deleting face model:', error);
+      res.status(500).json({ message: 'Model silinirken hata oluştu' });
+    }
+  });
+
 
 
 

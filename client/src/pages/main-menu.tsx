@@ -162,26 +162,29 @@ export default function MainMenuPage() {
 
   // Initialize face-api for detection and UI
   useEffect(() => {
-    const initializeFaceAPI = async () => {
-      try {
-        const modelPath = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js-models@master';
-        
-        console.log('Loading face-api models...');
-        await faceapi.nets.tinyFaceDetector.loadFromUri(`${modelPath}/tiny_face_detector`);
-        console.log('Tiny face detector loaded');
-        
-        await faceapi.nets.faceLandmark68Net.loadFromUri(`${modelPath}/face_landmark_68`);
-        console.log('Face landmarks loaded');
-        
-        setIsFaceDetectionReady(true);
-        console.log('Face-API initialized successfully');
-      } catch (error) {
-        console.error('Face-API initialization error:', error);
-        setIsFaceDetectionReady(false);
-      }
-    };
-    
-    initializeFaceAPI();
+    // Face-API initialization disabled for model management mode
+    // The actual face detection is done via Python GUI tool
+    // const initializeFaceAPI = async () => {
+    //   try {
+    //     const modelPath = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js-models@master';
+    //     
+    //     console.log('Loading face-api models...');
+    //     await faceapi.nets.tinyFaceDetector.loadFromUri(`${modelPath}/tiny_face_detector`);
+    //     console.log('Tiny face detector loaded');
+    //     
+    //     await faceapi.nets.faceLandmark68Net.loadFromUri(`${modelPath}/face_landmark_68`);
+    //     console.log('Face landmarks loaded');
+    //     
+    //     setIsFaceDetectionReady(true);
+    //     console.log('Face-API initialized successfully');
+    //   } catch (error) {
+    //     console.error('Face-API initialization error:', error);
+    //     setIsFaceDetectionReady(false);
+    //   }
+    // };
+    // 
+    // initializeFaceAPI();
+    setIsFaceDetectionReady(true); // Set to true for model management mode
   }, []);
   
   // Preload images

@@ -19,6 +19,7 @@ import {
   processingQueue,
   campDays,
   photoRequestDays,
+  faceModels,
   type User,
   type InsertUser,
   type Table,
@@ -59,6 +60,8 @@ import {
   type InsertCampDay,
   type PhotoRequestDay,
   type InsertPhotoRequestDay,
+  type FaceModel,
+  type InsertFaceModel,
   type UserWithStats,
   type QuestionWithStats,
   type AnswerWithDetails,
@@ -220,6 +223,13 @@ export interface IStorage {
   createPhotoRequestDay(requestDay: InsertPhotoRequestDay): Promise<PhotoRequestDay>;
   getPhotoRequestDays(photoRequestId: string): Promise<CampDay[]>;
   deletePhotoRequestDays(photoRequestId: string): Promise<void>;
+  
+  // Face models operations
+  createFaceModel(model: InsertFaceModel): Promise<FaceModel>;
+  getAllFaceModels(): Promise<FaceModel[]>;
+  getFaceModel(id: string): Promise<FaceModel | undefined>;
+  deleteFaceModel(id: string): Promise<void>;
+  updateFaceModel(id: string, updates: Partial<FaceModel>): Promise<FaceModel>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1418,6 +1428,37 @@ export class DatabaseStorage implements IStorage {
 
   async deletePhotoRequestDays(photoRequestId: string): Promise<void> {
     await db.delete(photoRequestDays).where(eq(photoRequestDays.photoRequestId, photoRequestId));
+  }
+
+  // Face models operations
+  async createFaceModel(insertModel: InsertFaceModel): Promise<FaceModel> {
+    const [model] = await db
+      .insert(faceModels)
+      .values(insertModel)
+      .returning();
+    return model;
+  }
+
+  async getAllFaceModels(): Promise<FaceModel[]> {
+    return db.select().from(faceModels).orderBy(desc(faceModels.createdAt));
+  }
+
+  async getFaceModel(id: string): Promise<FaceModel | undefined> {
+    const [model] = await db.select().from(faceModels).where(eq(faceModels.id, id));
+    return model || undefined;
+  }
+
+  async deleteFaceModel(id: string): Promise<void> {
+    await db.delete(faceModels).where(eq(faceModels.id, id));
+  }
+
+  async updateFaceModel(id: string, updates: Partial<FaceModel>): Promise<FaceModel> {
+    const [model] = await db
+      .update(faceModels)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(faceModels.id, id))
+      .returning();
+    return model;
   }
 }
 
