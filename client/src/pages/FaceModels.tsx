@@ -306,14 +306,15 @@ export default function FaceModels() {
                     <TableCell>{formatDate(model.createdAt)}</TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
-                        {model.status === 'downloading' && (
+                        {(model.status === 'pending' || model.status === 'created' || model.status === 'error') && (
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => downloadModelMutation.mutate(model.id)}
                             disabled={downloadModelMutation.isPending}
                           >
-                            <Download className="w-4 h-4" />
+                            <Download className="w-4 h-4 mr-1" />
+                            {model.status === 'error' ? 'Tekrar Dene' : 'İndir'}
                           </Button>
                         )}
                         <Button
