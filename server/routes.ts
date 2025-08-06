@@ -1995,24 +1995,53 @@ Bu dosyalar şu anda yüz eşleştirme sisteminin çalıştığını doğrular.
         throw new Error('face_database.pkl dosyası bulunamadı');
       }
       
-      // Dosyaları hedef dizine kopyala (klasörleri atla)
+      // Tüm dosya ve klasörleri hedef dizine kopyala (recursive)
+      const copyRecursive = (source: string, destination: string) => {
+        const stats = fs.statSync(source);
+        
+        if (stats.isDirectory()) {
+          // Klasör ise recursive kopyala
+          if (!fs.existsSync(destination)) {
+            fs.mkdirSync(destination, { recursive: true });
+          }
+          const files = fs.readdirSync(source);
+          for (const file of files) {
+            copyRecursive(
+              path.join(source, file),
+              path.join(destination, file)
+            );
+          }
+          console.log(`Copied directory: ${path.basename(source)}`);
+        } else {
+          // Dosya ise direkt kopyala
+          fs.copyFileSync(source, destination);
+          console.log(`Copied file: ${path.basename(source)}`);
+        }
+      };
+      
       const files = fs.readdirSync(trainingPackageDir);
       for (const file of files) {
         const sourcePath = path.join(trainingPackageDir, file);
         const targetPath = path.join(targetDir, file);
-        
-        // Eğer klasörse atla, sadece dosyaları kopyala
-        if (fs.statSync(sourcePath).isFile()) {
-          fs.copyFileSync(sourcePath, targetPath);
-          console.log(`Copied file: ${file}`);
-        } else {
-          console.log(`Skipped directory: ${file}`);
-        }
+        copyRecursive(sourcePath, targetPath);
       }
       
-      // Yüz sayısını hesapla (basit bir yaklaşım - dosya sayısı)
-      const imageFiles = files.filter(f => f.match(/\.(jpg|jpeg|png)$/i));
-      const faceCount = imageFiles.length;
+      // Yüz sayısını hesapla (tüm klasörlerde recursive olarak)
+      const countImagesRecursive = (dir: string): number => {
+        let count = 0;
+        const items = fs.readdirSync(dir);
+        for (const item of items) {
+          const fullPath = path.join(dir, item);
+          if (fs.statSync(fullPath).isDirectory()) {
+            count += countImagesRecursive(fullPath);
+          } else if (item.match(/\.(jpg|jpeg|png|bmp|tiff)$/i)) {
+            count++;
+          }
+        }
+        return count;
+      };
+      
+      const faceCount = countImagesRecursive(targetDir);
       
       // Geçici dosyaları temizle
       fs.rmSync(tempDir, { recursive: true, force: true });
