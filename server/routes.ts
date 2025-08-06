@@ -10,7 +10,7 @@ import rateLimit from "express-rate-limit";
 import path from "path";
 import fs from "fs";
 import { nanoid } from "nanoid";
-import { spawn } from "child_process";
+
 
 // Object Storage için gerekli importlar
 let ObjectStorageService: any;
@@ -132,125 +132,14 @@ const userImportSchema = z.object({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Face embedding extraction endpoint
-  app.post('/api/extract-embedding', imageUpload.single('photo'), async (req, res) => {
-    try {
-      console.log('🔍 Extract embedding endpoint called');
-      
-      if (!req.file) {
-        console.log('❌ No file uploaded');
-        return res.status(400).json({ error: 'Fotoğraf gerekli' });
-      }
-
-      const tempFilePath = req.file.path;
-      console.log('📁 File saved at:', tempFilePath);
-      console.log('📏 File size:', req.file.size, 'bytes');
-      
-      // Python script ile embedding çıkar
-      console.log('🐍 Starting Python process...');
-      const pythonProcess = spawn('python3', ['extract_embedding.py', tempFilePath], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: 30000 // 30 saniye timeout
-      });
-      console.log('🐍 Python process started');
-      
-      let output = '';
-      let errorOutput = '';
-      
-      // Process timeout handling
-      const timeout = setTimeout(() => {
-        console.log('⏰ Python process timeout, killing...');
-        pythonProcess.kill('SIGTERM');
-      }, 30000);
-      
-      pythonProcess.stdout.on('data', (data) => {
-        const chunk = data.toString();
-        console.log('📤 Python stdout:', chunk);
-        output += chunk;
-      });
-      
-      pythonProcess.stderr.on('data', (data) => {
-        const chunk = data.toString();
-        console.log('⚠️ Python stderr:', chunk);
-        errorOutput += chunk;
-      });
-      
-      pythonProcess.on('close', (code) => {
-        clearTimeout(timeout); // Timeout'u temizle
-        console.log('🏁 Python process closed with code:', code);
-        console.log('📝 Python output length:', output.length, 'chars');
-        console.log('❗ Python errors:', errorOutput);
-        
-        // Geçici dosyayı sil
-        fs.unlink(tempFilePath, (err) => {
-          if (err) console.error('Geçici dosya silinirken hata:', err);
-          else console.log('🗑️ Temp file deleted:', tempFilePath);
-        });
-        
-        if (code !== 0) {
-          console.error('❌ Python script hatası (exit code:', code, '):', errorOutput);
-          return res.status(500).json({ error: 'Embedding çıkarılamadı' });
-        }
-        
-        try {
-          console.log('🔄 Parsing JSON output...');
-          
-          // Clean up output - trim whitespace and get only the last line (which should be the JSON)
-          const lines = output.trim().split('\n');
-          const jsonLine = lines[lines.length - 1].trim();
-          console.log('📄 JSON line length:', jsonLine.length);
-          console.log('📄 JSON line preview:', jsonLine.substring(0, 100) + '...');
-          
-          const result = JSON.parse(jsonLine);
-          console.log('✅ JSON parsed successfully. Keys:', Object.keys(result));
-          
-          if (result.error) {
-            console.log('❌ Python script returned error:', result.error);
-            return res.status(400).json(result);
-          }
-          
-          // Convert compact format to readable format
-          if (result.s === 1) {
-            const readableResult = {
-              success: true,
-              embedding: result.e,
-              embedding_size: result.l,
-              faces_count: result.f,
-              confidence: result.c
-            };
-            console.log('🎉 Sending successful result with', result.l, 'dim embedding');
-            res.json(readableResult);
-          } else {
-            console.log('❌ Unexpected result format:', result);
-            return res.status(500).json({ error: 'Unexpected result format' });
-          }
-        } catch (parseError) {
-          console.error('❌ JSON parse hatası:', parseError);
-          const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
-          console.error('❌ Parse error message:', errorMessage);
-          console.error('📝 Raw output lines:', output.split('\n').length);
-          console.error('📝 First 200 chars:', output.substring(0, 200));
-          console.error('📝 Last 200 chars:', output.substring(output.length - 200));
-          return res.status(500).json({ error: 'JSON parse hatası: ' + errorMessage });
-        }
-      });
-      
-    } catch (error) {
-      console.error('Embedding endpoint hatası:', error);
-      res.status(500).json({ error: 'Server hatası' });
-    }
-  });
 
   // Genel API rate limiting (belirli rotalar hariç)
   app.use('/api/', (req, res, next) => {
     // Bu rotalar rate limiting'den muaf:
     // - Auth rotaları (zaten kendi limitleri var)
-    // - Python API rotaları (otomatik polling için)
     // - Fotoğraf işleme rotaları (büyük dosya yüklemeleri için)
     if (req.path.startsWith('/api/auth/') || 
-        req.path.startsWith('/api/python/') ||
-        req.path.startsWith('/api/photo-requests') ||
-        req.path.startsWith('/api/extract-embedding')) {
+        req.path.startsWith('/api/photo-requests')) {
       return next();
     }
     apiLimiter(req, res, next);
@@ -878,26 +767,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Python GUI için photo request endpoint
-  app.get('/api/python/photo-requests', async (req, res) => {
-    try {
-      // Basit güvenlik kontrolü - sadece localhost'tan
-      const clientIP = req.ip || req.connection?.remoteAddress || 'unknown';
-      if (clientIP !== '127.0.0.1' && clientIP !== '::1' && !clientIP.includes('127.0.0.1')) {
-        // localhost olmayan IP'ler için temel auth kontrol
-        const authHeader = req.headers.authorization;
-        if (!authHeader || authHeader !== 'Bearer python-gui-token') {
-          return res.status(401).json({ message: 'Unauthorized' });
-        }
-      }
-      
-      const photoRequests = await storage.getAllPhotoRequests();
-      res.json(photoRequests);
-    } catch (error) {
-      console.error('Python photo requests error:', error);
-      res.status(500).json({ message: 'Photo requests alınamadı' });
-    }
-  });
+
 
   // Table management routes (genelsekreterlik only)
   app.post('/api/tables', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
@@ -1899,45 +1769,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Python'dan model senkronizasyonu endpoint'i
-  app.post('/api/python/sync-models', async (req, res) => {
-    try {
-      const { models } = req.body;
-      
-      if (!models || !Array.isArray(models)) {
-        return res.status(400).json({ message: 'Geçersiz model verisi' });
-      }
 
-      // Önce mevcut kamp günlerini temizle (sadece Python'dan gelenler kalacak)
-      await storage.deleteAllCampDays();
-
-      // Yeni modelleri kamp günü olarak kaydet
-      for (const model of models) {
-        const campDayData = {
-          id: model.id,
-          dayName: model.name,
-          dayDate: new Date(model.trainedAt),
-          modelPath: `./models/${model.id}/face_database.pkl`,
-          modelStatus: 'trained' as const,
-          photoCount: 0, // Python'dan gelmedi ise varsayılan
-          faceCount: model.faceCount || 0,
-          lastTrainedAt: new Date(model.trainedAt),
-          isActive: true
-        };
-
-        await storage.createCampDay(campDayData);
-      }
-
-      res.json({ 
-        message: 'Modeller başarıyla senkronize edildi',
-        syncedCount: models.length 
-      });
-      
-    } catch (error) {
-      console.error('Model sync error:', error);
-      res.status(500).json({ message: 'Model senkronizasyonu başarısız' });
-    }
-  });
 
   // Mock görsel servis (gerçek uygulamada object storage kullanılacak)
   app.get('/api/images/:imagePath', (req, res) => {
@@ -1946,165 +1778,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.status(404).json({ message: 'Görsel bulunamadı (mock mode)' });
   });
 
-  // Python API Integration Endpoints
-  // Python tarafından çağrılan endpoint'ler
-  app.post('/api/process-photo-request', async (req, res) => {
-    try {
-      const { tcNumber, email, referencePhotos, selectedCampDays } = req.body;
-      
-      if (!tcNumber || !email || !selectedCampDays?.length) {
-        return res.status(400).json({ error: 'Eksik parametreler' });
-      }
-      
-      // Photo request'i veritabanına kaydet
-      const photoRequest = await storage.createPhotoRequest({
-        tcNumber,
-        email,
-        status: 'processing'
-      });
-      
-      // Selected camp days'i kaydet
-      for (const campDayId of selectedCampDays) {
-        await storage.createPhotoRequestDay({
-          photoRequestId: photoRequest.id,
-          campDayId
-        });
-      }
-      
-      res.json({ 
-        message: 'İstek başarıyla alındı',
-        requestId: photoRequest.id,
-        tcNumber 
-      });
-      
-    } catch (error) {
-      console.error('Process photo request error:', error);
-      res.status(500).json({ error: 'İstek işlenirken hata oluştu' });
-    }
-  });
 
-  app.get('/api/request-status/:tcNumber', async (req, res) => {
-    try {
-      const { tcNumber } = req.params;
-      
-      // Son photo request'i bul
-      const photoRequest = await storage.getPhotoRequestByTc(tcNumber);
-      
-      if (!photoRequest) {
-        return res.status(404).json({ status: 'not_found' });
-      }
-      
-      res.json({
-        status: photoRequest.status,
-        progress: 0, // Progress buraya eklenmeli
-        startTime: photoRequest.createdAt,
-        message: photoRequest.errorMessage || ''
-      });
-      
-    } catch (error) {
-      console.error('Get request status error:', error);
-      res.status(500).json({ error: 'Durum sorgulanırken hata oluştu' });
-    }
-  });
 
-  app.post('/api/update-request-status', async (req, res) => {
-    try {
-      const { tcNumber, status, progress, message } = req.body;
-      
-      if (!tcNumber) {
-        return res.status(400).json({ error: 'TC number gerekli' });
-      }
-      
-      // Son photo request'i güncelle
-      const photoRequest = await storage.getPhotoRequestByTc(tcNumber);
-      
-      if (photoRequest) {
-        await storage.updatePhotoRequest(photoRequest.id, {
-          status,
-          errorMessage: message
-        });
-      }
-      
-      res.json({ message: 'Durum güncellendi' });
-      
-    } catch (error) {
-      console.error('Update request status error:', error);
-      res.status(500).json({ error: 'Durum güncellenirken hata oluştu' });
-    }
-  });
 
-  // Python API için özel endpoint'ler (authentication-free)
-  // Python yüz tanıma servisinin API durumunu kontrol etmesi için
-  app.get('/api/python/health', async (req, res) => {
-    try {
-      const queueItems = await storage.getQueueStatus();
-      res.json({
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        queueSize: queueItems.length,
-        processing: queueItems.filter(item => item.startedAt && !item.completedAt).length
-      });
-    } catch (error) {
-      console.error('Python health check error:', error);
-      res.status(500).json({ 
-        status: 'error',
-        message: 'Health check failed'
-      });
-    }
-  });
-
-  // Python servisinin işlem tamamlandığını bildirmesi için
-  app.post('/api/python/photo-request/:tcNumber/complete', async (req, res) => {
-    try {
-      const { tcNumber } = req.params;
-      const { success, message, matchCount } = req.body;
-
-      console.log(`Python API: Photo request completed for TC: ${tcNumber}, Success: ${success}, Matches: ${matchCount}`);
-
-      // İsteği veritabanında güncelle
-      const photoRequest = await storage.getPhotoRequestByTc(tcNumber);
-      if (photoRequest) {
-        await storage.updatePhotoRequest(photoRequest.id, {
-          status: success ? 'completed' : 'failed',
-          errorMessage: success ? null : (message || 'İşlem sırasında hata oluştu')
-        });
-      }
-
-      res.json({ 
-        message: 'Status updated successfully',
-        tcNumber 
-      });
-    } catch (error) {
-      console.error('Python complete request error:', error);
-      res.status(500).json({ 
-        error: 'Failed to update request status' 
-      });
-    }
-  });
-
-  // Python servisinin yeni işlemler alması için
-  app.get('/api/python/next-request', async (req, res) => {
-    try {
-      const nextQueueItem = await storage.getNextInQueue();
-      if (nextQueueItem) {
-        // İsteği işleme al
-        await storage.updateQueueProgress(nextQueueItem.id, 0, 'Python servisi tarafından başlatılıyor');
-        
-        // Photo request bilgilerini de al
-        const photoRequest = await storage.getPhotoRequest(nextQueueItem.photoRequestId);
-        
-        res.json({
-          queueId: nextQueueItem.id,
-          photoRequest: photoRequest
-        });
-      } else {
-        res.json(null);
-      }
-    } catch (error) {
-      console.error('Get next request error:', error);
-      res.status(500).json({ error: 'Failed to get next request' });
-    }
-  });
 
   const httpServer = createServer(app);
   return httpServer;
