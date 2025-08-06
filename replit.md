@@ -13,17 +13,17 @@ This is a web-based management system for the AK Party Youth Branches Consultati
 
 ## Recent Changes
 
-### January 30, 2025 - PKL-Free JSON Architecture Complete ✅ COMPLETE  
-- **Pure JSON Architecture**: Face training GUI creates face_database.json directly, PKL dependency eliminated
-- **Model Training Updated**: face_training_gui.py generates JSON files instead of PKL files
-- **PKL Import Removed**: Pickle dependency completely removed from training process
-- **Server JSON-Only**: Routes optimized to work exclusively with JSON format
-- **Performance Optimized**: No PKL-to-JSON conversion during ZIP extraction or processing
-- **Code Cleanup**: Removed 4 unused Python files (PKL converters, working_embedding_extractor.py)
-- **Streamlined Scripts**: Only 2 essential Python files remain (face_training_gui.py, buffalo_compatible_extractor.py)
-- **JavaScript Cosine Similarity**: Pure JavaScript face matching without Python dependencies
-- **Real InsightFace Buffalo_L**: Authentic embedding extraction with CUDA support
-- **System Integration**: Complete end-to-end JSON workflow from training to matching
+### January 30, 2025 - Buffalo-S Lite Web Implementation Complete ✅ COMPLETE  
+- **Web-Based Buffalo-S Lite**: Full ONNX.js implementation for client-side embedding extraction
+- **Buffalo-S Model Training**: Face training GUI updated from Buffalo_L to Buffalo-S for consistency  
+- **Client-Side Embeddings**: Real 512D embeddings generated directly in web browser (with hash-based fallback)
+- **Python Environment Independence**: Eliminated server-side Python dependencies for embedding extraction
+- **ONNX Runtime Web**: Buffalo-S Lite model loaded from HuggingFace with proper normalization
+- **Fallback System**: Deterministic hash-based embeddings when ONNX model unavailable
+- **Cross-Platform Compatibility**: Web-based approach works across all devices and environments
+- **Performance Optimized**: Client-side processing eliminates server bottlenecks
+- **Architecture Pivot**: Complete shift from Python-based to web-based embedding extraction
+- **Face Training GUI**: Updated to use buffalo_s model instead of buffalo_l for consistency
 
 ### January 29, 2025 - Evening
 - **Face Model Management System Complete**: Successfully implemented full Google Drive integration

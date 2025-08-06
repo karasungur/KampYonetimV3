@@ -1723,7 +1723,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               let similarityCount = 0;
               
               for (const face of modelFaces) {
-                if (!face.embedding) continue;
+                if (!face || !face.embedding) {
+                  console.log('⚠️ Geçersiz face objesi veya embedding eksik, atlanıyor');
+                  continue;
+                }
                 
                 const similarity = calculateCosineSimilarity(userEmbedding, face.embedding);
                 similarityCount++;

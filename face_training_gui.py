@@ -58,12 +58,13 @@ class TrainingWorker(QThread):
             providers = ['CUDAExecutionProvider', 'CPUExecutionProvider'] if ctx_id >= 0 else ['CPUExecutionProvider']
             
             try:
-                self.face_app = FaceAnalysis(name='buffalo_l', providers=providers)
+                # Buffalo-S Lite ONNX model ile uyumlu eğitim için Buffalo_S kullan
+                self.face_app = FaceAnalysis(name='buffalo_s', providers=providers)
                 self.face_app.prepare(ctx_id=ctx_id, det_size=(640, 640))
-                self.log_message.emit("✅ Face Recognition modeli başarıyla yüklendi")
+                self.log_message.emit("✅ Buffalo-S model başarıyla yüklendi (512D embeddings)")
             except Exception as e:
                 self.log_message.emit("⚠️ GPU başlatılamadı, CPU'ya geçiliyor...")
-                self.face_app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])
+                self.face_app = FaceAnalysis(name='buffalo_s', providers=['CPUExecutionProvider'])
                 self.face_app.prepare(ctx_id=-1, det_size=(640, 640))
                 
             self.progress.emit("Eğitim verisi taranıyor...", 10)

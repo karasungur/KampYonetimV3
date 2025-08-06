@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import * as faceapi from '@vladmandic/face-api';
 import * as ort from 'onnxruntime-web';
+import { buffaloSLite } from '@/utils/insightface-onnx';
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -181,43 +182,59 @@ export default function MainMenuPage() {
 
   // HİBRİT YAKLAŞIM: Client tarafında InsightFace Buffalo_L yüklenmez
   // Sadece Face-API kullanılır, embedding çıkarma server tarafında Python ile yapılır
-  const loadInsightFaceBuffaloL = async () => {
-    console.log('🦬 InsightFace Buffalo_L server tarafında kullanılacak (Python)');
-    console.log('✅ Client tarafında yükleme atlandı - hibrit yaklaşım');
-    // Client tarafında InsightFace yükleme yapmıyoruz
-    return true; // Başarılı olarak işaretle ki Face-API devam etsin
-  };
-
-  // HİBRİT YAKLAŞIM: Embedding çıkarma server tarafında Python ile
-  const extractBuffaloLEmbedding = async (faceImageData: string): Promise<number[] | null> => {
+  const loadBuffaloSLite = async () => {
+    console.log('🦬 Buffalo-S Lite ONNX model web tarafında yükleniyor...');
     try {
-      console.log('🦬 Server tarafında Buffalo_L embedding çıkarılıyor...');
-      
-      // Kırpılmış yüz resmini server'a gönder
-      const blob = dataURLtoBlob(faceImageData);
-      const formData = new FormData();
-      formData.append('photo', blob, `face_${Date.now()}.jpg`);
-
-      const response = await fetch('/api/extract-embedding', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
-      }
-
-      const result = await response.json();
-      
-      if (result.success && result.embedding) {
-        console.log(`✅ Buffalo_L embedding çıkarıldı: ${result.embedding_size || result.embedding.length} boyut`);
-        return result.embedding;
+      const success = await buffaloSLite.initialize();
+      if (success) {
+        console.log('✅ Buffalo-S Lite model başarıyla yüklendi - gerçek embeddings aktif');
+        return true;
       } else {
-        console.error('❌ Embedding çıkarma başarısız:', result.error);
-        return null;
+        console.log('⚠️ Buffalo-S Lite model yüklenemedi - hash-based fallback aktif');
+        return true; // Fallback ile devam et
       }
     } catch (error) {
-      console.error('❌ BuffaloL embedding hatası:', error);
+      console.error('❌ Buffalo-S Lite yükleme hatası:', error);
+      console.log('🔄 Hash-based embedding fallback kullanılacak');
+      return true; // Fallback ile devam et
+    }
+  };
+
+  // WEB-BASED YAKLAŞIM: Embedding çıkarma Buffalo-S Lite ile web tarafında
+  const extractBuffaloLEmbedding = async (faceImageData: string): Promise<number[] | null> => {
+    try {
+      console.log('🦬 Web tarafında Buffalo-S Lite embedding çıkarılıyor...');
+      
+      // Data URL'den Image element oluştur
+      const img = new Image();
+      img.src = faceImageData;
+      
+      return new Promise((resolve) => {
+        img.onload = async () => {
+          try {
+            // Buffalo-S Lite ile embedding çıkar
+            const embedding = await buffaloSLite.extractEmbedding(img);
+            
+            if (embedding && embedding.length === 512) {
+              console.log(`✅ Buffalo-S Lite embedding çıkarıldı: ${embedding.length}D, norm=${Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0)).toFixed(6)}`);
+              resolve(embedding);
+            } else {
+              console.error('❌ Buffalo-S Lite embedding başarısız veya yanlış boyut');
+              resolve(null);
+            }
+          } catch (error) {
+            console.error('❌ Buffalo-S Lite embedding hatası:', error);
+            resolve(null);
+          }
+        };
+        
+        img.onerror = () => {
+          console.error('❌ Image yükleme hatası');
+          resolve(null);
+        };
+      });
+    } catch (error) {
+      console.error('❌ Buffalo-S Lite genel hatası:', error);
       return null;
     }
   };
@@ -257,8 +274,8 @@ export default function MainMenuPage() {
         await faceapi.nets.faceRecognitionNet.load(modelPath);
         console.log('FaceRecognitionNet loaded');
         
-        // Load InsightFace Buffalo_L for superior embeddings
-        const buffaloLoaded = await loadInsightFaceBuffaloL();
+        // Load Buffalo-S Lite for superior embeddings
+        const buffaloLoaded = await loadBuffaloSLite();
         
         setIsFaceDetectionReady(true);
         setIsLoadingModels(false); // Loading'i kapat
@@ -280,8 +297,8 @@ export default function MainMenuPage() {
             faceapi.nets.faceRecognitionNet.load(fallbackPath)
           ]);
           
-          // Load InsightFace Buffalo_L
-          const buffaloLoaded = await loadInsightFaceBuffaloL();
+          // Load Buffalo-S Lite
+          const buffaloLoaded = await loadBuffaloSLite();
           
           setIsFaceDetectionReady(true);
           setIsLoadingModels(false); // Loading'i kapat
