@@ -145,7 +145,7 @@ export default function MainMenuPage() {
   const [photoTcNumber, setPhotoTcNumber] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [photoStep, setPhotoStep] = useState<'tc-input' | 'model-selection' | 'photo-upload' | 'processing' | 'results'>('tc-input');
+  const [photoStep, setPhotoStep] = useState<'tc-input' | 'photo-upload' | 'model-selection' | 'processing' | 'results'>('tc-input');
   const [tcError, setTcError] = useState("");
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [currentSession, setCurrentSession] = useState<MatchingSession | null>(null);
@@ -900,7 +900,7 @@ export default function MainMenuPage() {
                               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
                               disabled={photoTcNumber.length !== 11 || tcError !== ""}
                               onClick={() => {
-                                setPhotoStep('model-selection');
+                                setPhotoStep('photo-upload');
                               }}
                             >
                               <CheckCircle className="mr-2 w-4 h-4" />
@@ -909,13 +909,13 @@ export default function MainMenuPage() {
                           </div>
                         )}
 
-                        {/* Model Selection Step */}
-                        {photoStep === 'model-selection' && (
+                        {/* Photo Upload Step */}
+                        {photoStep === 'photo-upload' && (
                           <div className="space-y-6">
                             <div className="flex items-center justify-between bg-green-50 p-3 rounded-lg">
                               <div>
                                 <span className="font-medium text-green-800">TC: {photoTcNumber}</span>
-                                <p className="text-sm text-green-600">Model seçimi yapılıyor</p>
+                                <p className="text-sm text-green-600">Referans fotoğraf bekleniyor</p>
                               </div>
                               <Button 
                                 variant="ghost" 
@@ -926,6 +926,191 @@ export default function MainMenuPage() {
                                 }}
                               >
                                 Değiştir
+                              </Button>
+                            </div>
+                            
+                        <div>
+                          <Label className="text-gray-700 font-medium mb-2 block">
+                            Referans Fotoğraflarınız
+                          </Label>
+                          <div 
+                            className="border-2 border-dashed border-orange-300 rounded-lg p-8 text-center bg-orange-50/50 hover:bg-orange-50 transition-colors"
+                            onDrop={async (e) => {
+                              e.preventDefault();
+                              const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+                              if (files.length > 0) {
+                                await handleFileUpload([...uploadedFiles, ...files]);
+                              }
+                            }}
+                            onDragOver={(e) => e.preventDefault()}
+                          >
+                            <Upload className="w-12 h-12 mx-auto text-orange-400 mb-4" />
+                            <p className="text-gray-600 mb-2">Fotoğraflarınızı sürükleyip bırakın veya</p>
+                            <Button 
+                              variant="outline" 
+                              className="border-orange-300 text-orange-600 hover:bg-orange-50"
+                              onClick={() => {
+                                const input = document.createElement('input');
+                                input.type = 'file';
+                                input.multiple = true;
+                                input.accept = 'image/*';
+                                input.onchange = async (e) => {
+                                  const files = Array.from((e.target as HTMLInputElement).files || []);
+                                  if (files.length > 0) {
+                                    await handleFileUpload([...uploadedFiles, ...files]);
+                                  }
+                                };
+                                input.click();
+                              }}
+                            >
+                              Dosya Seç
+                            </Button>
+                            <p className="text-xs text-gray-500 mt-2">PNG, JPG, JPEG dosyaları kabul edilir</p>
+                          </div>
+                        </div>
+
+                        {/* Face Detection Progress */}
+                        {isDetectingFaces && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600">Yüzler tespit ediliyor...</span>
+                              <span className="font-medium">{faceDetectionProgress}%</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-orange-600 h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${faceDetectionProgress}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        )}
+
+                        {uploadedFiles.length > 0 && (
+                          <div>
+                            <h4 className="font-medium text-gray-700 mb-3">Yüklenen Fotoğraflar ({uploadedFiles.length})</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                              {uploadedFiles.map((file, index) => (
+                                <div key={index} className="relative group">
+                                  <img 
+                                    src={URL.createObjectURL(file)} 
+                                    alt={file.name}
+                                    className="w-full h-24 object-cover rounded-lg"
+                                  />
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={() => {
+                                      const newFiles = uploadedFiles.filter((_, i) => i !== index);
+                                      setUploadedFiles(newFiles);
+                                      setDetectedFaces([]);
+                                      setSelectedFaceIds([]);
+                                    }}
+                                  >
+                                    ×
+                                  </Button>
+                                  <p className="text-xs text-gray-500 mt-1 truncate">{file.name}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Detected Faces Display */}
+                        {detectedFaces.length > 0 && (
+                          <div>
+                            <h4 className="font-medium text-gray-700 mb-3">
+                              Tespit Edilen Yüzler ({detectedFaces.length})
+                              {selectedFaceIds.length > 0 && (
+                                <span className="ml-2 text-sm text-orange-600">({selectedFaceIds.length} seçili)</span>
+                              )}
+                            </h4>
+                            <Alert className="mb-4">
+                              <Camera className="h-4 w-4" />
+                              <AlertDescription>
+                                Size ait olan yüzleri seçin. Seçilen yüzler kamp fotoğraflarında aranacak.
+                              </AlertDescription>
+                            </Alert>
+                            <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
+                              {detectedFaces.map((face) => (
+                                <div
+                                  key={face.id}
+                                  className={`relative border-2 rounded-lg p-2 cursor-pointer transition-all ${
+                                    face.isSelected 
+                                      ? 'border-orange-500 bg-orange-50' 
+                                      : 'border-gray-200 hover:border-orange-300'
+                                  }`}
+                                  onClick={() => toggleFaceSelection(face.id)}
+                                >
+                                  <img
+                                    src={face.imageData}
+                                    alt="Tespit edilen yüz"
+                                    className="w-full h-20 object-cover rounded"
+                                  />
+                                  <div className="mt-1 space-y-1">
+                                    <div className={`text-xs px-1 py-0.5 rounded text-center font-medium ${
+                                      face.quality === 'good' ? 'bg-green-100 text-green-800' :
+                                      face.quality === 'poor' ? 'bg-red-100 text-red-800' :
+                                      face.quality === 'blurry' ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-purple-100 text-purple-800'
+                                    }`}>
+                                      {face.quality === 'good' ? 'İyi' :
+                                       face.quality === 'poor' ? 'Zayıf' :
+                                       face.quality === 'blurry' ? 'Bulanık' : 'Profil'}
+                                    </div>
+                                    <div className="text-xs text-gray-500 text-center">
+                                      %{Math.round(face.confidence)}
+                                    </div>
+                                  </div>
+                                  {face.isSelected && (
+                                    <CheckCircle className="absolute top-1 right-1 w-4 h-4 text-orange-600" />
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                            {detectedFaces.length > 0 && (
+                              <div className="mt-3 text-sm text-gray-600">
+                                Ortalama Kalite: %{Math.round(detectedFaces.reduce((acc, face) => acc + face.confidence, 0) / detectedFaces.length)}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <Alert>
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            <strong>Nasıl çalışır:</strong> Referans fotoğraflarınızı yükledikten sonra model seçimi yapacaksınız ve sistem kamp fotoğrafları arasında sizin bulunduğunuz fotoğrafları bulacaktır.
+                          </AlertDescription>
+                        </Alert>
+
+                        <Button 
+                          className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
+                          disabled={uploadedFiles.length === 0 || selectedFaceIds.length === 0}
+                          onClick={() => setPhotoStep('model-selection')}
+                        >
+                          <CheckCircle className="mr-2 w-4 h-4" />
+                          Model Seçimine Geç
+                        </Button>
+                          </div>
+                        )}
+
+                        {/* Model Selection Step */}
+                        {photoStep === 'model-selection' && (
+                          <div className="space-y-6">
+                            <div className="flex items-center justify-between bg-green-50 p-3 rounded-lg">
+                              <div>
+                                <span className="font-medium text-green-800">TC: {photoTcNumber}</span>
+                                <p className="text-sm text-green-600">
+                                  {uploadedFiles.length} fotoğraf, {selectedFaceIds.length} yüz seçildi - Model seçimi
+                                </p>
+                              </div>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => setPhotoStep('photo-upload')}
+                              >
+                                <ArrowLeft className="mr-1 w-3 h-3" />
+                                Geri
                               </Button>
                             </div>
                             
@@ -978,37 +1163,6 @@ export default function MainMenuPage() {
                                   En az bir model seçmelisiniz
                                 </p>
                               )}
-                            </div>
-                            
-                            <Button 
-                              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
-                              disabled={selectedModelIds.length === 0}
-                              onClick={() => setPhotoStep('photo-upload')}
-                            >
-                              <Camera className="mr-2 w-4 h-4" />
-                              Fotoğraf Yüklemeye Geç
-                            </Button>
-                          </div>
-                        )}
-
-                        {/* Photo Upload Form */}
-                        {photoStep === 'photo-upload' && (
-                          <div className="space-y-6">
-                            <div className="flex items-center justify-between bg-green-50 p-3 rounded-lg">
-                              <div>
-                                <span className="font-medium text-green-800">TC: {photoTcNumber}</span>
-                                <p className="text-sm text-green-600">
-                                  {selectedModelIds.length} model seçildi - Referans fotoğraf bekleniyor
-                                </p>
-                              </div>
-                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                onClick={() => setPhotoStep('model-selection')}
-                              >
-                                <ArrowLeft className="mr-1 w-3 h-3" />
-                                Geri
-                              </Button>
                             </div>
 
                         <div>
