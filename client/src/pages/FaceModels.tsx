@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { setAuthHeader } from "@/lib/auth-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +37,13 @@ export default function FaceModels() {
   // Fetch face models
   const { data: models = [], isLoading, error } = useQuery({
     queryKey: ['/api/face-models'],
+    queryFn: async () => {
+      const response = await fetch('/api/face-models', {
+        headers: setAuthHeader(),
+      });
+      if (!response.ok) throw new Error('Failed to fetch face models');
+      return response.json();
+    },
     refetchInterval: 5000, // Refresh every 5 seconds to see status updates
   });
 
