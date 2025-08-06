@@ -1885,6 +1885,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Face Models API Endpoints
+  // Photo matching routes
+  app.post('/api/photo-matching/start', requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { tcNumber, selectedModelIds } = req.body;
+      
+      if (!tcNumber || !selectedModelIds || selectedModelIds.length === 0) {
+        return res.status(400).json({ message: 'TC numarası ve en az bir model seçilmelidir' });
+      }
+      
+      // Check for existing active session within timeout
+      const existingSession = await storage.getActivePhotoMatchingSession(tcNumber);
+      if (existingSession) {
+        return res.json({
+          sessionId: existingSession.id,
+          status: existingSession.status,
+          progress: existingSession.progressPercentage,
+          currentStep: existingSession.currentStep,
+          timeoutAt: existingSession.timeoutAt,
+        });
+      }
+      
+      // Create new session
+      const timeoutHours = await storage.getSystemSetting('photo_matching_timeout_hours', '3');
+      const timeoutAt = new Date(Date.now() + parseInt(timeoutHours) * 60 * 60 * 1000);
+      
+      const session = await storage.createPhotoMatchingSession({
+        tcNumber,
+        uploadedPhotoPath: '', // Will be updated when photo is uploaded
+        selectedModelIds: JSON.stringify(selectedModelIds),
+        timeoutAt,
+      });
+      
+      res.json({
+        sessionId: session.id,
+        status: session.status,
+        uploadUrl: `/api/photo-matching/${session.id}/upload`,
+      });
+    } catch (error) {
+      console.error('Error starting photo matching session:', error);
+      res.status(500).json({ message: 'Eşleştirme oturumu başlatılamadı' });
+    }
+  });
+
+  app.get('/api/photo-matching/:sessionId/status', requireAuth, async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const session = await storage.getPhotoMatchingSession(sessionId);
+      
+      if (!session) {
+        return res.status(404).json({ message: 'Oturum bulunamadı' });
+      }
+      
+      const results = await storage.getFaceModelMatchingResults(sessionId);
+      
+      res.json({
+        sessionId: session.id,
+        status: session.status,
+        progress: session.progressPercentage,
+        currentStep: session.currentStep,
+        queuePosition: session.queuePosition,
+        results: results.map(r => ({
+          modelId: r.faceModelId,
+          modelName: r.faceModel?.name,
+          totalMatches: r.totalMatches,
+          isZipReady: r.isZipReady,
+          canDownload: r.isZipReady && !r.downloadedAt,
+        })),
+        timeoutAt: session.timeoutAt,
+        errorMessage: session.errorMessage,
+      });
+    } catch (error) {
+      console.error('Error getting session status:', error);
+      res.status(500).json({ message: 'Durum alınamadı' });
+    }
+  });
+
+  app.post('/api/photo-matching/:sessionId/:modelId/download', requireAuth, async (req, res) => {
+    try {
+      const { sessionId, modelId } = req.params;
+      
+      const result = await storage.getFaceModelMatchingResult(sessionId, modelId);
+      if (!result || !result.isZipReady) {
+        return res.status(404).json({ message: 'İndirme dosyası hazır değil' });
+      }
+      
+      // TODO: Implement actual file download
+      // For now, just mark as downloaded
+      await storage.markResultAsDownloaded(result.id);
+      
+      res.json({ 
+        message: 'İndirme başladı',
+        downloadUrl: `/downloads/${result.zipFilePath}` 
+      });
+    } catch (error) {
+      console.error('Error downloading results:', error);
+      res.status(500).json({ message: 'İndirme başlatılamadı' });
+    }
+  });
+
   app.get('/api/face-models', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
     try {
       const models = await storage.getAllFaceModels();

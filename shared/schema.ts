@@ -18,7 +18,7 @@ export const userRoleEnum = pgEnum('user_role', ['genelbaskan', 'genelsekreterli
 export const questionTypeEnum = pgEnum('question_type', ['general', 'specific']);
 export const logActionEnum = pgEnum('log_action', ['login', 'logout', 'create_question', 'edit_question', 'delete_question', 'create_answer', 'edit_answer', 'delete_answer', 'create_user', 'edit_user', 'delete_user', 'send_feedback', 'import_users']);
 export const elementTypeEnum = pgEnum('element_type', ['text', 'button', 'logo', 'slogan']);
-export const photoRequestStatusEnum = pgEnum('photo_request_status', ['pending', 'processing', 'completed', 'failed']);
+export const photoRequestStatusEnum = pgEnum('photo_request_status', ['pending', 'face_detection', 'face_selection', 'queued', 'matching', 'completed', 'failed']);
 export const faceQualityEnum = pgEnum('face_quality', ['good', 'poor', 'blurry', 'profile']);
 export const faceModelStatusEnum = pgEnum('face_model_status', ['downloading', 'extracting', 'ready', 'error']);
 
@@ -317,6 +317,52 @@ export const faceModels = pgTable("face_models", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// Photo matching sessions - Kullanıcı fotoğraf eşleştirme oturumları
+export const photoMatchingSessions = pgTable("photo_matching_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tcNumber: varchar("tc_number", { length: 11 }).notNull(),
+  uploadedPhotoPath: varchar("uploaded_photo_path").notNull(), // Yüklenen fotoğraf yolu
+  selectedFaceData: jsonb("selected_face_data"), // Kullanıcının seçtiği yüz verileri
+  selectedModelIds: jsonb("selected_model_ids").notNull(), // Seçilen model ID'leri array
+  status: photoRequestStatusEnum("status").notNull().default('face_detection'),
+  queuePosition: integer("queue_position"), // Kuyruk sırası
+  progressPercentage: integer("progress_percentage").default(0), // 0-100 arası
+  currentStep: varchar("current_step").default('face_detection'), // "face_detection", "matching", "completed"
+  timeoutAt: timestamp("timeout_at").notNull(), // 3 saatlik zaman aşımı
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Face model matching results - Model bazlı eşleştirme sonuçları
+export const faceModelMatchingResults = pgTable("face_model_matching_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => photoMatchingSessions.id, { onDelete: 'cascade' }),
+  faceModelId: varchar("face_model_id").notNull().references(() => faceModels.id, { onDelete: 'cascade' }),
+  matchedPhotos: jsonb("matched_photos").notNull(), // Eşleşen fotoğrafların listesi
+  similarityThreshold: varchar("similarity_threshold").default('0.6'), // Benzerlik eşiği
+  totalMatches: integer("total_matches").default(0),
+  zipFilePath: varchar("zip_file_path"), // matched/{TCKN}_{modelAdi}.zip
+  zipCreatedAt: timestamp("zip_created_at"),
+  downloadedAt: timestamp("downloaded_at"),
+  isZipReady: boolean("is_zip_ready").notNull().default(false),
+  processingError: text("processing_error"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// System settings - Sistem ayarları (timeout vs.)
+export const systemSettings = pgTable("system_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  settingKey: varchar("setting_key").notNull().unique(),
+  settingValue: text("setting_value").notNull(),
+  description: text("description"),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   questions: many(questions),
@@ -444,9 +490,32 @@ export const photoRequestDaysRelations = relations(photoRequestDays, ({ one }) =
   }),
 }));
 
-export const faceModelsRelations = relations(faceModels, ({ one }) => ({
+export const faceModelsRelations = relations(faceModels, ({ one, many }) => ({
   createdBy: one(users, {
     fields: [faceModels.createdBy],
+    references: [users.id],
+  }),
+  matchingResults: many(faceModelMatchingResults),
+}));
+
+export const photoMatchingSessionsRelations = relations(photoMatchingSessions, ({ many }) => ({
+  matchingResults: many(faceModelMatchingResults),
+}));
+
+export const faceModelMatchingResultsRelations = relations(faceModelMatchingResults, ({ one }) => ({
+  session: one(photoMatchingSessions, {
+    fields: [faceModelMatchingResults.sessionId],
+    references: [photoMatchingSessions.id],
+  }),
+  faceModel: one(faceModels, {
+    fields: [faceModelMatchingResults.faceModelId],
+    references: [faceModels.id],
+  }),
+}));
+
+export const systemSettingsRelations = relations(systemSettings, ({ one }) => ({
+  updatedBy: one(users, {
+    fields: [systemSettings.updatedBy],
     references: [users.id],
   }),
 }));
@@ -584,6 +653,33 @@ export const insertFaceModelSchema = createInsertSchema(faceModels).omit({
   updatedAt: true,
 });
 
+export const insertPhotoMatchingSessionSchema = createInsertSchema(photoMatchingSessions).omit({
+  id: true,
+  queuePosition: true,
+  progressPercentage: true,
+  startedAt: true,
+  completedAt: true,
+  errorMessage: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFaceModelMatchingResultSchema = createInsertSchema(faceModelMatchingResults).omit({
+  id: true,
+  zipFilePath: true,
+  zipCreatedAt: true,
+  downloadedAt: true,
+  isZipReady: true,
+  processingError: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSystemSettingsSchema = createInsertSchema(systemSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -627,6 +723,12 @@ export type PhotoRequestDay = typeof photoRequestDays.$inferSelect;
 export type InsertPhotoRequestDay = z.infer<typeof insertPhotoRequestDaySchema>;
 export type FaceModel = typeof faceModels.$inferSelect;
 export type InsertFaceModel = z.infer<typeof insertFaceModelSchema>;
+export type PhotoMatchingSession = typeof photoMatchingSessions.$inferSelect;
+export type InsertPhotoMatchingSession = z.infer<typeof insertPhotoMatchingSessionSchema>;
+export type FaceModelMatchingResult = typeof faceModelMatchingResults.$inferSelect;
+export type InsertFaceModelMatchingResult = z.infer<typeof insertFaceModelMatchingResultSchema>;
+export type SystemSettings = typeof systemSettings.$inferSelect;
+export type InsertSystemSettings = z.infer<typeof insertSystemSettingsSchema>;
 
 // Additional types for API responses
 export type UserWithStats = User & {

@@ -20,6 +20,9 @@ import {
   campDays,
   photoRequestDays,
   faceModels,
+  photoMatchingSessions,
+  faceModelMatchingResults,
+  systemSettings,
   type User,
   type InsertUser,
   type Table,
@@ -62,6 +65,12 @@ import {
   type InsertPhotoRequestDay,
   type FaceModel,
   type InsertFaceModel,
+  type PhotoMatchingSession,
+  type InsertPhotoMatchingSession,
+  type FaceModelMatchingResult,
+  type InsertFaceModelMatchingResult,
+  type SystemSettings,
+  type InsertSystemSettings,
   type UserWithStats,
   type QuestionWithStats,
   type AnswerWithDetails,
@@ -230,6 +239,22 @@ export interface IStorage {
   getFaceModel(id: string): Promise<FaceModel | undefined>;
   deleteFaceModel(id: string): Promise<void>;
   updateFaceModel(id: string, updates: Partial<FaceModel>): Promise<FaceModel>;
+
+  // Photo matching sessions
+  createPhotoMatchingSession(session: InsertPhotoMatchingSession): Promise<PhotoMatchingSession>;
+  getPhotoMatchingSession(id: string): Promise<PhotoMatchingSession | undefined>;
+  getActivePhotoMatchingSession(tcNumber: string): Promise<PhotoMatchingSession | undefined>;
+  updatePhotoMatchingSession(id: string, updates: Partial<PhotoMatchingSession>): Promise<PhotoMatchingSession>;
+  
+  // Face model matching results
+  createFaceModelMatchingResult(result: InsertFaceModelMatchingResult): Promise<FaceModelMatchingResult>;
+  getFaceModelMatchingResults(sessionId: string): Promise<FaceModelMatchingResult[]>;
+  getFaceModelMatchingResult(sessionId: string, modelId: string): Promise<FaceModelMatchingResult | undefined>;
+  markResultAsDownloaded(resultId: string): Promise<void>;
+  
+  // System settings
+  getSystemSetting(key: string, defaultValue: string): Promise<string>;
+  updateSystemSetting(key: string, value: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1459,6 +1484,99 @@ export class DatabaseStorage implements IStorage {
       .where(eq(faceModels.id, id))
       .returning();
     return model;
+  }
+
+  // Photo matching sessions operations
+  async createPhotoMatchingSession(insertSession: InsertPhotoMatchingSession): Promise<PhotoMatchingSession> {
+    const [session] = await db
+      .insert(photoMatchingSessions)
+      .values(insertSession)
+      .returning();
+    return session;
+  }
+
+  async getPhotoMatchingSession(id: string): Promise<PhotoMatchingSession | undefined> {
+    const [session] = await db.select().from(photoMatchingSessions).where(eq(photoMatchingSessions.id, id));
+    return session || undefined;
+  }
+
+  async getActivePhotoMatchingSession(tcNumber: string): Promise<PhotoMatchingSession | undefined> {
+    const [session] = await db
+      .select()
+      .from(photoMatchingSessions)
+      .where(
+        and(
+          eq(photoMatchingSessions.tcNumber, tcNumber),
+          sql`${photoMatchingSessions.timeoutAt} > NOW()`
+        )
+      )
+      .orderBy(desc(photoMatchingSessions.createdAt));
+    return session || undefined;
+  }
+
+  async updatePhotoMatchingSession(id: string, updates: Partial<PhotoMatchingSession>): Promise<PhotoMatchingSession> {
+    const [session] = await db
+      .update(photoMatchingSessions)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(photoMatchingSessions.id, id))
+      .returning();
+    return session;
+  }
+
+  // Face model matching results operations
+  async createFaceModelMatchingResult(insertResult: InsertFaceModelMatchingResult): Promise<FaceModelMatchingResult> {
+    const [result] = await db
+      .insert(faceModelMatchingResults)
+      .values(insertResult)
+      .returning();
+    return result;
+  }
+
+  async getFaceModelMatchingResults(sessionId: string): Promise<FaceModelMatchingResult[]> {
+    return db
+      .select()
+      .from(faceModelMatchingResults)
+      .where(eq(faceModelMatchingResults.sessionId, sessionId))
+      .orderBy(faceModelMatchingResults.createdAt);
+  }
+
+  async getFaceModelMatchingResult(sessionId: string, modelId: string): Promise<FaceModelMatchingResult | undefined> {
+    const [result] = await db
+      .select()
+      .from(faceModelMatchingResults)
+      .where(
+        and(
+          eq(faceModelMatchingResults.sessionId, sessionId),
+          eq(faceModelMatchingResults.faceModelId, modelId)
+        )
+      );
+    return result || undefined;
+  }
+
+  async markResultAsDownloaded(resultId: string): Promise<void> {
+    await db
+      .update(faceModelMatchingResults)
+      .set({ downloadedAt: new Date() })
+      .where(eq(faceModelMatchingResults.id, resultId));
+  }
+
+  // System settings operations
+  async getSystemSetting(key: string, defaultValue: string): Promise<string> {
+    const [setting] = await db
+      .select()
+      .from(systemSettings)
+      .where(eq(systemSettings.settingKey, key));
+    return setting?.settingValue || defaultValue;
+  }
+
+  async updateSystemSetting(key: string, value: string): Promise<void> {
+    await db
+      .insert(systemSettings)
+      .values({ settingKey: key, settingValue: value })
+      .onConflictDoUpdate({
+        target: systemSettings.settingKey,
+        set: { settingValue: value, updatedAt: new Date() }
+      });
   }
 }
 
