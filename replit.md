@@ -16,11 +16,13 @@ This is a web-based management system for the AK Party Youth Branches Consultati
 ### January 29, 2025 - Evening
 - **Face Model Management System Complete**: Successfully implemented full Google Drive integration
 - **Download System Working**: Models can now be downloaded from Google Drive ZIP links and processed
-- **File Processing Robust**: ZIP extraction handles mixed files/directories properly
+- **File Processing Robust**: ZIP extraction handles mixed files/directories properly with recursive copying
 - **Storage Path Fixed**: Models stored in `./models/` directory (Replit-compatible)
 - **Authentication System Stable**: All API endpoints properly secured with JWT tokens
 - **Debug System Enhanced**: Comprehensive logging for download and processing stages
 - **Schema Updates**: Added `pending` status to face model enum for proper workflow
+- **Manual Download Control**: Fixed model creation to start in "pending" status, requiring manual İNDİR button click
+- **Recursive File Copying**: ZIP extraction now properly copies both files and directories (denemelik folder + photos)
 
 ### January 29, 2025
 - **Major Architectural Change - Email System Removed**: Completely replaced email delivery system with direct ZIP file downloads
