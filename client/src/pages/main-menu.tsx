@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import * as faceapi from '@vladmandic/face-api';
+import * as ort from 'onnxruntime-web';
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -144,11 +145,13 @@ export default function MainMenuPage() {
   
   // Photos section states
   const [photoTcNumber, setPhotoTcNumber] = useState("");
+  const [photoEmail, setPhotoEmail] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [photoStep, setPhotoStep] = useState<'tc-input' | 'photo-upload' | 'model-selection' | 'processing' | 'results'>('tc-input');
   const [tcError, setTcError] = useState("");
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+  const [selectedCampDays, setSelectedCampDays] = useState<string[]>([]);
   const [currentSession, setCurrentSession] = useState<MatchingSession | null>(null);
   
   // Face detection states
@@ -156,7 +159,7 @@ export default function MainMenuPage() {
   const [faceDetectionProgress, setFaceDetectionProgress] = useState(0);
   const [isFaceDetectionReady, setIsFaceDetectionReady] = useState(false);
   const [isLoadingModels, setIsLoadingModels] = useState(true);
-
+  const [insightFaceSession, setInsightFaceSession] = useState<ort.InferenceSession | null>(null);
   const [isDetectingFaces, setIsDetectingFaces] = useState(false);
   const [selectedFaceIds, setSelectedFaceIds] = useState<string[]>([]);
   const [faceQualityScores, setFaceQualityScores] = useState<{[key: string]: number}>({});
@@ -175,6 +178,109 @@ export default function MainMenuPage() {
     isSelected: boolean;
   }
 
+  // Load InsightFace Buffalo_L model for embedding extraction
+  const loadInsightFaceBuffaloL = async () => {
+    try {
+      console.log('🦬 Loading InsightFace Buffalo_L model...');
+      
+      // Set ONNX Runtime execution providers for better compatibility
+      ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/';
+      ort.env.wasm.numThreads = 1;
+      
+      // Try multiple sources for Buffalo_L model
+      const modelUrls = [
+        'https://huggingface.co/Xenova/insightface/resolve/main/buffalo_l.onnx',
+        'https://cdn.jsdelivr.net/gh/deepinsight/insightface@master/models/buffalo_l/buffalo_l.onnx',
+        '/models/buffalo_l.onnx' // Local model if available
+      ];
+
+      let session = null;
+      for (const modelUrl of modelUrls) {
+        try {
+          console.log(`🔄 Trying to load model from: ${modelUrl}`);
+          session = await ort.InferenceSession.create(modelUrl, {
+            executionProviders: ['wasm', 'cpu'],
+            graphOptimizationLevel: 'all'
+          });
+          break;
+        } catch (error) {
+          console.warn(`⚠️ Failed to load from ${modelUrl}:`, error);
+          continue;
+        }
+      }
+
+      if (session) {
+        setInsightFaceSession(session);
+        console.log('✅ InsightFace Buffalo_L model loaded successfully');
+        return true;
+      } else {
+        throw new Error('All model sources failed');
+      }
+    } catch (error) {
+      console.error('❌ InsightFace Buffalo_L model loading failed:', error);
+      toast({
+        title: "Model Yükleme Uyarısı",
+        description: "InsightFace Buffalo_L yüklenemedi. Face-API embeddings kullanılacak.",
+        variant: "default",
+      });
+      return false;
+    }
+  };
+
+  // Extract embeddings using InsightFace Buffalo_L
+  const extractBuffaloLEmbedding = async (faceImageData: string): Promise<number[] | null> => {
+    if (!insightFaceSession) {
+      console.warn('InsightFace Buffalo_L session not available');
+      return null;
+    }
+
+    try {
+      console.log('🔍 Extracting Buffalo_L embedding...');
+      
+      // Create image element from data URL
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = faceImageData;
+      });
+
+      // Create canvas and resize image to 112x112 (InsightFace input size)
+      const canvas = document.createElement('canvas');
+      canvas.width = 112;
+      canvas.height = 112;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, 112, 112);
+
+      // Get image data and normalize for Buffalo_L
+      const imageData = ctx.getImageData(0, 0, 112, 112);
+      const pixels = imageData.data;
+      
+      // Convert to RGB and normalize to [0, 1] then to [-1, 1]
+      const input = new Float32Array(3 * 112 * 112);
+      for (let i = 0; i < 112 * 112; i++) {
+        input[i] = (pixels[i * 4] / 255.0 - 0.5) / 0.5; // R
+        input[i + 112 * 112] = (pixels[i * 4 + 1] / 255.0 - 0.5) / 0.5; // G  
+        input[i + 2 * 112 * 112] = (pixels[i * 4 + 2] / 255.0 - 0.5) / 0.5; // B
+      }
+
+      // Run inference with Buffalo_L
+      const inputTensor = new ort.Tensor('float32', input, [1, 3, 112, 112]);
+      const feeds: Record<string, ort.Tensor> = { data: inputTensor };
+      
+      const results = await insightFaceSession.run(feeds);
+      
+      // Get embedding from Buffalo_L (512-dimensional)
+      const outputName = Object.keys(results)[0];
+      const embedding = results[outputName].data as Float32Array;
+      
+      console.log(`✅ Buffalo_L embedding extracted: ${embedding.length} dimensions`);
+      return Array.from(embedding);
+    } catch (error) {
+      console.error('❌ Buffalo_L embedding extraction failed:', error);
+      return null;
+    }
+  };
 
   // Initialize face-api for detection and UI
   useEffect(() => {
@@ -198,11 +304,14 @@ export default function MainMenuPage() {
         await faceapi.nets.faceRecognitionNet.load(modelPath);
         console.log('FaceRecognitionNet loaded');
         
+        // Load InsightFace Buffalo_L for superior embeddings
+        const buffaloLoaded = await loadInsightFaceBuffaloL();
+        
         setIsFaceDetectionReady(true);
         console.log('Vladimir Mandic Face-API initialized successfully');
         toast({
           title: "Yüz Tanıma Aktif",
-          description: "Vladimir Mandic Face-API ile yüz tespiti hazır.",
+          description: `Face-API${buffaloLoaded ? ' + InsightFace Buffalo_L' : ''} ile yüz tespiti hazır.`,
         });
       } catch (error) {
         console.warn('Face-API initialization failed, trying alternative CDN:', error);
@@ -217,11 +326,14 @@ export default function MainMenuPage() {
             faceapi.nets.faceRecognitionNet.load(fallbackPath)
           ]);
           
+          // Load InsightFace Buffalo_L
+          const buffaloLoaded = await loadInsightFaceBuffaloL();
+          
           setIsFaceDetectionReady(true);
           console.log('Face-API loaded from fallback CDN');
           toast({
             title: "Yüz Tanıma Aktif",
-            description: "Otomatik yüz tespiti hazır (fallback CDN).",
+            description: `Face-API${buffaloLoaded ? ' + Buffalo_L' : ''} (fallback CDN) hazır.`,
           });
         } catch (fallbackError) {
           console.warn('All Face-API initialization attempts failed, using manual mode:', fallbackError);
@@ -324,6 +436,10 @@ export default function MainMenuPage() {
             const croppedFace = await cropFaceFromImage(img, detection.detection.box);
             const quality = assessFaceQuality(detection);
             
+            // Extract InsightFace Buffalo_L embedding from cropped face
+            console.log(`🦬 Extracting Buffalo_L embedding for face ${faceIndex + 1}...`);
+            const buffaloEmbedding = await extractBuffaloLEmbedding(croppedFace);
+            
             const face: DetectedFace = {
               id: `${fileIndex}-${faceIndex}-${Date.now()}`,
               imageData: croppedFace,
@@ -336,7 +452,7 @@ export default function MainMenuPage() {
                 height: detection.detection.box.height,
               },
               landmarks: detection.landmarks,
-              descriptor: detection.descriptor ? Array.from(detection.descriptor) : undefined,
+              descriptor: buffaloEmbedding || (detection.descriptor ? Array.from(detection.descriptor) : undefined),
               originalFile: file,
               isSelected: false,
             };
@@ -980,9 +1096,27 @@ export default function MainMenuPage() {
                               )}
                             </div>
                             
+                            <div>
+                              <Label htmlFor="photo-email" className="text-gray-700 font-medium">
+                                E-posta Adresi
+                              </Label>
+                              <Input
+                                id="photo-email"
+                                type="email"
+                                value={photoEmail}
+                                onChange={(e) => setPhotoEmail(e.target.value)}
+                                className="mt-1 focus:ring-orange-500 focus:border-orange-500"
+                                placeholder="Fotoğrafların gönderileceği e-posta adresi"
+                                required
+                              />
+                              <p className="text-xs text-gray-500 mt-1">
+                                Bulunan fotoğraflar bu e-posta adresine gönderilecektir
+                              </p>
+                            </div>
+                            
                             <Button 
                               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
-                              disabled={photoTcNumber.length !== 11 || tcError !== ""}
+                              disabled={photoTcNumber.length !== 11 || tcError !== "" || !photoEmail || !photoEmail.includes('@')}
                               onClick={() => {
                                 setPhotoStep('photo-upload');
                               }}
@@ -999,6 +1133,7 @@ export default function MainMenuPage() {
                             <div className="flex items-center justify-between bg-green-50 p-3 rounded-lg">
                               <div>
                                 <span className="font-medium text-green-800">TC: {photoTcNumber}</span>
+                                <span className="font-medium text-green-800 ml-3">E-posta: {photoEmail}</span>
                                 <p className="text-sm text-green-600">Referans fotoğraf bekleniyor</p>
                               </div>
                               <Button 
@@ -1006,6 +1141,7 @@ export default function MainMenuPage() {
                                 size="sm"
                                 onClick={() => {
                                   setPhotoTcNumber("");
+                                  setPhotoEmail("");
                                   setPhotoStep('tc-input');
                                 }}
                               >
@@ -1436,7 +1572,7 @@ export default function MainMenuPage() {
 
                             <Button 
                               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
-                              disabled={!photoEmail || uploadedFiles.length === 0 || selectedCampDays.length === 0 || isProcessing || (detectedFaces.length > 0 && selectedFaceIds.length === 0)}
+                              disabled={!photoEmail || uploadedFiles.length === 0 || isProcessing || (detectedFaces.length > 0 && selectedFaceIds.length === 0)}
                               onClick={async () => {
                                 setIsProcessing(true);
                                 try {
@@ -1503,13 +1639,13 @@ export default function MainMenuPage() {
                                   });
 
                                   // Start photo matching session
-                                  const sessionResponse = await apiRequest('POST', '/api/photo-matching/start-session', {
+                                  const sessionData = await apiRequest('POST', '/api/photo-matching/start-session', {
                                     tcNumber: photoTcNumber,
                                     modelIds: selectedModelIds,
                                     faceData: faceData
                                   });
                                   
-                                  setCurrentSession(sessionResponse);
+                                  setCurrentSession(sessionData as MatchingSession);
                                   setPhotoStep('processing');
                                   
                                   toast({
