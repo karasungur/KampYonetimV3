@@ -1709,7 +1709,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`🎯 Threshold: ${threshold}`);
             
             const pythonProcess = spawn('python3', [
-              'pkl_matcher_real.py',
+              'simple_pkl_reader.py',
               faceDbPath,
               userEmbeddingJson,
               threshold.toString(),
