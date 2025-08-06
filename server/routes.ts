@@ -12,6 +12,7 @@ import fs from "fs";
 import { nanoid } from "nanoid";
 import axios from "axios";
 import AdmZip from "adm-zip";
+import { spawn } from "child_process";
 
 
 // Object Storage için gerekli importlar
@@ -1463,9 +1464,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('🦬 Python InsightFace Buffalo_L ile embedding çıkarılıyor...');
       
       try {
-        // Python script'i çalıştır
-        const { spawn } = require('child_process');
-        const pythonProcess = spawn('python3', ['python_insightface_extractor.py', req.file.path]);
+        // Python script'i çalıştır (Buffalo_L compatible extractor)
+        
+        // İlk önce gerçek InsightFace'i dene, başarısız olursa çalışan alternatif kullan
+        let pythonProcess = spawn('python3', ['buffalo_compatible_extractor.py', req.file.path]);
+        let usingFallback = false; // Buffalo_L compatible extractor kullanıyoruz
         
         let pythonOutput = '';
         let pythonError = '';

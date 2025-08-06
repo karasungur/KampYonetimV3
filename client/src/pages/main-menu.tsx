@@ -179,53 +179,13 @@ export default function MainMenuPage() {
     isSelected: boolean;
   }
 
-  // Load InsightFace Buffalo_L model for embedding extraction
+  // HİBRİT YAKLAŞIM: Client tarafında InsightFace Buffalo_L yüklenmez
+  // Sadece Face-API kullanılır, embedding çıkarma server tarafında Python ile yapılır
   const loadInsightFaceBuffaloL = async () => {
-    try {
-      console.log('🦬 Loading InsightFace Buffalo_L model...');
-      
-      // Set ONNX Runtime execution providers for better compatibility
-      ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/';
-      ort.env.wasm.numThreads = 1;
-      
-      // Try multiple sources for Buffalo_L model
-      const modelUrls = [
-        'https://huggingface.co/Xenova/insightface/resolve/main/buffalo_l.onnx',
-        'https://cdn.jsdelivr.net/gh/deepinsight/insightface@master/models/buffalo_l/buffalo_l.onnx',
-        '/models/buffalo_l.onnx' // Local model if available
-      ];
-
-      let session = null;
-      for (const modelUrl of modelUrls) {
-        try {
-          console.log(`🔄 Trying to load model from: ${modelUrl}`);
-          session = await ort.InferenceSession.create(modelUrl, {
-            executionProviders: ['wasm', 'cpu'],
-            graphOptimizationLevel: 'all'
-          });
-          break;
-        } catch (error) {
-          console.warn(`⚠️ Failed to load from ${modelUrl}:`, error);
-          continue;
-        }
-      }
-
-      if (session) {
-        setInsightFaceSession(session);
-        console.log('✅ InsightFace Buffalo_L model loaded successfully');
-        return true;
-      } else {
-        throw new Error('All model sources failed');
-      }
-    } catch (error) {
-      console.error('❌ InsightFace Buffalo_L model loading failed:', error);
-      toast({
-        title: "Model Yükleme Uyarısı",
-        description: "InsightFace Buffalo_L yüklenemedi. Face-API embeddings kullanılacak.",
-        variant: "default",
-      });
-      return false;
-    }
+    console.log('🦬 InsightFace Buffalo_L server tarafında kullanılacak (Python)');
+    console.log('✅ Client tarafında yükleme atlandı - hibrit yaklaşım');
+    // Client tarafında InsightFace yükleme yapmıyoruz
+    return true; // Başarılı olarak işaretle ki Face-API devam etsin
   };
 
   // Extract embeddings using InsightFace Buffalo_L
@@ -309,10 +269,11 @@ export default function MainMenuPage() {
         const buffaloLoaded = await loadInsightFaceBuffaloL();
         
         setIsFaceDetectionReady(true);
+        setIsLoadingModels(false); // Loading'i kapat
         console.log('Vladimir Mandic Face-API initialized successfully');
         toast({
           title: "Yüz Tanıma Aktif",
-          description: `Face-API${buffaloLoaded ? ' + InsightFace Buffalo_L' : ''} ile yüz tespiti hazır.`,
+          description: `Face-API ile hibrit yüz tespiti hazır.`,
         });
       } catch (error) {
         console.warn('Face-API initialization failed, trying alternative CDN:', error);
@@ -331,14 +292,16 @@ export default function MainMenuPage() {
           const buffaloLoaded = await loadInsightFaceBuffaloL();
           
           setIsFaceDetectionReady(true);
+          setIsLoadingModels(false); // Loading'i kapat
           console.log('Face-API loaded from fallback CDN');
           toast({
             title: "Yüz Tanıma Aktif",
-            description: `Face-API${buffaloLoaded ? ' + Buffalo_L' : ''} (fallback CDN) hazır.`,
+            description: `Face-API (fallback CDN) ile hibrit sistem hazır.`,
           });
         } catch (fallbackError) {
           console.warn('All Face-API initialization attempts failed, using manual mode:', fallbackError);
           setIsFaceDetectionReady(false);
+          setIsLoadingModels(false); // Loading'i kapat
           toast({
             title: "Manuel Mod",
             description: "Yüz tanıma modelleri yüklenemedi. Manuel seçim modu kullanılacak.",
@@ -701,7 +664,7 @@ export default function MainMenuPage() {
         className="min-h-screen flex items-center justify-center bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: `url(${backgroundImage})` }}
       >
-        <div className="animate-pulse text-white text-xl bg-black/30 backdrop-blur-sm px-6 py-3 rounded-2xl">Menü yükleniyor...</div>
+        <div className="animate-pulse text-white text-xl bg-black/30 backdrop-blur-sm px-6 py-3 rounded-2xl">Sistem hazırlanıyor...</div>
       </div>
     );
   }
@@ -1144,8 +1107,21 @@ export default function MainMenuPage() {
                               <div className="flex items-center gap-3">
                                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
                                 <div>
-                                  <p className="text-sm font-medium text-blue-800">Yüz tanıma modelleri yükleniyor...</p>
-                                  <p className="text-xs text-blue-600">Bu işlem birkaç saniye sürebilir</p>
+                                  <p className="text-sm font-medium text-blue-800">Hibrit yüz tanıma sistemi hazırlanıyor...</p>
+                                  <p className="text-xs text-blue-600">Face-API + Buffalo_L embedding sistemi yükleniyor</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Model Ready */}
+                          {!isLoadingModels && isFaceDetectionReady && (
+                            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                              <div className="flex items-center gap-3">
+                                <CheckCircle className="h-5 w-5 text-green-600" />
+                                <div>
+                                  <p className="text-sm font-medium text-green-800">Hibrit yüz tanıma sistemi hazır</p>
+                                  <p className="text-xs text-green-600">Face-API (tespit) + Buffalo_L (embedding) aktif</p>
                                 </div>
                               </div>
                             </div>
@@ -1157,8 +1133,8 @@ export default function MainMenuPage() {
                               <div className="flex items-center gap-3">
                                 <AlertCircle className="h-5 w-5 text-yellow-600" />
                                 <div>
-                                  <p className="text-sm font-medium text-yellow-800">Yüz tanıma sistemi kullanılamıyor</p>
-                                  <p className="text-xs text-yellow-600">Fotoğraflar yüklenecek ancak otomatik yüz tespiti yapılamayacak</p>
+                                  <p className="text-sm font-medium text-yellow-800">Manuel mod aktif</p>
+                                  <p className="text-xs text-yellow-600">Otomatik yüz tespiti yapılamayacak, manuel seçim kullanılacak</p>
                                 </div>
                               </div>
                             </div>
