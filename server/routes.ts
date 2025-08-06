@@ -1698,50 +1698,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           console.log(`🗃️ PKL veritabanı bulundu: ${faceDbPath}`);
           
-          // PKL ile gerçek yüz eşleştirmesi yap
+          // Node.js PKL Reader ile gerçek eşleştirme
           try {
             const userEmbedding = userFaceData[0].embedding;
-            const userEmbeddingJson = JSON.stringify(userEmbedding);
             const threshold = 0.5; // Kullanıcı talebi
             
-            console.log(`🦬 PKL eşleştirmesi başlatılıyor...`);
+            console.log(`🦬 Node.js PKL eşleştirmesi başlatılıyor...`);
+            console.log(`📊 User embedding boyutu: ${userEmbedding.length}`);
             
-            // Çalışan PKL okuyucu kullan (dependency olmadan)
-            console.log(`🐍 PKL Matcher başlatılıyor: ${faceDbPath}`);
-            const pythonProcess = spawn('python3', [
-              'working_embedding_extractor.py',
-              faceDbPath,
-              userEmbeddingJson,
-              threshold.toString()
-            ]);
-            
-            let pythonOutput = '';
-            let pythonError = '';
-            
-            pythonProcess.stdout.on('data', (data: Buffer) => {
-              pythonOutput += data.toString();
-            });
-            
-            pythonProcess.stderr.on('data', (data: Buffer) => {
-              pythonError += data.toString();
-              console.log('🐍 PKL Python:', data.toString().trim());
-            });
-            
-            await new Promise((resolve, reject) => {
-              pythonProcess.on('close', (code: number) => {
-                if (code === 0) {
-                  resolve(code);
-                } else {
-                  reject(new Error(`PKL Python script çıkış kodu: ${code}`));
-                }
-              });
-            });
-            
-            // Python çıktısını parse et
-            const pklResult = JSON.parse(pythonOutput.trim());
+            // Node.js PKL okuyucu kullan
+            const { pklReader } = await import('./pkl-reader.js');
+            const pklResult = await pklReader.matchFaces(faceDbPath, userEmbedding, threshold);
             
             if (pklResult.success) {
-              console.log(`✅ PKL eşleştirmesi başarılı: ${pklResult.matches.length} eşleşme`);
+              console.log(`✅ Node.js PKL eşleştirmesi başarılı: ${pklResult.matches.length} eşleşme`);
               
               // PKL sonuçlarını ZIP'e ekle
               const reportContent = `
@@ -1749,58 +1719,41 @@ PKL Face Database Eşleştirme Raporu
 Model: ${model.name}
 İşlem Tarihi: ${new Date().toLocaleDateString('tr-TR')}
 PKL Dosyası: ${path.basename(faceDbPath)}
-Toplam Yüz Sayısı: ${pklResult.total_faces}
+Toplam Yüz Sayısı: ${pklResult.totalFaces}
 Threshold: ${pklResult.threshold}
 Algoritma: ${pklResult.algorithm}
 Toplam Eşleşme: ${pklResult.matches.length}
 
 EŞLEŞEN YÜZLER:
-${pklResult.matches.map((match: any, i: number) => 
-  `${i+1}. ${match.image_path} - Similarity: ${match.similarity.toFixed(3)}`
+${pklResult.matches.map((match, i: number) => 
+  `${i+1}. ${match.imagePath} - Similarity: ${match.similarity.toFixed(3)}`
 ).join('\n')}
 
-⚡ Bu sonuçlar gerçek InsightFace PKL veritabanından alınmıştır.
+⚡ Bu sonuçlar Node.js tabanlı PKL okuyucu ile alınmıştır.
 `;
               
-              zip.addFile(`${model.name}_PKL_eşleştirme_raporu.txt`, Buffer.from(reportContent, 'utf8'));
+              zip.addFile(`${model.name}_NodeJS_PKL_raporu.txt`, Buffer.from(reportContent, 'utf8'));
+              totalMatches += pklResult.matches.length;
               
-              // Eşleşen yüzlerin kopyalarını ekle (varsa)
+              // Eşleşen yüzlerin kopyalarını ekle
               for (const match of pklResult.matches.slice(0, 10)) { // İlk 10 eşleşme
-                const imageName = match.image_path;
-                let imageFound = false;
+                const imageName = match.imagePath;
+                const possiblePaths = [
+                  path.join(modelPath, imageName),
+                  path.join(modelPath, 'denemelik', imageName),
+                  path.join(modelPath, match.relativePath)
+                ];
                 
-                // Python script tarafından bulunan tam yolu kullan
-                if (match.full_path && fs.existsSync(match.full_path)) {
-                  try {
-                    const imageBuffer = fs.readFileSync(match.full_path);
-                    const zipFileName = `eşleşen_${match.similarity.toFixed(3)}_${imageName}`;
-                    zip.addFile(zipFileName, imageBuffer);
-                    console.log(`📸 Eşleşen görsel eklendi: ${zipFileName} (${match.relative_path})`);
-                    imageFound = true;
-                  } catch (imgError) {
-                    console.log(`⚠️ Görsel okunamadı: ${match.full_path}`);
-                  }
-                }
-                
-                // Fallback: Manuel arama
-                if (!imageFound) {
-                  const possiblePaths = [
-                    path.join(modelPath, imageName),
-                    path.join(modelPath, 'denemelik', imageName),
-                    path.join(modelPath, match.relative_path || imageName)
-                  ];
-                  
-                  for (const possiblePath of possiblePaths) {
-                    if (fs.existsSync(possiblePath)) {
-                      try {
-                        const imageBuffer = fs.readFileSync(possiblePath);
-                        const zipFileName = `eşleşen_${match.similarity.toFixed(3)}_${imageName}`;
-                        zip.addFile(zipFileName, imageBuffer);
-                        console.log(`📸 Eşleşen görsel eklendi: ${zipFileName} (fallback)`);
-                        break;
-                      } catch (imgError) {
-                        console.log(`⚠️ Görsel eklenemedi: ${possiblePath}`);
-                      }
+                for (const possiblePath of possiblePaths) {
+                  if (fs.existsSync(possiblePath)) {
+                    try {
+                      const imageBuffer = fs.readFileSync(possiblePath);
+                      const zipFileName = `${model.name}/match_${String(pklResult.matches.indexOf(match) + 1).padStart(2, '0')}_sim_${match.similarity.toFixed(3).replace('.', '_')}_${imageName}`;
+                      zip.addFile(zipFileName, imageBuffer);
+                      console.log(`📸 ZIP'e eklendi: ${zipFileName}`);
+                      break;
+                    } catch (imgError) {
+                      console.log(`⚠️ Görsel eklenemedi: ${possiblePath}`);
                     }
                   }
                 }
@@ -1811,20 +1764,17 @@ ${pklResult.matches.map((match: any, i: number) =>
               continue;
               
             } else {
-              console.log(`❌ PKL eşleştirmesi başarısız: ${pklResult.error}`);
-              console.log(`❌ FALLBACK DEVRE DIŞI - Gerçek PKL sonucu gerekli!`);
-              zip.addFile(`${model.name}_PKL_HATASI.txt`, Buffer.from(`PKL Eşleştirme Hatası: ${pklResult.error}`, 'utf8'));
+              console.log(`❌ Node.js PKL eşleştirmesi başarısız: ${pklResult.error}`);
+              zip.addFile(`${model.name}_NodeJS_PKL_HATASI.txt`, Buffer.from(`Node.js PKL Eşleştirme Hatası: ${pklResult.error}`, 'utf8'));
               processedModels++;
-              continue; // Fallback'e geçme, bir sonraki modele geç
+              continue;
             }
             
           } catch (pklError) {
-            console.log(`❌ PKL işlemi başarısız: ${pklError}`);
-            console.log(`❌ FALLBACK DEVRE DIŞI - Gerçek PKL eşleştirmesi gerekli!`);
-            // Gerçek hata raporla, fallback kullanma
-            zip.addFile(`${model.name}_HATA.txt`, Buffer.from(`PKL Eşleştirme Hatası: ${pklError}`, 'utf8'));
+            console.log(`❌ Node.js PKL işlemi başarısız: ${pklError}`);
+            zip.addFile(`${model.name}_NODEJS_HATA.txt`, Buffer.from(`Node.js PKL Eşleştirme Hatası: ${pklError}`, 'utf8'));
             processedModels++;
-            continue; // Fallback'e geçme, bir sonraki modele geç
+            continue;
           }
           
         } catch (error) {
