@@ -1447,6 +1447,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Embedding çıkarma endpoint'i (InsightFace Buffalo_L için)
+  app.post('/api/extract-embedding', imageUpload.single('photo'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Yüz fotoğrafı gönderilmedi' 
+        });
+      }
+
+      console.log('🦬 Embedding çıkarma isteği:', req.file.filename, req.file.size, 'bytes');
+      
+      // Şu an için Face-API benzeri 512 boyutlu dummy embedding döndürüyoruz
+      // İleride burada gerçek InsightFace Buffalo_L implementasyonu olacak
+      const dummyEmbedding = Array.from({length: 512}, () => Math.random() * 2 - 1);
+      
+      // Dosyayı temizle
+      fs.unlinkSync(req.file.path);
+      
+      res.json({
+        success: true,
+        embedding: dummyEmbedding,
+        embedding_size: 512,
+        model: 'InsightFace Buffalo_L (dummy)',
+        message: 'Embedding başarıyla çıkarıldı'
+      });
+    } catch (error) {
+      console.error('Embedding extraction error:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Embedding çıkarımında hata oluştu' 
+      });
+    }
+  });
+
   // Yeni fotoğraf talebi oluşturma
   app.post('/api/photo-requests', async (req, res) => {
     try {

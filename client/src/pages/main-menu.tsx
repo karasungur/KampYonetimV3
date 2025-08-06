@@ -29,7 +29,8 @@ import {
   AlertCircle,
   Image as ImageIcon,
   Search,
-  Download
+  Download,
+  PlayCircle
 } from "lucide-react";
 import { 
   SiX, 
@@ -148,7 +149,7 @@ export default function MainMenuPage() {
   const [photoEmail, setPhotoEmail] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [photoStep, setPhotoStep] = useState<'tc-input' | 'photo-upload' | 'model-selection' | 'processing' | 'results'>('tc-input');
+  const [photoStep, setPhotoStep] = useState<'tc-input' | 'photo-upload' | 'face-extraction' | 'face-selection' | 'model-selection' | 'processing' | 'results'>('tc-input');
   const [tcError, setTcError] = useState("");
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [selectedCampDays, setSelectedCampDays] = useState<string[]>([]);
@@ -1573,12 +1574,94 @@ export default function MainMenuPage() {
                             <Button 
                               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
                               disabled={!photoEmail || uploadedFiles.length === 0 || isProcessing || (detectedFaces.length > 0 && selectedFaceIds.length === 0)}
+                              onClick={() => {
+                                setPhotoStep('model-selection');
+                              }}
+                            >
+                              <CheckCircle className="mr-2 w-4 h-4" />
+                              Model Seç
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* Model Selection Step */}
+                        {photoStep === 'model-selection' && (
+                          <div className="space-y-6">
+                            <div className="flex items-center justify-between bg-blue-50 p-3 rounded-lg">
+                              <div>
+                                <span className="font-medium text-blue-800">6. Adım: Model Seçimi</span>
+                                <p className="text-sm text-blue-600">Hangi model ile eşleştirme yapılacağını seçin</p>
+                              </div>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => {
+                                  setPhotoStep('photo-upload');
+                                }}
+                              >
+                                Geri
+                              </Button>
+                            </div>
+
+                            <div>
+                              <Label className="text-gray-700 font-medium mb-3 block">
+                                Kamp Fotoğraf Modelleri
+                              </Label>
+                              
+                              {faceModels && faceModels.length > 0 ? (
+                                <div className="space-y-3">
+                                  {faceModels.map((model) => (
+                                    <div 
+                                      key={model.id}
+                                      className={`p-4 border rounded-lg cursor-pointer transition-all ${
+                                        selectedModelIds.includes(model.id)
+                                          ? 'border-orange-500 bg-orange-50'
+                                          : 'border-gray-200 hover:border-orange-300'
+                                      }`}
+                                      onClick={() => {
+                                        setSelectedModelIds(prev => 
+                                          prev.includes(model.id)
+                                            ? prev.filter(id => id !== model.id)
+                                            : [...prev, model.id]
+                                        );
+                                      }}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div>
+                                          <h4 className="font-semibold text-gray-900">{model.name}</h4>
+                                          <p className="text-sm text-gray-600">
+                                            Durum: <span className={`
+                                              ${model.status === 'ready' ? 'text-green-600' : 
+                                                model.status === 'error' ? 'text-red-600' : 'text-orange-600'}
+                                            `}>
+                                              {model.status === 'ready' ? 'Hazır' :
+                                               model.status === 'error' ? 'Hata' : 'İşleniyor'}
+                                            </span>
+                                          </p>
+                                        </div>
+                                        {selectedModelIds.includes(model.id) && (
+                                          <CheckCircle className="w-5 h-5 text-orange-600" />
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-center py-8 text-gray-500">
+                                  <Camera className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                                  <p>Henüz yüklenmiş model yok</p>
+                                </div>
+                              )}
+                            </div>
+
+                            <Button 
+                              className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3"
+                              disabled={selectedModelIds.length === 0 || isProcessing}
                               onClick={async () => {
                                 setIsProcessing(true);
                                 try {
                                   // Seçilen yüzlerin embedding verilerini hazırla
                                   const selectedFaces = detectedFaces.filter(face => selectedFaceIds.includes(face.id));
-                                  // Seçilen yüzleri server'a gönderip 512 boyutlu embedding al
                                   const faceData = [];
                                   
                                   console.log('🔄 Seçilen yüzler için embedding çıkarılıyor...', selectedFaces.length, 'yüz');
@@ -1629,33 +1712,43 @@ export default function MainMenuPage() {
                                   
                                   console.log('🏁 Embedding extraction tamamlandı. FaceData:', faceData.length, 'adet');
                                   
-
-                                  // Debug: Embedding çıkarıldı mı kontrol et
-                                  console.log('🔬 Face embedding debug:');
-                                  console.log('- Seçilen yüz sayısı:', selectedFaces.length);
-                                  console.log('- Face data sayısı:', faceData.length);
-                                  faceData.forEach((face, idx) => {
-                                    console.log(`- Face ${idx + 1}: embedding boyutu=${face.embedding.length}, confidence=${face.confidence}`);
-                                  });
-
-                                  // Start photo matching session
-                                  const sessionData = await apiRequest('POST', '/api/photo-matching/start-session', {
+                                  // Photo request oluştur (authentication gerektirmez)
+                                  const requestData = {
                                     tcNumber: photoTcNumber,
-                                    modelIds: selectedModelIds,
-                                    faceData: faceData
-                                  });
+                                    email: photoEmail,
+                                    faceData: faceData,
+                                    selectedCampDays: selectedModelIds,
+                                    uploadedFilesCount: uploadedFiles.length
+                                  };
+
+                                  console.log('📡 Photo request gönderiliyor:', requestData);
                                   
-                                  setCurrentSession(sessionData as MatchingSession);
-                                  setPhotoStep('processing');
-                                  
-                                  toast({
-                                    title: "Eşleştirme Başlatıldı",
-                                    description: `${selectedModelIds.length} model seçildi. İşlem başlatıldı.`,
+                                  const response = await fetch('/api/photo-requests', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify(requestData),
                                   });
+
+                                  if (response.ok) {
+                                    const result = await response.json();
+                                    console.log('✅ Photo request başarıyla oluşturuldu:', result);
+                                    
+                                    setPhotoStep('processing');
+                                    toast({
+                                      title: "İşlem Başlatıldı",
+                                      description: `${selectedModelIds.length} model seçildi. İşlem kuyruğa alındı.`,
+                                    });
+                                  } else {
+                                    const errorData = await response.json();
+                                    throw new Error(errorData.message || 'Photo request oluşturulamadı');
+                                  }
                                 } catch (error) {
+                                  console.error('Photo request error:', error);
                                   toast({
                                     title: "Hata",
-                                    description: "İstek gönderilirken bir hata oluştu. Lütfen tekrar deneyin.",
+                                    description: error instanceof Error ? error.message : "İstek gönderilirken bir hata oluştu.",
                                     variant: "destructive"
                                   });
                                 } finally {
@@ -1666,12 +1759,12 @@ export default function MainMenuPage() {
                               {isProcessing ? (
                                 <>
                                   <Clock className="mr-2 w-4 h-4 animate-spin" />
-                                  İşlem başlatılıyor...
+                                  Başlatılıyor...
                                 </>
                               ) : (
                                 <>
-                                  <CheckCircle className="mr-2 w-4 h-4" />
-                                  Fotoğrafları Bul ve Gönder
+                                  <PlayCircle className="mr-2 w-4 h-4" />
+                                  Başlat ({selectedModelIds.length} model seçili)
                                 </>
                               )}
                             </Button>
@@ -1680,35 +1773,73 @@ export default function MainMenuPage() {
 
                         {/* Processing Step */}
                         {photoStep === 'processing' && currentSession && (
-                          <ProcessingStep 
-                            session={currentSession}
-                            onComplete={(results) => {
-                              setCurrentSession(prev => prev ? { ...prev, results, status: 'completed' } : null);
-                              setPhotoStep('results');
-                            }}
-                            onError={(error) => {
-                              setCurrentSession(prev => prev ? { ...prev, errorMessage: error, status: 'error' } : null);
-                              setPhotoStep('results');
-                            }}
-                          />
+                          <div className="space-y-6">
+                            <div className="text-center py-8">
+                              <Clock className="w-16 h-16 mx-auto text-orange-500 mb-4 animate-spin" />
+                              <h3 className="text-xl font-semibold text-gray-900 mb-2">İşlem Devam Ediyor</h3>
+                              <p className="text-gray-600">Fotoğraflarınız işleniyor, lütfen bekleyiniz.</p>
+                              <div className="mt-4">
+                                <div className="bg-gray-200 rounded-full h-2 w-64 mx-auto">
+                                  <div className="bg-orange-500 h-2 rounded-full animate-pulse" style={{width: '60%'}}></div>
+                                </div>
+                                <p className="text-sm text-gray-500 mt-2">Bu işlem birkaç dakika sürebilir</p>
+                              </div>
+                            </div>
+                            
+                            <Button 
+                              variant="outline"
+                              onClick={() => {
+                                setPhotoStep('tc-input');
+                                setPhotoTcNumber("");
+                                setPhotoEmail("");
+                                setUploadedFiles([]);
+                                setDetectedFaces([]);
+                                setSelectedFaceIds([]);
+                                setSelectedModelIds([]);
+                              }}
+                              className="w-full"
+                            >
+                              Yeni İşlem Başlat
+                            </Button>
+                          </div>
                         )}
 
                         {/* Results Step */}
-                        {photoStep === 'results' && currentSession && (
-                          <ResultsStep 
-                            session={currentSession}
-                            tcNumber={photoTcNumber}
-                            onBackToMenu={handleBackToMenu}
-                            onNewSearch={() => {
-                              setPhotoTcNumber("");
-                              setUploadedFiles([]);
-                              setSelectedModelIds([]);
-                              setCurrentSession(null);
-                              setDetectedFaces([]);
-                              setSelectedFaceIds([]);
-                              setPhotoStep('tc-input');
-                            }}
-                          />
+                        {photoStep === 'results' && (
+                          <div className="space-y-6">
+                            <div className="text-center py-8">
+                              <CheckCircle className="w-16 h-16 mx-auto text-green-500 mb-4" />
+                              <h3 className="text-xl font-semibold text-gray-900 mb-2">İşlem Tamamlandı</h3>
+                              <p className="text-gray-600">Fotoğraf isteğiniz başarıyla kaydedildi. E-posta adresinize bilgilendirme gönderilecektir.</p>
+                            </div>
+                            
+                            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                              <h4 className="font-semibold text-green-800 mb-2">Sonraki Adımlar:</h4>
+                              <ul className="list-disc list-inside text-sm text-green-700 space-y-1">
+                                <li>İsteğiniz sistem tarafından işlemeye alındı</li>
+                                <li>Fotoğraf eşleştirme işlemi Python GUI uygulaması tarafından yapılacak</li>
+                                <li>Bulunan fotoğraflar e-posta adresinize gönderilecek</li>
+                                <li>İşlem süresi yüklenen model sayısına göre değişebilir</li>
+                              </ul>
+                            </div>
+
+                            <Button 
+                              variant="outline"
+                              onClick={() => {
+                                setPhotoTcNumber("");
+                                setPhotoEmail("");
+                                setUploadedFiles([]);
+                                setSelectedModelIds([]);
+                                setCurrentSession(null);
+                                setDetectedFaces([]);
+                                setSelectedFaceIds([]);
+                                setPhotoStep('tc-input');
+                              }}
+                              className="w-full"
+                            >
+                              Yeni İşlem Başlat
+                            </Button>
+                          </div>
                         )}
                       </div>
                     </div>
