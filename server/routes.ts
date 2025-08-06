@@ -1710,7 +1710,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               'pkl_face_matcher.py',
               faceDbPath,
               userEmbeddingJson,
-              threshold.toString()
+              threshold.toString(),
+              modelPath  // Model klasör yolunu gönder
             ]);
             
             let pythonOutput = '';
@@ -1764,26 +1765,41 @@ ${pklResult.matches.map((match: any, i: number) =>
               
               // Eşleşen yüzlerin kopyalarını ekle (varsa)
               for (const match of pklResult.matches.slice(0, 10)) { // İlk 10 eşleşme
-                const originalImagePath = match.original_path;
                 const imageName = match.image_path;
+                let imageFound = false;
                 
-                // Göreli yoldan dosyayı bulmaya çalış
-                const possiblePaths = [
-                  path.join(modelPath, imageName),
-                  path.join(modelPath, 'denemelik', imageName),
-                  path.join(modelPath, '..', imageName)
-                ];
+                // Python script tarafından bulunan tam yolu kullan
+                if (match.full_path && fs.existsSync(match.full_path)) {
+                  try {
+                    const imageBuffer = fs.readFileSync(match.full_path);
+                    const zipFileName = `eşleşen_${match.similarity.toFixed(3)}_${imageName}`;
+                    zip.addFile(zipFileName, imageBuffer);
+                    console.log(`📸 Eşleşen görsel eklendi: ${zipFileName} (${match.relative_path})`);
+                    imageFound = true;
+                  } catch (imgError) {
+                    console.log(`⚠️ Görsel okunamadı: ${match.full_path}`);
+                  }
+                }
                 
-                for (const possiblePath of possiblePaths) {
-                  if (fs.existsSync(possiblePath)) {
-                    try {
-                      const imageBuffer = fs.readFileSync(possiblePath);
-                      const zipFileName = `eşleşen_${match.similarity.toFixed(3)}_${imageName}`;
-                      zip.addFile(zipFileName, imageBuffer);
-                      console.log(`📸 Eşleşen görsel eklendi: ${zipFileName}`);
-                      break;
-                    } catch (imgError) {
-                      console.log(`⚠️ Görsel eklenemedi: ${possiblePath}`);
+                // Fallback: Manuel arama
+                if (!imageFound) {
+                  const possiblePaths = [
+                    path.join(modelPath, imageName),
+                    path.join(modelPath, 'denemelik', imageName),
+                    path.join(modelPath, match.relative_path || imageName)
+                  ];
+                  
+                  for (const possiblePath of possiblePaths) {
+                    if (fs.existsSync(possiblePath)) {
+                      try {
+                        const imageBuffer = fs.readFileSync(possiblePath);
+                        const zipFileName = `eşleşen_${match.similarity.toFixed(3)}_${imageName}`;
+                        zip.addFile(zipFileName, imageBuffer);
+                        console.log(`📸 Eşleşen görsel eklendi: ${zipFileName} (fallback)`);
+                        break;
+                      } catch (imgError) {
+                        console.log(`⚠️ Görsel eklenemedi: ${possiblePath}`);
+                      }
                     }
                   }
                 }

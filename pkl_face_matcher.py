@@ -102,7 +102,7 @@ def cosine_similarity(emb1: np.ndarray, emb2: np.ndarray) -> float:
         print(f"❌ Similarity hesaplama hatası: {e}", file=sys.stderr)
         return 0.0
 
-def match_faces(user_embedding: List[float], pkl_path: str, threshold: float = 0.5) -> Dict:
+def match_faces(user_embedding: List[float], pkl_path: str, threshold: float = 0.5, model_path: str = None) -> Dict:
     """PKL veritabanında yüz eşleştirmesi yap"""
     try:
         print(f"🦬 PKL yüz eşleştirmesi başlıyor...", file=sys.stderr)
@@ -144,19 +144,50 @@ def match_faces(user_embedding: List[float], pkl_path: str, threshold: float = 0
             similarity = cosine_similarity(user_emb, face_embedding)
             
             if similarity > threshold:
-                # Dosya yolunu temizle (Windows path -> basename)
+                # Dosya yolunu temizle ve models klasörüne map et
                 image_path = face_key.split('||')[0] if '||' in face_key else face_key
                 image_name = os.path.basename(image_path).replace('\\', '/')
+                
+                # Windows path'inden klasör yapısını çıkar
+                # D:/Users/.../denemelik\IMG_0909.JPG -> denemelik/IMG_0909.JPG
+                windows_parts = image_path.replace('\\', '/').split('/')
+                relative_path = image_name  # Default: sadece dosya adı
+                
+                # denemelik, kişi_adı gibi klasörleri bul
+                for i, part in enumerate(windows_parts):
+                    if part in ['denemelik'] or (part != '' and not ':' in part and len(part) < 50):
+                        # Son 2 parçayı al (klasör/dosya.jpg)
+                        if i < len(windows_parts) - 1:
+                            relative_path = f"{part}/{windows_parts[-1]}"
+                            break
+                
+                # Model path'i varsa tam yolu oluştur
+                full_model_path = None
+                if model_path:
+                    potential_paths = [
+                        os.path.join(model_path, image_name),
+                        os.path.join(model_path, 'denemelik', image_name),
+                        os.path.join(model_path, relative_path),
+                    ]
+                    # İlk bulunan dosyayı kullan
+                    for potential_path in potential_paths:
+                        if os.path.exists(potential_path):
+                            full_model_path = potential_path
+                            relative_path = os.path.relpath(potential_path, model_path)
+                            break
                 
                 matches.append({
                     "face_id": face_key,
                     "similarity": similarity,
                     "image_path": image_name,
+                    "relative_path": relative_path,
+                    "full_path": full_model_path,
                     "original_path": image_path,
                     "metadata": {
-                        "type": "pkl_real_match",
+                        "type": "pkl_real_match", 
                         "threshold": threshold,
-                        "embedding_dim": face_embedding.shape[0]
+                        "embedding_dim": face_embedding.shape[0],
+                        "path_mapped": full_model_path is not None
                     }
                 })
         
@@ -200,13 +231,14 @@ def match_faces(user_embedding: List[float], pkl_path: str, threshold: float = 0
         return {"success": False, "error": str(e)}
 
 def main():
-    if len(sys.argv) != 4:
-        print(json.dumps({"success": False, "error": "Usage: python3 pkl_face_matcher.py <pkl_path> <user_embedding_json> <threshold>"}))
+    if len(sys.argv) not in [4, 5]:
+        print(json.dumps({"success": False, "error": "Usage: python3 pkl_face_matcher.py <pkl_path> <user_embedding_json> <threshold> [model_path]"}))
         sys.exit(1)
     
     pkl_path = sys.argv[1]
     user_embedding_json = sys.argv[2]
     threshold = float(sys.argv[3])
+    model_path = sys.argv[4] if len(sys.argv) > 4 else None
     
     if not os.path.exists(pkl_path):
         print(json.dumps({"success": False, "error": f"PKL dosyası bulunamadı: {pkl_path}"}))
@@ -222,7 +254,7 @@ def main():
         print(f"🎯 Threshold: {threshold}", file=sys.stderr)
         
         # Eşleştirme yap
-        result = match_faces(user_embedding, pkl_path, threshold)
+        result = match_faces(user_embedding, pkl_path, threshold, model_path)
         
         # JSON olarak stdout'a yazdır
         print(json.dumps(result))
