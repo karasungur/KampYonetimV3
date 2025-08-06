@@ -1,0 +1,28 @@
+# AI Yüz Tanıma Eğitim Aracı Gereksinimleri
+
+# Temel kütüphaneler
+numpy>=1.21.0
+opencv-python>=4.5.0
+torch>=1.9.0
+torchvision>=0.10.0
+
+# GUI kütüphanesi
+PyQt5>=5.15.0
+
+# Face Recognition
+insightface>=0.6.2
+onnxruntime>=1.12.0
+onnxruntime-gpu>=1.12.0  # GPU desteği için (opsiyonel)
+
+# Yardımcı kütüphaneler
+Pillow>=8.3.0
+scikit-learn>=1.0.0
+
+# CUDA desteği için (opsiyonel)
+# cupy-cuda11x>=10.0.0  # CUDA 11.x için
+# cupy-cuda12x>=12.0.0  # CUDA 12.x için
+
+# Kurulum talimatları:
+# 1. pip install -r requirements_training.txt
+# 2. InsightFace model dosyalarını indirin (otomatik indirilecek)
+# 3. GPU kullanmak için CUDA ve cuDNN'i kurun
