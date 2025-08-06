@@ -1555,7 +1555,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // PhotoRequest'i güncelle
       const updatedRequest = await storage.updatePhotoRequest(id, {
         referencePhotoPath: referencePhotoURL,
-        status: 'processing'
+        status: 'pending'
       });
       
       // İşlem kuyruğuna ekle
@@ -1886,7 +1886,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Face Models API Endpoints
   // Photo matching routes
-  app.post('/api/photo-matching/start', requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/photo-matching/start-session', requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const { tcNumber, selectedModelIds } = req.body;
       
@@ -1947,7 +1947,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         queuePosition: session.queuePosition,
         results: results.map(r => ({
           modelId: r.faceModelId,
-          modelName: r.faceModel?.name,
+          modelName: `Model ${r.faceModelId}`,
           totalMatches: r.totalMatches,
           isZipReady: r.isZipReady,
           canDownload: r.isZipReady && !r.downloadedAt,
@@ -1961,7 +1961,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/photo-matching/:sessionId/:modelId/download', requireAuth, async (req, res) => {
+  app.get('/api/photo-matching/download/:sessionId/:modelId', requireAuth, async (req, res) => {
     try {
       const { sessionId, modelId } = req.params;
       
@@ -1984,7 +1984,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/face-models', requireAuth, requireRole(['genelsekreterlik']), async (req: AuthenticatedRequest, res) => {
+  app.get('/api/face-models', async (req, res) => {
     try {
       const models = await storage.getAllFaceModels();
       res.json(models);

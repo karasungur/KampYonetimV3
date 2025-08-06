@@ -25,7 +25,9 @@ import {
   Upload,
   CheckCircle,
   AlertCircle,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Search,
+  Download
 } from "lucide-react";
 import { 
   SiX, 
@@ -101,18 +103,30 @@ interface TeamMember {
   displayOrder: number;
 }
 
-interface CampDay {
+interface FaceModel {
   id: string;
-  dayName: string;
-  dayDate: string;
-  modelPath: string | null;
-  modelStatus: string;
-  photoCount: number;
-  faceCount: number;
-  lastTrainedAt: string | null;
-  isActive: boolean;
+  name: string;
+  status: 'created' | 'downloading' | 'extracting' | 'ready' | 'error';
   createdAt: string;
-  updatedAt: string;
+}
+
+interface MatchingSession {
+  sessionId: string;
+  status: 'face_detection' | 'face_selection' | 'queued' | 'matching' | 'completed' | 'error';
+  progress: number;
+  currentStep: string;
+  queuePosition?: number;
+  results?: MatchingResult[];
+  timeoutAt: string;
+  errorMessage?: string;
+}
+
+interface MatchingResult {
+  modelId: string;
+  modelName: string;
+  totalMatches: number;
+  isZipReady: boolean;
+  canDownload: boolean;
 }
 
 type ActiveSection = 'program' | 'social' | 'team' | 'login' | 'photos' | null;
@@ -129,14 +143,12 @@ export default function MainMenuPage() {
   
   // Photos section states
   const [photoTcNumber, setPhotoTcNumber] = useState("");
-  const [photoEmail, setPhotoEmail] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [photoStep, setPhotoStep] = useState<'tc-input' | 'existing-request' | 'new-request'>('tc-input');
-  const [existingRequest, setExistingRequest] = useState<any>(null);
-  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [photoStep, setPhotoStep] = useState<'tc-input' | 'model-selection' | 'photo-upload' | 'processing' | 'results'>('tc-input');
   const [tcError, setTcError] = useState("");
-  const [selectedCampDays, setSelectedCampDays] = useState<string[]>([]);
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+  const [currentSession, setCurrentSession] = useState<MatchingSession | null>(null);
   
   // Face detection states
   const [detectedFaces, setDetectedFaces] = useState<DetectedFace[]>([]);
@@ -368,9 +380,19 @@ export default function MainMenuPage() {
     enabled: menuSettings?.teamEnabled || false,
   });
 
-  const { data: campDays } = useQuery<CampDay[]>({
-    queryKey: ["/api/camp-days"],
+  const { data: faceModels } = useQuery<FaceModel[]>({
+    queryKey: ["/api/face-models"],
     enabled: menuSettings?.photosEnabled || false,
+    queryFn: async () => {
+      const response = await fetch('/api/face-models', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      if (!response.ok) throw new Error('Failed to fetch face models');
+      const data = await response.json();
+      return data.filter((model: FaceModel) => model.status === 'ready');
+    },
   });
 
   // Eğer hiçbir menü aktif değilse, otomatik olarak giriş sayfasına yönlendir
@@ -425,13 +447,14 @@ export default function MainMenuPage() {
     setPassword("");
     // Reset photo states
     setPhotoTcNumber("");
-    setPhotoEmail("");
     setUploadedFiles([]);
     setIsProcessing(false);
     setPhotoStep('tc-input');
-    setExistingRequest(null);
-    setIsCheckingStatus(false);
     setTcError("");
+    setSelectedModelIds([]);
+    setCurrentSession(null);
+    setDetectedFaces([]);
+    setSelectedFaceIds([]);
   };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -875,132 +898,24 @@ export default function MainMenuPage() {
                             
                             <Button 
                               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
-                              disabled={photoTcNumber.length !== 11 || tcError !== "" || isCheckingStatus}
-                              onClick={async () => {
-                                setIsCheckingStatus(true);
-                                try {
-                                  // Check for existing request
-                                  const response = await fetch(`/api/photo-requests/check/${photoTcNumber}`);
-                                  if (response.ok) {
-                                    const requestData = await response.json();
-                                    if (requestData.exists) {
-                                      setExistingRequest(requestData.request);
-                                      setPhotoStep('existing-request');
-                                    } else {
-                                      setPhotoStep('new-request');
-                                    }
-                                  } else {
-                                    setPhotoStep('new-request');
-                                  }
-                                } catch (error) {
-                                  console.error('Error checking request:', error);
-                                  setPhotoStep('new-request');
-                                } finally {
-                                  setIsCheckingStatus(false);
-                                }
+                              disabled={photoTcNumber.length !== 11 || tcError !== ""}
+                              onClick={() => {
+                                setPhotoStep('model-selection');
                               }}
                             >
-                              {isCheckingStatus ? (
-                                <>
-                                  <Clock className="mr-2 w-4 h-4 animate-spin" />
-                                  Kontrol ediliyor...
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle className="mr-2 w-4 h-4" />
-                                  Devam Et
-                                </>
-                              )}
+                              <CheckCircle className="mr-2 w-4 h-4" />
+                              Devam Et
                             </Button>
                           </div>
                         )}
 
-                        {/* Existing Request Status */}
-                        {photoStep === 'existing-request' && existingRequest && (
-                          <div className="space-y-4">
-                            <Alert>
-                              <Clock className="h-4 w-4" />
-                              <AlertDescription>
-                                <strong>Mevcut İsteğiniz:</strong> {photoTcNumber} TC numarası için zaten bir fotoğraf isteği bulunuyor.
-                              </AlertDescription>
-                            </Alert>
-                            
-                            <div className="bg-orange-50 p-4 rounded-lg space-y-3">
-                              <div className="flex justify-between items-center">
-                                <span className="font-medium text-gray-700">Durum:</span>
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  existingRequest.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                  existingRequest.status === 'processing' ? 'bg-blue-100 text-blue-800' :
-                                  existingRequest.status === 'failed' ? 'bg-red-100 text-red-800' :
-                                  'bg-yellow-100 text-yellow-800'
-                                }`}>
-                                  {existingRequest.status === 'completed' ? 'Tamamlandı' :
-                                   existingRequest.status === 'processing' ? 'İşleniyor' :
-                                   existingRequest.status === 'failed' ? 'Başarısız' : 'Bekliyor'}
-                                </span>
-                              </div>
-                              
-                              <div className="flex justify-between items-center">
-                                <span className="font-medium text-gray-700">E-posta:</span>
-                                <span className="text-gray-600">{existingRequest.email}</span>
-                              </div>
-                              
-                              <div className="flex justify-between items-center">
-                                <span className="font-medium text-gray-700">Oluşturma Tarihi:</span>
-                                <span className="text-gray-600">
-                                  {new Date(existingRequest.createdAt).toLocaleString('tr-TR')}
-                                </span>
-                              </div>
-                              
-                              {existingRequest.matchedPhotosCount !== undefined && (
-                                <div className="flex justify-between items-center">
-                                  <span className="font-medium text-gray-700">Bulunan Fotoğraf:</span>
-                                  <span className="text-gray-600">{existingRequest.matchedPhotosCount} adet</span>
-                                </div>
-                              )}
-                              
-                              {existingRequest.errorMessage && (
-                                <div className="text-red-600 text-sm">
-                                  <strong>Hata:</strong> {existingRequest.errorMessage}
-                                </div>
-                              )}
-                            </div>
-                            
-                            <div className="flex gap-3">
-                              <Button 
-                                variant="outline"
-                                className="flex-1"
-                                onClick={() => {
-                                  setPhotoTcNumber("");
-                                  setPhotoStep('tc-input');
-                                  setExistingRequest(null);
-                                }}
-                              >
-                                <ArrowLeft className="mr-2 w-4 h-4" />
-                                Geri Dön
-                              </Button>
-                              
-                              {existingRequest.status === 'failed' && (
-                                <Button 
-                                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
-                                  onClick={() => {
-                                    setPhotoStep('new-request');
-                                  }}
-                                >
-                                  Yeni İstek Oluştur
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* New Request Form */}
-                        {photoStep === 'new-request' && (
+                        {/* Model Selection Step */}
+                        {photoStep === 'model-selection' && (
                           <div className="space-y-6">
                             <div className="flex items-center justify-between bg-green-50 p-3 rounded-lg">
                               <div>
                                 <span className="font-medium text-green-800">TC: {photoTcNumber}</span>
-                                <p className="text-sm text-green-600">Yeni fotoğraf isteği oluşturuluyor</p>
+                                <p className="text-sm text-green-600">Model seçimi yapılıyor</p>
                               </div>
                               <Button 
                                 variant="ghost" 
@@ -1014,48 +929,39 @@ export default function MainMenuPage() {
                               </Button>
                             </div>
                             
-                            {/* Kamp günü seçimi */}
                             <div>
                               <Label className="text-gray-700 font-medium">
-                                Aranacak Kamp Günleri
+                                Eşleştirme Modelleri
                               </Label>
                               <p className="text-sm text-gray-600 mb-3">
-                                Fotoğraflarınızın aranacağı kamp günlerini seçiniz:
+                                Fotoğraflarınızın aranacağı modelleri seçiniz:
                               </p>
                               <div className="space-y-3 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
-                                {campDays && campDays.length > 0 ? (
-                                  campDays.map((day) => (
-                                    <div key={day.id} className="flex items-center space-x-3">
+                                {faceModels && faceModels.length > 0 ? (
+                                  faceModels.map((model) => (
+                                    <div key={model.id} className="flex items-center space-x-3">
                                       <Checkbox
-                                        id={`day-${day.id}`}
-                                        checked={selectedCampDays.includes(day.id)}
+                                        id={`model-${model.id}`}
+                                        checked={selectedModelIds.includes(model.id)}
                                         onCheckedChange={(checked) => {
                                           if (checked) {
-                                            setSelectedCampDays([...selectedCampDays, day.id]);
+                                            setSelectedModelIds([...selectedModelIds, model.id]);
                                           } else {
-                                            setSelectedCampDays(selectedCampDays.filter(id => id !== day.id));
+                                            setSelectedModelIds(selectedModelIds.filter(id => id !== model.id));
                                           }
                                         }}
                                       />
                                       <label
-                                        htmlFor={`day-${day.id}`}
+                                        htmlFor={`model-${model.id}`}
                                         className="text-sm font-medium leading-none cursor-pointer flex-1"
                                       >
                                         <div className="flex items-center justify-between">
-                                          <span>{day.dayName}</span>
+                                          <span>{model.name}</span>
                                           <div className="text-xs text-gray-500 flex items-center gap-2">
-                                            <span className={`px-2 py-1 rounded text-xs ${
-                                              day.modelStatus === 'ready' ? 'bg-green-100 text-green-700' :
-                                              day.modelStatus === 'training' ? 'bg-yellow-100 text-yellow-700' :
-                                              day.modelStatus === 'error' ? 'bg-red-100 text-red-700' :
-                                              'bg-gray-100 text-gray-700'
-                                            }`}>
-                                              {day.modelStatus === 'ready' && 'Hazır'}
-                                              {day.modelStatus === 'training' && 'Eğitiliyor'}
-                                              {day.modelStatus === 'error' && 'Hata'}
-                                              {day.modelStatus === 'not_trained' && 'Eğitilmedi'}
+                                            <span className="px-2 py-1 rounded text-xs bg-green-100 text-green-700">
+                                              Hazır
                                             </span>
-                                            <span>{day.photoCount} fotoğraf</span>
+                                            <span>{new Date(model.createdAt).toLocaleDateString('tr-TR')}</span>
                                           </div>
                                         </div>
                                       </label>
@@ -1063,29 +969,46 @@ export default function MainMenuPage() {
                                   ))
                                 ) : (
                                   <div className="text-sm text-gray-500 py-4 text-center">
-                                    Henüz kamp günü eklenmemiş
+                                    Henüz hazır model bulunmuyor
                                   </div>
                                 )}
                               </div>
-                              {selectedCampDays.length === 0 && (
+                              {selectedModelIds.length === 0 && (
                                 <p className="text-xs text-red-600 mt-1">
-                                  En az bir kamp günü seçmelisiniz
+                                  En az bir model seçmelisiniz
                                 </p>
                               )}
                             </div>
                             
-                            <div>
-                              <Label htmlFor="photo-email" className="text-gray-700 font-medium">
-                                E-posta Adresi
-                              </Label>
-                              <Input
-                                id="photo-email"
-                                type="email"
-                                value={photoEmail}
-                                onChange={(e) => setPhotoEmail(e.target.value)}
-                                className="mt-1 focus:ring-orange-500 focus:border-orange-500"
-                                placeholder="ornek@email.com"
-                              />
+                            <Button 
+                              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
+                              disabled={selectedModelIds.length === 0}
+                              onClick={() => setPhotoStep('photo-upload')}
+                            >
+                              <Camera className="mr-2 w-4 h-4" />
+                              Fotoğraf Yüklemeye Geç
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* Photo Upload Form */}
+                        {photoStep === 'photo-upload' && (
+                          <div className="space-y-6">
+                            <div className="flex items-center justify-between bg-green-50 p-3 rounded-lg">
+                              <div>
+                                <span className="font-medium text-green-800">TC: {photoTcNumber}</span>
+                                <p className="text-sm text-green-600">
+                                  {selectedModelIds.length} model seçildi - Referans fotoğraf bekleniyor
+                                </p>
+                              </div>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => setPhotoStep('model-selection')}
+                              >
+                                <ArrowLeft className="mr-1 w-3 h-3" />
+                                Geri
+                              </Button>
                             </div>
 
                         <div>
@@ -1310,26 +1233,20 @@ export default function MainMenuPage() {
                                     console.log(`- Face ${idx + 1}: embedding boyutu=${face.embedding.length}, confidence=${face.confidence}`);
                                   });
 
-                                  // API'ye fotoğraf isteği gönder
-                                  await apiRequest('POST', '/api/photo-requests', {
+                                  // Start photo matching session
+                                  const sessionResponse = await apiRequest('POST', '/api/photo-matching/start-session', {
                                     tcNumber: photoTcNumber,
-                                    email: photoEmail,
-                                    selectedCampDays: selectedCampDays,
-                                    faceData: faceData,
-                                    uploadedFilesCount: uploadedFiles.length
+                                    modelIds: selectedModelIds,
+                                    faceData: faceData
                                   });
+                                  
+                                  setCurrentSession(sessionResponse);
+                                  setPhotoStep('processing');
                                   
                                   toast({
-                                    title: "İstek Alındı",
-                                    description: `Fotoğraf eşleştirme işlemi başlatıldı. ${selectedCampDays.length} kamp günü seçildi. Sonuçlar e-posta adresinize gönderilecektir.`,
+                                    title: "Eşleştirme Başlatıldı",
+                                    description: `${selectedModelIds.length} model seçildi. İşlem başlatıldı.`,
                                   });
-                                  
-                                  // Form'u sıfırla
-                                  setPhotoTcNumber("");
-                                  setPhotoEmail("");
-                                  setUploadedFiles([]);
-                                  setSelectedCampDays([]);
-                                  handleBackToMenu();
                                 } catch (error) {
                                   toast({
                                     title: "Hata",
@@ -1355,6 +1272,39 @@ export default function MainMenuPage() {
                             </Button>
                           </div>
                         )}
+
+                        {/* Processing Step */}
+                        {photoStep === 'processing' && currentSession && (
+                          <ProcessingStep 
+                            session={currentSession}
+                            onComplete={(results) => {
+                              setCurrentSession(prev => prev ? { ...prev, results, status: 'completed' } : null);
+                              setPhotoStep('results');
+                            }}
+                            onError={(error) => {
+                              setCurrentSession(prev => prev ? { ...prev, errorMessage: error, status: 'error' } : null);
+                              setPhotoStep('results');
+                            }}
+                          />
+                        )}
+
+                        {/* Results Step */}
+                        {photoStep === 'results' && currentSession && (
+                          <ResultsStep 
+                            session={currentSession}
+                            tcNumber={photoTcNumber}
+                            onBackToMenu={handleBackToMenu}
+                            onNewSearch={() => {
+                              setPhotoTcNumber("");
+                              setUploadedFiles([]);
+                              setSelectedModelIds([]);
+                              setCurrentSession(null);
+                              setDetectedFaces([]);
+                              setSelectedFaceIds([]);
+                              setPhotoStep('tc-input');
+                            }}
+                          />
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -1364,6 +1314,253 @@ export default function MainMenuPage() {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// Processing Step Component
+function ProcessingStep({ 
+  session, 
+  onComplete, 
+  onError 
+}: { 
+  session: MatchingSession; 
+  onComplete: (results: MatchingResult[]) => void; 
+  onError: (error: string) => void; 
+}) {
+  const [currentSession, setCurrentSession] = useState(session);
+
+  useEffect(() => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/photo-matching/session/${session.sessionId}/status`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
+        });
+        
+        if (response.ok) {
+          const updatedSession = await response.json();
+          setCurrentSession(updatedSession);
+          
+          if (updatedSession.status === 'completed' && updatedSession.results) {
+            clearInterval(pollInterval);
+            onComplete(updatedSession.results);
+          } else if (updatedSession.status === 'error') {
+            clearInterval(pollInterval);
+            onError(updatedSession.errorMessage || 'Beklenmeyen bir hata oluştu');
+          }
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    }, 2000);
+
+    // Timeout kontrolü
+    const timeout = setTimeout(() => {
+      clearInterval(pollInterval);
+      onError('İşlem zaman aşımına uğradı');
+    }, 15 * 60 * 1000); // 15 dakika
+
+    return () => {
+      clearInterval(pollInterval);
+      clearTimeout(timeout);
+    };
+  }, [session.sessionId, onComplete, onError]);
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'face_detection': return 'Yüzler tespit ediliyor...';
+      case 'face_selection': return 'Yüzler seçiliyor...';
+      case 'queued': return 'Sırada bekleniyor...';
+      case 'matching': return 'Eşleştirme yapılıyor...';
+      default: return 'İşleniyor...';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'face_detection': return <Camera className="w-5 h-5" />;
+      case 'face_selection': return <CheckCircle className="w-5 h-5" />;
+      case 'queued': return <Clock className="w-5 h-5" />;
+      case 'matching': return <Search className="w-5 h-5" />;
+      default: return <Clock className="w-5 h-5 animate-spin" />;
+    }
+  };
+
+  return (
+    <div className="space-y-6 text-center">
+      <div className="flex flex-col items-center space-y-4">
+        <div className="animate-pulse text-orange-500">
+          {getStatusIcon(currentSession.status)}
+        </div>
+        <h3 className="text-lg font-semibold text-gray-900">
+          {getStatusText(currentSession.status)}
+        </h3>
+        <p className="text-gray-600">
+          {currentSession.currentStep || 'İşlem devam ediyor...'}
+        </p>
+      </div>
+
+      {currentSession.queuePosition && (
+        <Alert>
+          <Clock className="h-4 w-4" />
+          <AlertDescription>
+            Sırada {currentSession.queuePosition}. pozisyondasınız. Lütfen bekleyin.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-gray-600">İlerleme</span>
+          <span className="font-medium">{currentSession.progress}%</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2">
+          <div 
+            className="bg-orange-600 h-2 rounded-full transition-all duration-300"
+            style={{ width: `${currentSession.progress}%` }}
+          ></div>
+        </div>
+      </div>
+
+      <Alert>
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          Bu işlem birkaç dakika sürebilir. Lütfen sayfayı kapatmayın.
+        </AlertDescription>
+      </Alert>
+    </div>
+  );
+}
+
+// Results Step Component  
+function ResultsStep({ 
+  session, 
+  tcNumber,
+  onBackToMenu, 
+  onNewSearch 
+}: { 
+  session: MatchingSession; 
+  tcNumber: string;
+  onBackToMenu: () => void; 
+  onNewSearch: () => void; 
+}) {
+  const [downloadingModelId, setDownloadingModelId] = useState<string | null>(null);
+
+  const handleDownload = async (modelId: string) => {
+    setDownloadingModelId(modelId);
+    try {
+      const response = await fetch(`/api/photo-matching/download/${session.sessionId}/${modelId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `fotograf_eslestirme_${tcNumber}_${modelId}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        throw new Error('Download failed');
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+    } finally {
+      setDownloadingModelId(null);
+    }
+  };
+
+  if (session.status === 'error') {
+    return (
+      <div className="space-y-6 text-center">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="text-red-500">
+            <AlertCircle className="w-12 h-12" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900">İşlem Başarısız</h3>
+          <p className="text-gray-600">
+            {session.errorMessage || 'Beklenmeyen bir hata oluştu'}
+          </p>
+        </div>
+        
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={onBackToMenu} className="flex-1">
+            Ana Menüye Dön
+          </Button>
+          <Button onClick={onNewSearch} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white">
+            Yeni Arama
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const totalMatches = session.results?.reduce((sum, result) => sum + result.totalMatches, 0) || 0;
+
+  return (
+    <div className="space-y-6">
+      <div className="text-center">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="text-green-500">
+            <CheckCircle className="w-12 h-12" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900">Eşleştirme Tamamlandı</h3>
+          <p className="text-gray-600">
+            Toplam <strong>{totalMatches}</strong> fotoğraf bulundu
+          </p>
+        </div>
+      </div>
+
+      {session.results && session.results.length > 0 && (
+        <div className="space-y-4">
+          <h4 className="font-medium text-gray-700">Model Sonuçları</h4>
+          <div className="space-y-3">
+            {session.results.map((result) => (
+              <div key={result.modelId} className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h5 className="font-medium text-gray-900">{result.modelName}</h5>
+                    <p className="text-sm text-gray-600">{result.totalMatches} fotoğraf bulundu</p>
+                  </div>
+                  <Button
+                    onClick={() => handleDownload(result.modelId)}
+                    disabled={!result.canDownload || downloadingModelId === result.modelId}
+                    className="bg-orange-500 hover:bg-orange-600 text-white"
+                  >
+                    {downloadingModelId === result.modelId ? (
+                      <>
+                        <Clock className="mr-2 w-4 h-4 animate-spin" />
+                        İndiriliyor...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="mr-2 w-4 h-4" />
+                        İndir
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-3">
+        <Button variant="outline" onClick={onBackToMenu} className="flex-1">
+          Ana Menüye Dön
+        </Button>
+        <Button onClick={onNewSearch} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white">
+          Yeni Arama Yap
+        </Button>
       </div>
     </div>
   );
