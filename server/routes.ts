@@ -1459,22 +1459,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('🦬 Embedding çıkarma isteği:', req.file.filename, req.file.size, 'bytes');
       
-      // Şu an için Face-API benzeri 512 boyutlu dummy embedding döndürüyoruz
-      // İleride burada gerçek InsightFace Buffalo_L implementasyonu olacak
-      const dummyEmbedding = Array.from({length: 512}, () => Math.random() * 2 - 1);
+      // InsightFace Buffalo_L model ile gerçek embedding çıkar
+      const { insightFaceModel } = await import('./insightface-buffalo');
       
-      // Dosyayı temizle
-      fs.unlinkSync(req.file.path);
+      try {
+        // Model hazır değilse yükle
+        if (!(await insightFaceModel.isModelReady())) {
+          console.log('🔄 Model yükleniyor...');
+          await insightFaceModel.loadModel();
+        }
+
+        // Dosyayı buffer olarak oku
+        const imageBuffer = fs.readFileSync(req.file.path);
+        
+        // Gerçek embedding çıkar
+        const embedding = await insightFaceModel.extractEmbedding(imageBuffer);
+        
+        // Dosyayı temizle
+        fs.unlinkSync(req.file.path);
+        
+        res.json({
+          success: true,
+          embedding: embedding,
+          embedding_size: embedding.length,
+          model: 'InsightFace Buffalo_L (ONNX)',
+          message: 'Embedding başarıyla çıkarıldı'
+        });
+        
+      } catch (modelError) {
+        console.error('❌ InsightFace model hatası:', modelError);
+        
+        // Model hatası durumunda fallback olarak dummy embedding
+        console.log('⚠️ Fallback: Dummy embedding kullanılıyor');
+        const dummyEmbedding = Array.from({length: 512}, () => Math.random() * 2 - 1);
+        
+        // Dosyayı temizle
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+        
+        res.json({
+          success: true,
+          embedding: dummyEmbedding,
+          embedding_size: 512,
+          model: 'InsightFace Buffalo_L (fallback)',
+          message: 'Model hatası - fallback embedding kullanıldı',
+          warning: (modelError as Error).message
+        });
+      }
       
-      res.json({
-        success: true,
-        embedding: dummyEmbedding,
-        embedding_size: 512,
-        model: 'InsightFace Buffalo_L (dummy)',
-        message: 'Embedding başarıyla çıkarıldı'
-      });
     } catch (error) {
       console.error('Embedding extraction error:', error);
+      
+      // Dosyayı temizle
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      
       res.status(500).json({ 
         success: false, 
         message: 'Embedding çıkarımında hata oluştu' 
