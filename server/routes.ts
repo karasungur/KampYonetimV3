@@ -1497,6 +1497,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const requestData = insertPhotoRequestSchema.parse({
         ...requestBody,
+        email: req.body.email || `temp_${requestBody.tcNumber}@example.com`, // Email artık opsiyonel
         faceData: req.body.faceData, // Web'den gelen yüz embedding verileri
         status: 'pending'
       });
@@ -1521,7 +1522,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Debug: Gelen veriyi kontrol et
       console.log('📥 Web\'den gelen fotoğraf isteği:');
       console.log('- TC:', requestData.tcNumber);
-      console.log('- Email:', requestData.email);
       console.log('- Face Data (raw):', req.body.faceData ? `${Array.isArray(req.body.faceData) ? req.body.faceData.length : 'VAR'} adet` : 'YOK');
       console.log('- Face Data (parsed):', requestData.faceData ? `${Array.isArray(requestData.faceData) ? requestData.faceData.length : 'VAR'} adet` : 'YOK (KAYBOLDU!)');
       console.log('- Selected Camp Days:', selectedCampDays);
@@ -1544,11 +1544,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...photoRequest,
         selectedCampDaysCount: selectedCampDays?.length || 0,
         uploadedFilesCount: uploadedFilesCount || 0,
-        message: 'İsteğiniz başarıyla kaydedildi. Python GUI uygulamasından işlenecektir.'
+        downloadUrl: `/api/download-results/${photoRequest.tcNumber}`,
+        message: 'İsteğiniz başarıyla kaydedildi. ZIP dosyası hazırlandığında indirebilirsiniz.'
       });
     } catch (error) {
       console.error('Photo request creation error:', error);
       res.status(400).json({ message: 'Fotoğraf talebi oluşturulamadı' });
+    }
+  });
+
+  // ZIP dosyası indirme endpoint'i
+  app.get('/api/download-results/:tcNumber', async (req, res) => {
+    try {
+      const { tcNumber } = req.params;
+      
+      console.log('📦 ZIP indirme isteği:', tcNumber);
+      
+      // TC kimlik doğrulama
+      if (!validateTCNumber(tcNumber)) {
+        return res.status(400).json({ message: 'Geçersiz TC kimlik numarası' });
+      }
+
+      // Photo request kontrolü
+      const photoRequest = await storage.getPhotoRequestByTc(tcNumber);
+      if (!photoRequest) {
+        return res.status(404).json({ message: 'Bu TC için fotoğraf isteği bulunamadı' });
+      }
+
+      // Şu an mock ZIP dosyası oluşturuyoruz
+      // Gerçek implementasyonda burada Python GUI'den gelen sonuçlar işlenecek
+      const zip = new AdmZip();
+      
+      // Dummy fotoğraf verisi ekle
+      zip.addFile('sonuclar.txt', Buffer.from(`
+TC Kimlik: ${tcNumber}
+İşlem Tarihi: ${new Date().toLocaleDateString('tr-TR')}
+Bulunan Fotoğraf Sayısı: 0 (Demo)
+
+Bu dosya demo amaçlıdır. Gerçek implementasyonda Python GUI tarafından 
+oluşturulan fotoğraflar bu ZIP dosyasında yer alacaktır.
+      `, 'utf8'));
+
+      // ZIP'i buffer olarak al
+      const zipBuffer = zip.toBuffer();
+      
+      // ZIP dosyasını response olarak gönder
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="fotograf_${tcNumber}_${new Date().toISOString().split('T')[0]}.zip"`);
+      res.setHeader('Content-Length', zipBuffer.length);
+      
+      console.log('✅ ZIP dosyası gönderiliyor:', zipBuffer.length, 'bytes');
+      res.send(zipBuffer);
+    } catch (error) {
+      console.error('ZIP download error:', error);
+      res.status(500).json({ message: 'ZIP dosyası oluşturulamadı' });
     }
   });
 

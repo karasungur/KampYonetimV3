@@ -14,6 +14,12 @@ This is a web-based management system for the AK Party Youth Branches Consultati
 ## Recent Changes
 
 ### January 29, 2025
+- **Major Architectural Change - Email System Removed**: Completely replaced email delivery system with direct ZIP file downloads
+- **8-Step Face Recognition Workflow**: Implemented precise workflow: TC input → Photo upload → Face extraction (vladmandic/face-api) → Face selection → Model selection → Processing queue → Database storage → Direct ZIP download
+- **Vladimir Mandic Face-API Integration**: Successfully integrated face detection and cropping functionality
+- **InsightFace Buffalo_L Embedding**: Added /api/extract-embedding endpoint for 512-dimensional face embeddings
+- **ZIP Download System**: Created /api/download-results/:tcNumber endpoint for direct file downloads
+- **UI Flow Complete**: All 8 steps implemented with proper state management and user feedback
 - **Feedback Management Enhanced**: Added feedback deletion functionality for genelsekreterlik role
 - **Table Management Enhanced**: Updated table management to show user details and enable editing
 - **Export Formats Added**: Implemented Excel (.xlsx) and TXT export alongside existing CSV

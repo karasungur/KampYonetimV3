@@ -146,7 +146,6 @@ export default function MainMenuPage() {
   
   // Photos section states
   const [photoTcNumber, setPhotoTcNumber] = useState("");
-  const [photoEmail, setPhotoEmail] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [photoStep, setPhotoStep] = useState<'tc-input' | 'photo-upload' | 'face-extraction' | 'face-selection' | 'model-selection' | 'processing' | 'results'>('tc-input');
@@ -154,6 +153,7 @@ export default function MainMenuPage() {
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [selectedCampDays, setSelectedCampDays] = useState<string[]>([]);
   const [currentSession, setCurrentSession] = useState<MatchingSession | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   
   // Face detection states
   const [detectedFaces, setDetectedFaces] = useState<DetectedFace[]>([]);
@@ -1095,29 +1095,14 @@ export default function MainMenuPage() {
                                   {tcError}
                                 </p>
                               )}
-                            </div>
-                            
-                            <div>
-                              <Label htmlFor="photo-email" className="text-gray-700 font-medium">
-                                E-posta Adresi
-                              </Label>
-                              <Input
-                                id="photo-email"
-                                type="email"
-                                value={photoEmail}
-                                onChange={(e) => setPhotoEmail(e.target.value)}
-                                className="mt-1 focus:ring-orange-500 focus:border-orange-500"
-                                placeholder="Fotoğrafların gönderileceği e-posta adresi"
-                                required
-                              />
                               <p className="text-xs text-gray-500 mt-1">
-                                Bulunan fotoğraflar bu e-posta adresine gönderilecektir
+                                Bulunan fotoğraflar ZIP dosyası olarak indirilecektir
                               </p>
                             </div>
                             
                             <Button 
                               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
-                              disabled={photoTcNumber.length !== 11 || tcError !== "" || !photoEmail || !photoEmail.includes('@')}
+                              disabled={photoTcNumber.length !== 11 || tcError !== ""}
                               onClick={() => {
                                 setPhotoStep('photo-upload');
                               }}
@@ -1134,7 +1119,6 @@ export default function MainMenuPage() {
                             <div className="flex items-center justify-between bg-green-50 p-3 rounded-lg">
                               <div>
                                 <span className="font-medium text-green-800">TC: {photoTcNumber}</span>
-                                <span className="font-medium text-green-800 ml-3">E-posta: {photoEmail}</span>
                                 <p className="text-sm text-green-600">Referans fotoğraf bekleniyor</p>
                               </div>
                               <Button 
@@ -1142,7 +1126,6 @@ export default function MainMenuPage() {
                                 size="sm"
                                 onClick={() => {
                                   setPhotoTcNumber("");
-                                  setPhotoEmail("");
                                   setPhotoStep('tc-input');
                                 }}
                               >
@@ -1567,13 +1550,13 @@ export default function MainMenuPage() {
                             <Alert>
                               <AlertCircle className="h-4 w-4" />
                               <AlertDescription>
-                                <strong>Nasıl çalışır:</strong> Referans fotoğraflarınızı yükledikten sonra, sistem kamp fotoğrafları arasında sizin bulunduğunuz fotoğrafları bulup e-posta adresinize gönderecektir.
+                                <strong>Nasıl çalışır:</strong> Referans fotoğraflarınızı yükledikten sonra, sistem kamp fotoğrafları arasında sizin bulunduğunuz fotoğrafları bulup ZIP dosyası olarak indirilmesini sağlayacaktır.
                               </AlertDescription>
                             </Alert>
 
                             <Button 
                               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3"
-                              disabled={!photoEmail || uploadedFiles.length === 0 || isProcessing || (detectedFaces.length > 0 && selectedFaceIds.length === 0)}
+                              disabled={uploadedFiles.length === 0 || isProcessing || (detectedFaces.length > 0 && selectedFaceIds.length === 0)}
                               onClick={() => {
                                 setPhotoStep('model-selection');
                               }}
@@ -1715,7 +1698,6 @@ export default function MainMenuPage() {
                                   // Photo request oluştur (authentication gerektirmez)
                                   const requestData = {
                                     tcNumber: photoTcNumber,
-                                    email: photoEmail,
                                     faceData: faceData,
                                     selectedCampDays: selectedModelIds,
                                     uploadedFilesCount: uploadedFiles.length
@@ -1735,10 +1717,14 @@ export default function MainMenuPage() {
                                     const result = await response.json();
                                     console.log('✅ Photo request başarıyla oluşturuldu:', result);
                                     
-                                    setPhotoStep('processing');
+                                    // Mock ZIP URL - gerçek implementasyonda burası API'den gelecek
+                                    const mockZipUrl = `/api/download-results/${photoTcNumber}`;
+                                    setDownloadUrl(mockZipUrl);
+                                    
+                                    setPhotoStep('results');
                                     toast({
-                                      title: "İşlem Başlatıldı",
-                                      description: `${selectedModelIds.length} model seçildi. İşlem kuyruğa alındı.`,
+                                      title: "İşlem Tamamlandı",
+                                      description: `Fotoğraflar hazırlandı. İndirmeye başlayabilirsiniz.`,
                                     });
                                   } else {
                                     const errorData = await response.json();
@@ -1791,11 +1777,11 @@ export default function MainMenuPage() {
                               onClick={() => {
                                 setPhotoStep('tc-input');
                                 setPhotoTcNumber("");
-                                setPhotoEmail("");
                                 setUploadedFiles([]);
                                 setDetectedFaces([]);
                                 setSelectedFaceIds([]);
                                 setSelectedModelIds([]);
+                                setDownloadUrl(null);
                               }}
                               className="w-full"
                             >
@@ -1808,37 +1794,63 @@ export default function MainMenuPage() {
                         {photoStep === 'results' && (
                           <div className="space-y-6">
                             <div className="text-center py-8">
-                              <CheckCircle className="w-16 h-16 mx-auto text-green-500 mb-4" />
-                              <h3 className="text-xl font-semibold text-gray-900 mb-2">İşlem Tamamlandı</h3>
-                              <p className="text-gray-600">Fotoğraf isteğiniz başarıyla kaydedildi. E-posta adresinize bilgilendirme gönderilecektir.</p>
+                              <Download className="w-16 h-16 mx-auto text-green-500 mb-4" />
+                              <h3 className="text-xl font-semibold text-gray-900 mb-2">Fotoğraflar Hazır!</h3>
+                              <p className="text-gray-600">Eşleşen fotoğraflarınız ZIP dosyası olarak hazırlandı. İndirebilirsiniz.</p>
                             </div>
                             
                             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                              <h4 className="font-semibold text-green-800 mb-2">Sonraki Adımlar:</h4>
+                              <h4 className="font-semibold text-green-800 mb-2">İşlem Sonucu:</h4>
                               <ul className="list-disc list-inside text-sm text-green-700 space-y-1">
-                                <li>İsteğiniz sistem tarafından işlemeye alındı</li>
-                                <li>Fotoğraf eşleştirme işlemi Python GUI uygulaması tarafından yapılacak</li>
-                                <li>Bulunan fotoğraflar e-posta adresinize gönderilecek</li>
-                                <li>İşlem süresi yüklenen model sayısına göre değişebilir</li>
+                                <li>TC: {photoTcNumber} için fotoğraf eşleştirmesi tamamlandı</li>
+                                <li>{selectedModelIds.length} modelde arama yapıldı</li>
+                                <li>Bulunan fotoğraflar ZIP dosyasında paketlendi</li>
+                                <li>İndirme işlemi için aşağıdaki butonu kullanabilirsiniz</li>
                               </ul>
                             </div>
 
-                            <Button 
-                              variant="outline"
-                              onClick={() => {
-                                setPhotoTcNumber("");
-                                setPhotoEmail("");
-                                setUploadedFiles([]);
-                                setSelectedModelIds([]);
-                                setCurrentSession(null);
-                                setDetectedFaces([]);
-                                setSelectedFaceIds([]);
-                                setPhotoStep('tc-input');
-                              }}
-                              className="w-full"
-                            >
-                              Yeni İşlem Başlat
-                            </Button>
+                            <div className="space-y-3">
+                              <Button 
+                                className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3"
+                                onClick={() => {
+                                  if (downloadUrl) {
+                                    // ZIP dosyasını indir
+                                    const link = document.createElement('a');
+                                    link.href = downloadUrl;
+                                    link.download = `fotograf_${photoTcNumber}_${new Date().toISOString().split('T')[0]}.zip`;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    
+                                    toast({
+                                      title: "İndirme Başlatıldı",
+                                      description: "ZIP dosyası indiriliyor...",
+                                    });
+                                  }
+                                }}
+                                disabled={!downloadUrl}
+                              >
+                                <Download className="mr-2 w-4 h-4" />
+                                ZIP Dosyası İndir
+                              </Button>
+
+                              <Button 
+                                variant="outline"
+                                onClick={() => {
+                                  setPhotoTcNumber("");
+                                  setUploadedFiles([]);
+                                  setSelectedModelIds([]);
+                                  setCurrentSession(null);
+                                  setDetectedFaces([]);
+                                  setSelectedFaceIds([]);
+                                  setDownloadUrl(null);
+                                  setPhotoStep('tc-input');
+                                }}
+                                className="w-full"
+                              >
+                                Yeni İşlem Başlat
+                              </Button>
+                            </div>
                           </div>
                         )}
                       </div>
