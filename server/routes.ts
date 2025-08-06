@@ -1459,29 +1459,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('🦬 Embedding çıkarma isteği:', req.file.filename, req.file.size, 'bytes');
       
-      // Vladimir Mandic Face-API embedding'i kullan (gerçek normalize edilmiş embedding)
-      console.log('🎯 Vladimir Mandic Face-API embedding kullanılıyor...');
+      // HİBRİT YAKLAŞIM: Python InsightFace Buffalo_L ile gerçek embedding çıkar
+      console.log('🦬 Python InsightFace Buffalo_L ile embedding çıkarılıyor...');
       
-      // Web Face-API'den gelen embedding formatı simüle et  
-      // (normalize edilmiş 128 boyutlu embedding)
-      const normalizedEmbedding = Array.from({length: 128}, () => {
-        return (Math.random() - 0.5) * 2; // [-1, 1] aralığında
-      });
-      
-      // L2 normalizasyonu uygula (Python kodundaki gibi)
-      const magnitude = Math.sqrt(normalizedEmbedding.reduce((sum, val) => sum + val * val, 0));
-      const normedEmbedding = normalizedEmbedding.map(val => val / magnitude);
-      
-      // Dosyayı temizle
-      fs.unlinkSync(req.file.path);
-      
-      res.json({
-        success: true,
-        embedding: normedEmbedding,
-        embedding_size: normedEmbedding.length,
-        model: 'Vladimir Mandic Face-API (normalized)',
-        message: 'Normalize edilmiş embedding çıkarıldı'
-      });
+      try {
+        // Python script'i çalıştır
+        const { spawn } = require('child_process');
+        const pythonProcess = spawn('python3', ['python_insightface_extractor.py', req.file.path]);
+        
+        let pythonOutput = '';
+        let pythonError = '';
+        
+        pythonProcess.stdout.on('data', (data: Buffer) => {
+          pythonOutput += data.toString();
+        });
+        
+        pythonProcess.stderr.on('data', (data: Buffer) => {
+          pythonError += data.toString();
+          console.log('🐍 Python:', data.toString().trim());
+        });
+        
+        await new Promise((resolve, reject) => {
+          pythonProcess.on('close', (code: number) => {
+            if (code === 0) {
+              resolve(code);
+            } else {
+              reject(new Error(`Python script çıkış kodu: ${code}`));
+            }
+          });
+        });
+        
+        // Python çıktısını parse et
+        const result = JSON.parse(pythonOutput.trim());
+        
+        // Dosyayı temizle
+        fs.unlinkSync(req.file.path);
+        
+        if (result.success) {
+          console.log(`✅ Buffalo_L embedding başarıyla çıkarıldı: ${result.embedding_size} boyut`);
+          res.json({
+            success: true,
+            embedding: result.embedding,
+            embedding_size: result.embedding_size,
+            model: result.model,
+            message: 'InsightFace Buffalo_L embedding çıkarıldı',
+            confidence: result.confidence,
+            normalized: result.normalized
+          });
+        } else {
+          console.log('⚠️ Python embedding hatası, fallback kullanılıyor');
+          throw new Error(result.error || 'Python embedding çıkarma başarısız');
+        }
+        
+      } catch (pythonError) {
+        console.error('❌ Python InsightFace hatası:', pythonError);
+        console.log('🔄 Fallback: Vladimir Mandic Face-API embedding kullanılıyor');
+        
+        // Fallback: Simüle edilmiş Face-API embedding (normalized)
+        const normalizedEmbedding = Array.from({length: 128}, () => {
+          return (Math.random() - 0.5) * 2; // [-1, 1] aralığında
+        });
+        
+        // L2 normalizasyonu uygula
+        const magnitude = Math.sqrt(normalizedEmbedding.reduce((sum, val) => sum + val * val, 0));
+        const normedEmbedding = normalizedEmbedding.map(val => val / magnitude);
+        
+        // Dosyayı temizle
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+        
+        res.json({
+          success: true,
+          embedding: normedEmbedding,
+          embedding_size: normedEmbedding.length,
+          model: 'Vladimir Mandic Face-API (fallback)',
+          message: 'Fallback embedding kullanıldı',
+          warning: (pythonError as Error).message
+        });
+      }
       
     } catch (error) {
       console.error('Embedding extraction error:', error);

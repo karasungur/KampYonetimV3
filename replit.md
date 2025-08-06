@@ -13,14 +13,17 @@ This is a web-based management system for the AK Party Youth Branches Consultati
 
 ## Recent Changes
 
-### January 30, 2025 - Cosine Similarity Implementation
+### January 30, 2025 - Hybrid Face Recognition Implementation
+- **Hybrid Architecture Complete**: Face-API (browser, cropping) + InsightFace Buffalo_L (server, embedding/matching)
+- **Python InsightFace Integration**: Direct Python script for real Buffalo_L embedding extraction
 - **Real Cosine Similarity Algorithm**: Implemented exact Python algorithm (np.dot) in Node.js
 - **Threshold Optimization**: Lowered from 0.35 to 0.15 for better match detection with current embeddings
 - **Fallback System**: Added 0.05 threshold fallback when no matches found with main threshold
 - **Debug Enhancement**: Added top-5 similarity value logging for troubleshooting
 - **TypeScript Fixes**: Resolved function scope and Map iteration compatibility issues
-- **Embedding Size Matching**: Dynamic embedding size based on user input (128D)
+- **Embedding Size Matching**: Dynamic embedding size based on user input (512D for InsightFace, 128D fallback)
 - **Algorithm Accuracy**: Matches Python's approach: normalized embeddings + dot product + similarity sorting
+- **Production Ready**: Real InsightFace Buffalo_L embeddings with CPU/GPU auto-detection
 
 ### January 29, 2025 - Evening
 - **Face Model Management System Complete**: Successfully implemented full Google Drive integration
