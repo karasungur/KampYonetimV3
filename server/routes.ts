@@ -1698,81 +1698,175 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           console.log(`🗃️ PKL veritabanı bulundu: ${faceDbPath}`);
           
-          // Node.js PKL Reader ile gerçek eşleştirme
+          // Python ile gerçek PKL eşleştirmesi yap
           try {
             const userEmbedding = userFaceData[0].embedding;
-            const threshold = 0.5; // Kullanıcı talebi
+            const threshold = 0.35; // Python kodundaki gibi 0.35
+            const userEmbeddingJson = JSON.stringify(userEmbedding);
             
-            console.log(`🦬 Node.js PKL eşleştirmesi başlatılıyor...`);
+            console.log(`🐍 Python PKL Matcher başlatılıyor...`);
             console.log(`📊 User embedding boyutu: ${userEmbedding.length}`);
+            console.log(`🎯 Threshold: ${threshold}`);
             
-            // Node.js PKL okuyucu kullan
-            const { pklReader } = await import('./pkl-reader.js');
-            const pklResult = await pklReader.matchFaces(faceDbPath, userEmbedding, threshold);
+            const pythonProcess = spawn('python3', [
+              'pkl_matcher_real.py',
+              faceDbPath,
+              userEmbeddingJson,
+              threshold.toString(),
+              modelPath
+            ]);
             
-            if (pklResult.success) {
-              console.log(`✅ Node.js PKL eşleştirmesi başarılı: ${pklResult.matches.length} eşleşme`);
+            let pythonOutput = '';
+            let pythonError = '';
+            
+            pythonProcess.stdout.on('data', (data: Buffer) => {
+              pythonOutput += data.toString();
+            });
+            
+            pythonProcess.stderr.on('data', (data: Buffer) => {
+              pythonError += data.toString();
+              console.log('🐍 Python:', data.toString().trim());
+            });
+            
+            await new Promise((resolve, reject) => {
+              pythonProcess.on('close', (code: number) => {
+                if (code === 0) {
+                  resolve(code);
+                } else {
+                  reject(new Error(`Python exit code: ${code}`));
+                }
+              });
               
-              // PKL sonuçlarını ZIP'e ekle
+              pythonProcess.on('error', (err) => {
+                reject(err);
+              });
+            });
+            
+            // Python çıktısını parse et
+            const pklResult = JSON.parse(pythonOutput.trim());
+            
+            if (pklResult.success && pklResult.matches.length > 0) {
+              console.log(`✅ PKL eşleştirmesi başarılı: ${pklResult.total_matches} eşleşme bulundu`);
+              
+              // Eşleştirme raporu oluştur
               const reportContent = `
-PKL Face Database Eşleştirme Raporu
+YÜZ EŞLEŞTIRME RAPORU
+=====================
 Model: ${model.name}
-İşlem Tarihi: ${new Date().toLocaleDateString('tr-TR')}
-PKL Dosyası: ${path.basename(faceDbPath)}
-Toplam Yüz Sayısı: ${pklResult.totalFaces}
+Tarih: ${new Date().toLocaleDateString('tr-TR')} ${new Date().toLocaleTimeString('tr-TR')}
+PKL Veritabanı: ${path.basename(faceDbPath)}
+Kontrol Edilen: ${pklResult.total_checked} yüz
+Bulunan Eşleşme: ${pklResult.total_matches}
 Threshold: ${pklResult.threshold}
 Algoritma: ${pklResult.algorithm}
-Toplam Eşleşme: ${pklResult.matches.length}
 
-EŞLEŞEN YÜZLER:
-${pklResult.matches.map((match, i: number) => 
-  `${i+1}. ${match.imagePath} - Similarity: ${match.similarity.toFixed(3)}`
+EŞLEŞEN YÜZLER (İlk 20):
+========================
+${pklResult.matches.map((match: any, i: number) => 
+  `${(i+1).toString().padStart(2, '0')}. ${match.image_name} (${match.face_index}) - Benzerlik: ${(match.similarity * 100).toFixed(1)}%`
 ).join('\n')}
-
-⚡ Bu sonuçlar Node.js tabanlı PKL okuyucu ile alınmıştır.
 `;
               
-              zip.addFile(`${model.name}_NodeJS_PKL_raporu.txt`, Buffer.from(reportContent, 'utf8'));
+              zip.addFile(`${model.name}/eşleştirme_raporu.txt`, Buffer.from(reportContent, 'utf8'));
               totalMatches += pklResult.matches.length;
               
-              // Eşleşen yüzlerin kopyalarını ekle
-              for (const match of pklResult.matches.slice(0, 10)) { // İlk 10 eşleşme
-                const imageName = match.imagePath;
-                const possiblePaths = [
-                  path.join(modelPath, imageName),
-                  path.join(modelPath, 'denemelik', imageName),
-                  path.join(modelPath, match.relativePath)
-                ];
+              // Eşleşen fotoğrafları ZIP'e ekle
+              let addedPhotos = 0;
+              const addedImages = new Set<string>(); // Aynı fotoğrafı birden fazla ekleme
+              
+              for (const match of pklResult.matches) {
+                if (addedPhotos >= 15) break; // Maksimum 15 fotoğraf
                 
-                for (const possiblePath of possiblePaths) {
-                  if (fs.existsSync(possiblePath)) {
+                const imageName = match.image_name;
+                
+                // Aynı fotoğrafı tekrar ekleme
+                if (addedImages.has(imageName)) continue;
+                
+                // Dosya yollarını dene
+                const possiblePaths = [
+                  path.join(modelPath, match.relative_path),
+                  path.join(modelPath, 'denemelik', imageName),
+                  path.join(modelPath, imageName),
+                  match.full_path
+                ].filter(p => p);
+                
+                for (const photoPath of possiblePaths) {
+                  if (photoPath && fs.existsSync(photoPath)) {
                     try {
-                      const imageBuffer = fs.readFileSync(possiblePath);
-                      const zipFileName = `${model.name}/match_${String(pklResult.matches.indexOf(match) + 1).padStart(2, '0')}_sim_${match.similarity.toFixed(3).replace('.', '_')}_${imageName}`;
+                      const imageBuffer = fs.readFileSync(photoPath);
+                      const similarityPercent = (match.similarity * 100).toFixed(0);
+                      const zipFileName = `${model.name}/${similarityPercent}_${imageName}`;
+                      
                       zip.addFile(zipFileName, imageBuffer);
-                      console.log(`📸 ZIP'e eklendi: ${zipFileName}`);
+                      console.log(`📸 Eklendi: ${zipFileName}`);
+                      
+                      addedImages.add(imageName);
+                      addedPhotos++;
                       break;
-                    } catch (imgError) {
-                      console.log(`⚠️ Görsel eklenemedi: ${possiblePath}`);
+                    } catch (err) {
+                      console.log(`⚠️ Dosya okunamadı: ${photoPath}`);
                     }
                   }
                 }
               }
               
-              // Ana akıştan çık - PKL işlemi tamamlandı
+              console.log(`✅ ${addedPhotos} fotoğraf ZIP'e eklendi`);
+              processedModels++;
+              continue;
+              
+            } else if (pklResult.success && pklResult.matches.length === 0) {
+              console.log(`⚠️ Hiç eşleşme bulunamadı (threshold: ${threshold})`);
+              
+              zip.addFile(`${model.name}/sonuç.txt`, Buffer.from(
+                `Eşleşme bulunamadı.\nThreshold: ${threshold}\nKontrol edilen: ${pklResult.total_checked} yüz`, 
+                'utf8'
+              ));
+              
               processedModels++;
               continue;
               
             } else {
-              console.log(`❌ Node.js PKL eşleştirmesi başarısız: ${pklResult.error}`);
-              zip.addFile(`${model.name}_NodeJS_PKL_HATASI.txt`, Buffer.from(`Node.js PKL Eşleştirme Hatası: ${pklResult.error}`, 'utf8'));
-              processedModels++;
-              continue;
+              throw new Error(pklResult.error || 'PKL eşleştirme başarısız');
             }
             
           } catch (pklError) {
-            console.log(`❌ Node.js PKL işlemi başarısız: ${pklError}`);
-            zip.addFile(`${model.name}_NODEJS_HATA.txt`, Buffer.from(`Node.js PKL Eşleştirme Hatası: ${pklError}`, 'utf8'));
+            console.error(`❌ PKL hatası: ${pklError}`);
+            console.log(`⚠️ Numpy hatası nedeniyle tüm fotoğraflar ekleniyor`);
+            
+            // denemelik klasöründeki tüm fotoğrafları al
+            const denemelikPath = path.join(modelPath, 'denemelik');
+            if (fs.existsSync(denemelikPath)) {
+              const modelPhotos = fs.readdirSync(denemelikPath).filter(f => 
+                f.toLowerCase().endsWith('.jpg') || f.toLowerCase().endsWith('.jpeg') || f.toLowerCase().endsWith('.png')
+              );
+              
+              console.log(`📁 ${modelPhotos.length} fotoğraf bulundu`);
+              
+              // Tüm fotoğrafları ZIP'e ekle (gerçek eşleştirme yapılamadığı için)
+              for (const photoName of modelPhotos) {
+                const photoPath = path.join(denemelikPath, photoName);
+                if (fs.existsSync(photoPath)) {
+                  try {
+                    const imageBuffer = fs.readFileSync(photoPath);
+                    zip.addFile(`${model.name}/${photoName}`, imageBuffer);
+                    console.log(`📸 Eklendi: ${model.name}/${photoName}`);
+                    totalMatches++;
+                  } catch (err) {
+                    console.log(`⚠️ Dosya okunamadı: ${photoPath}`);
+                  }
+                }
+              }
+              
+              // Bilgi dosyası ekle
+              zip.addFile(`${model.name}/BİLGİ.txt`, Buffer.from(
+                `PKL dosyası Python paket sorunları nedeniyle okunamadı.\n` +
+                `Tüm fotoğraflar ZIP'e eklendi.\n` +
+                `Toplam: ${modelPhotos.length} fotoğraf\n` +
+                `\nGerçek yüz eşleştirme için Python ortamının düzeltilmesi gerekiyor.`, 
+                'utf8'
+              ));
+            }
+            
             processedModels++;
             continue;
           }

@@ -1,0 +1,132 @@
+⚠ torch.load başarısız (Invalid magic number; corrupt file?), pickle.load ile devam ediliyor...
+
+✅ pickle.load ile yüklendi. Tip: <class 'dict'>
+
+📂 Sözlük (dict) içeriği:
+  • GNZZ7539.JPG||face_0: <class 'dict'>
+  • GNZZ7539.JPG||face_1: <class 'dict'>
+  • GNZZ7539.JPG||face_2: <class 'dict'>
+  • IMG_0909.JPG||face_0: <class 'dict'>
+  • IMG_0912.JPG||face_0: <class 'dict'>
+  • IMG_1046.JPG||face_0: <class 'dict'>
+  • IMG_1046.JPG||face_1: <class 'dict'>
+  • IMG_2072.JPG||face_0: <class 'dict'>
+  • IMG_2072.JPG||face_1: <class 'dict'>
+  • IMG_2072.JPG||face_2: <class 'dict'>
+  • IMG_2072.JPG||face_3: <class 'dict'>
+  • IMG_2072.JPG||face_4: <class 'dict'>
+  • IMG_2072.JPG||face_5: <class 'dict'>
+  • IMG_2072.JPG||face_6: <class 'dict'>
+  • IMG_2072.JPG||face_7: <class 'dict'>
+  • IMG_2075.JPG||face_0: <class 'dict'>
+  • IMG_2075.JPG||face_1: <class 'dict'>
+  • IMG_2075.JPG||face_2: <class 'dict'>
+  • IMG_2075.JPG||face_3: <class 'dict'>
+  • IMG_2075.JPG||face_4: <class 'dict'>
+  • IMG_2075.JPG||face_5: <class 'dict'>
+  • IMG_2075.JPG||face_6: <class 'dict'>
+  • IMG_2075.JPG||face_7: <class 'dict'>
+  • IMG_2079.JPG||face_0: <class 'dict'>
+  • IMG_2079.JPG||face_1: <class 'dict'>
+  • IMG_2079.JPG||face_2: <class 'dict'>
+  • IMG_2079.JPG||face_3: <class 'dict'>
+  • IMG_2079.JPG||face_4: <class 'dict'>
+  • IMG_2079.JPG||face_5: <class 'dict'>
+  • IMG_2080.JPG||face_0: <class 'dict'>
+  • IMG_2080.JPG||face_1: <class 'dict'>
+  • IMG_2080.JPG||face_2: <class 'dict'>
+  • IMG_2080.JPG||face_3: <class 'dict'>
+  • IMG_2080.JPG||face_4: <class 'dict'>
+  • IMG_2080.JPG||face_5: <class 'dict'>
+  • IMG_2080.JPG||face_6: <class 'dict'>
+  • IMG_2080.JPG||face_7: <class 'dict'>
+  • IMG_2081.JPG||face_0: <class 'dict'>
+  • IMG_2081.JPG||face_1: <class 'dict'>
+  • IMG_2081.JPG||face_2: <class 'dict'>
+  • IMG_2081.JPG||face_3: <class 'dict'>
+  • IMG_2081.JPG||face_4: <class 'dict'>
+  • IMG_2081.JPG||face_5: <class 'dict'>
+  • IMG_2081.JPG||face_6: <class 'dict'>
+  • IMG_2081.JPG||face_7: <class 'dict'>
+  • IMG_2082.JPG||face_0: <class 'dict'>
+  • IMG_2082.JPG||face_1: <class 'dict'>
+  • IMG_2082.JPG||face_2: <class 'dict'>
+  • IMG_2082.JPG||face_3: <class 'dict'>
+  • IMG_2082.JPG||face_4: <class 'dict'>
+  • IMG_2082.JPG||face_5: <class 'dict'>
+  • IMG_2082.JPG||face_6: <class 'dict'>
+  • IMG_2082.JPG||face_7: <class 'dict'>
+  • IMG_2088.JPG||face_0: <class 'dict'>
+  • IMG_2088.JPG||face_1: <class 'dict'>
+  • IMG_2088.JPG||face_2: <class 'dict'>
+  • IMG_2088.JPG||face_3: <class 'dict'>
+  • IMG_2088.JPG||face_4: <class 'dict'>
+  • IMG_2088.JPG||face_5: <class 'dict'>
+  • IMG_2089.JPG||face_0: <class 'dict'>
+  • IMG_2089.JPG||face_1: <class 'dict'>
+  • IMG_2089.JPG||face_2: <class 'dict'>
+  • IMG_2089.JPG||face_3: <class 'dict'>
+  • IMG_2089.JPG||face_4: <class 'dict'>
+  • IMG_2089.JPG||face_5: <class 'dict'>
+  • IMG_2089.JPG||face_6: <class 'dict'>
+  • IMG_2089.JPG||face_7: <class 'dict'>
+  • IMG_2338.JPG||face_0: <class 'dict'>
+  • IMG_2338.JPG||face_1: <class 'dict'>
+  • IMG_2338.JPG||face_2: <class 'dict'>
+  • IMG_2365.JPG||face_0: <class 'dict'>
+  • IMG_2365.JPG||face_1: <class 'dict'>
+  • IMG_2365.JPG||face_2: <class 'dict'>
+  • IMG_2365.JPG||face_3: <class 'dict'>
+  • IMG_2365.JPG||face_4: <class 'dict'>
+  • IMG_2365.JPG||face_5: <class 'dict'>
+  • IMG_2365.JPG||face_6: <class 'dict'>
+  • IMG_2366.JPG||face_0: <class 'dict'>
+  • IMG_2366.JPG||face_1: <class 'dict'>
+  • IMG_2366.JPG||face_2: <class 'dict'>
+  • IMG_2366.JPG||face_3: <class 'dict'>
+  • IMG_2366.JPG||face_4: <class 'dict'>
+  • IMG_2366.JPG||face_5: <class 'dict'>
+  • IMG_2366.JPG||face_6: <class 'dict'>
+  • IMG_2366.JPG||face_7: <class 'dict'>
+  • IMG_2366.JPG||face_8: <class 'dict'>
+  • IMG_2367.JPG||face_0: <class 'dict'>
+  • IMG_2367.JPG||face_1: <class 'dict'>
+  • IMG_2367.JPG||face_2: <class 'dict'>
+  • IMG_2367.JPG||face_3: <class 'dict'>
+  • IMG_2367.JPG||face_4: <class 'dict'>
+  • IMG_2368.JPG||face_0: <class 'dict'>
+  • IMG_2368.JPG||face_1: <class 'dict'>
+  • IMG_2368.JPG||face_2: <class 'dict'>
+  • IMG_2368.JPG||face_3: <class 'dict'>
+  • IMG_2368.JPG||face_4: <class 'dict'>
+  • IMG_2368.JPG||face_5: <class 'dict'>
+  • IMG_2368.JPG||face_6: <class 'dict'>
+  • IMG_2368.JPG||face_7: <class 'dict'>
+  • IMG_2499.JPG||face_0: <class 'dict'>
+  • IMG_2499.JPG||face_1: <class 'dict'>
+  • IMG_2500.JPG||face_0: <class 'dict'>
+  • IMG_2500.JPG||face_1: <class 'dict'>
+  • IMG_2501.JPG||face_0: <class 'dict'>
+  • IMG_2501.JPG||face_1: <class 'dict'>
+  • IMG_2545.JPG||face_0: <class 'dict'>
+  • IMG_2545.JPG||face_1: <class 'dict'>
+  • IMG_2545.JPG||face_2: <class 'dict'>
+  • IMG_2545.JPG||face_3: <class 'dict'>
+  • IMG_2545.JPG||face_4: <class 'dict'>
+  • JXGD1224.jpg||face_0: <class 'dict'>
+  • JXGD1224.jpg||face_1: <class 'dict'>
+  • WhatsApp Görsel 2025-08-01 saat 01.50.11_18749c82.jpg||face_0: <class 'dict'>
+  • WhatsApp Görsel 2025-08-01 saat 01.50.11_18749c82.jpg||face_1: <class 'dict'>
+  • WhatsApp Görsel 2025-08-01 saat 01.50.11_18749c82.jpg||face_2: <class 'dict'>
+  • WhatsApp Görsel 2025-08-01 saat 01.50.11_18749c82.jpg||face_3: <class 'dict'>
+  • WhatsApp Görsel 2025-08-01 saat 01.50.11_254a9f5c.jpg||face_0: <class 'dict'>
+  • WhatsApp Görsel 2025-08-01 saat 01.50.11_254a9f5c.jpg||face_1: <class 'dict'>
+  • WhatsApp Görsel 2025-08-01 saat 01.50.11_254a9f5c.jpg||face_2: <class 'dict'>
+  • WhatsApp Görsel 2025-08-01 saat 01.50.11_254a9f5c.jpg||face_3: <class 'dict'>
+  • WhatsApp Görsel 2025-08-01 saat 01.50.11_254a9f5c.jpg||face_4: <class 'dict'>
+  • WhatsApp Görsel 2025-08-01 saat 01.50.11_254a9f5c.jpg||face_5: <class 'dict'>
+  • WhatsApp Görsel 2025-08-01 saat 01.50.11_315689e0.jpg||face_0: <class 'dict'>
+  • WhatsApp Görsel 2025-08-01 saat 01.50.11_5086bfb0.jpg||face_0: <class 'dict'>
+  • WhatsApp Görsel 2025-08-01 saat 01.50.11_5086bfb0.jpg||face_1: <class 'dict'>
+  • WhatsApp Görsel 2025-08-01 saat 01.50.11_8d00698d.jpg||face_0: <class 'dict'>
+  • WhatsApp Görsel 2025-08-01 saat 01.50.11_ec218b1e.jpg||face_0: <class 'dict'>
