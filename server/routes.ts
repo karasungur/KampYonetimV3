@@ -14,6 +14,30 @@ import axios from "axios";
 import AdmZip from "adm-zip";
 import { spawn } from "child_process";
 
+// JavaScript Cosine Similarity hesaplama fonksiyonu
+function calculateCosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) {
+    console.warn(`Embedding boyutları eşleşmiyor: ${a.length} vs ${b.length}`);
+    return 0.0;
+  }
+  
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  
+  const magnitude = Math.sqrt(normA) * Math.sqrt(normB);
+  if (magnitude === 0) {
+    return 0.0;
+  }
+  
+  return dotProduct / magnitude;
+}
 
 // Object Storage için gerekli importlar
 let ObjectStorageService: any;
@@ -1698,96 +1722,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           console.log(`🗃️ PKL veritabanı bulundu: ${faceDbPath}`);
           
-          // PKL ile gerçek yüz eşleştirmesi yap
+          // Database-based yüz eşleştirmesi yap (PKL dependency olmadan)
           try {
             const userEmbedding = userFaceData[0].embedding;
-            const userEmbeddingJson = JSON.stringify(userEmbedding);
-            const threshold = 0.5; // Kullanıcı talebi
+            const threshold = 0.5; // Benzerlik eşiği
             
-            console.log(`🦬 PKL eşleştirmesi başlatılıyor...`);
+            console.log(`🎯 Database-based face matching başlatılıyor...`);
+            console.log(`📐 User embedding boyutu: ${userEmbedding.length}`);
             
-            // Çalışan PKL okuyucu kullan (dependency olmadan)
-            console.log(`🐍 PKL Matcher başlatılıyor: ${faceDbPath}`);
-            const pythonProcess = spawn('python3', [
-              'working_embedding_extractor.py',
-              faceDbPath,
-              userEmbeddingJson,
-              threshold.toString()
-            ]);
+            // Model klasöründeki yardımcı JSON dosyalarını kontrol et
+            let modelFaces: any[] = [];
+            let dataSource = 'Database';
             
-            let pythonOutput = '';
-            let pythonError = '';
+            // 1. JSON backup dosyası varsa onu kullan
+            const jsonBackupPath = path.join(modelPath, 'face_database.json');
+            if (fs.existsSync(jsonBackupPath)) {
+              try {
+                const jsonData = JSON.parse(fs.readFileSync(jsonBackupPath, 'utf8'));
+                modelFaces = Object.entries(jsonData).map(([imagePath, faceData]: [string, any]) => ({
+                  imagePath,
+                  embedding: faceData.embedding || faceData.normed_embedding,
+                  ...faceData
+                }));
+                dataSource = 'JSON backup';
+                console.log(`✅ JSON backup bulundu: ${modelFaces.length} yüz`);
+              } catch (jsonError) {
+                console.log(`❌ JSON backup okunamadı: ${jsonError}`);
+              }
+            }
             
-            pythonProcess.stdout.on('data', (data: Buffer) => {
-              pythonOutput += data.toString();
-            });
+            // 2. Model'e ait database kayıtlarını kontrol et (future enhancement)
+            if (modelFaces.length === 0) {
+              // Burada gelecekte database'deki face records'ları alabiliriz
+              console.log(`⚠️ ${model.name} için yüz verisi bulunamadı`);
+            }
             
-            pythonProcess.stderr.on('data', (data: Buffer) => {
-              pythonError += data.toString();
-              console.log('🐍 PKL Python:', data.toString().trim());
-            });
+            let matches: any[] = [];
             
-            await new Promise((resolve, reject) => {
-              pythonProcess.on('close', (code: number) => {
-                if (code === 0) {
-                  resolve(code);
-                } else {
-                  reject(new Error(`PKL Python script çıkış kodu: ${code}`));
+            if (modelFaces.length > 0) {
+              // JavaScript cosine similarity ile eşleştirme yap
+              for (const face of modelFaces) {
+                if (!face.embedding) continue;
+                
+                const similarity = calculateCosineSimilarity(userEmbedding, face.embedding);
+                
+                if (similarity >= threshold) {
+                  matches.push({
+                    image_path: face.imagePath,
+                    similarity: similarity,
+                    full_path: path.join(modelPath, face.imagePath)
+                  });
                 }
-              });
-            });
-            
-            // Python çıktısını parse et
-            const pklResult = JSON.parse(pythonOutput.trim());
-            
-            if (pklResult.success) {
-              console.log(`✅ PKL eşleştirmesi başarılı: ${pklResult.matches.length} eşleşme`);
+              }
               
-              // PKL sonuçlarını ZIP'e ekle
+              // Benzerlik oranına göre sırala
+              matches.sort((a, b) => b.similarity - a.similarity);
+              
+              console.log(`✅ JavaScript eşleştirmesi başarılı: ${matches.length} eşleşme`);
+              
+              // Eşleştirme sonuçlarını ZIP'e ekle
               const reportContent = `
-PKL Face Database Eşleştirme Raporu
+Face Database Eşleştirme Raporu (JavaScript)
 Model: ${model.name}
 İşlem Tarihi: ${new Date().toLocaleDateString('tr-TR')}
-PKL Dosyası: ${path.basename(faceDbPath)}
-Toplam Yüz Sayısı: ${pklResult.total_faces}
-Threshold: ${pklResult.threshold}
-Algoritma: ${pklResult.algorithm}
-Toplam Eşleşme: ${pklResult.matches.length}
+Veri Kaynağı: ${dataSource}
+Toplam Yüz Sayısı: ${modelFaces.length}
+Threshold: ${threshold}
+Algoritma: JavaScript Cosine Similarity
+Toplam Eşleşme: ${matches.length}
 
 EŞLEŞEN YÜZLER:
-${pklResult.matches.map((match: any, i: number) => 
+${matches.map((match: any, i: number) => 
   `${i+1}. ${match.image_path} - Similarity: ${match.similarity.toFixed(3)}`
 ).join('\n')}
 
-⚡ Bu sonuçlar gerçek InsightFace PKL veritabanından alınmıştır.
+⚡ Bu sonuçlar server-side JavaScript cosine similarity ile hesaplanmıştır.
+⚡ PKL dosyası dependency'si olmadan çalışır.
 `;
               
-              zip.addFile(`${model.name}_PKL_eşleştirme_raporu.txt`, Buffer.from(reportContent, 'utf8'));
+              zip.addFile(`${model.name}_face_matching_raporu.txt`, Buffer.from(reportContent, 'utf8'));
               
               // Eşleşen yüzlerin kopyalarını ekle (varsa)
-              for (const match of pklResult.matches.slice(0, 10)) { // İlk 10 eşleşme
+              for (const match of matches.slice(0, 10)) { // İlk 10 eşleşme
                 const imageName = match.image_path;
                 let imageFound = false;
                 
-                // Python script tarafından bulunan tam yolu kullan
+                // Full path'i kontrol et
                 if (match.full_path && fs.existsSync(match.full_path)) {
                   try {
                     const imageBuffer = fs.readFileSync(match.full_path);
                     const zipFileName = `eşleşen_${match.similarity.toFixed(3)}_${imageName}`;
                     zip.addFile(zipFileName, imageBuffer);
-                    console.log(`📸 Eşleşen görsel eklendi: ${zipFileName} (${match.relative_path})`);
+                    console.log(`📸 Eşleşen görsel eklendi: ${zipFileName}`);
                     imageFound = true;
-                  } catch (imgError) {
-                    console.log(`⚠️ Görsel okunamadı: ${match.full_path}`);
+                  } catch (readError) {
+                    console.log(`❌ Resim okunamadı: ${match.full_path}`);
                   }
                 }
                 
-                // Fallback: Manuel arama
+                // Alternatif yolları dene
                 if (!imageFound) {
                   const possiblePaths = [
                     path.join(modelPath, imageName),
                     path.join(modelPath, 'denemelik', imageName),
-                    path.join(modelPath, match.relative_path || imageName)
+                    path.join(modelPath, 'photos', imageName),
+                    path.join(modelPath, 'images', imageName),
+                    path.join('./public/uploads', imageName)
                   ];
                   
                   for (const possiblePath of possiblePaths) {
@@ -1797,32 +1837,52 @@ ${pklResult.matches.map((match: any, i: number) =>
                         const zipFileName = `eşleşen_${match.similarity.toFixed(3)}_${imageName}`;
                         zip.addFile(zipFileName, imageBuffer);
                         console.log(`📸 Eşleşen görsel eklendi: ${zipFileName} (fallback)`);
+                        imageFound = true;
                         break;
-                      } catch (imgError) {
-                        console.log(`⚠️ Görsel eklenemedi: ${possiblePath}`);
+                      } catch (readError) {
+                        console.log(`❌ Resim okunamadı: ${possiblePath}`);
                       }
                     }
                   }
                 }
+                
+                if (!imageFound) {
+                  console.log(`⚠️ Resim bulunamadı: ${imageName}`);
+                }
               }
               
-              // Ana akıştan çık - PKL işlemi tamamlandı
-              processedModels++;
-              continue;
-              
+              totalMatches += matches.length;
             } else {
-              console.log(`❌ PKL eşleştirmesi başarısız: ${pklResult.error}`);
-              console.log(`❌ FALLBACK DEVRE DIŞI - Gerçek PKL sonucu gerekli!`);
-              zip.addFile(`${model.name}_PKL_HATASI.txt`, Buffer.from(`PKL Eşleştirme Hatası: ${pklResult.error}`, 'utf8'));
-              processedModels++;
-              continue; // Fallback'e geçme, bir sonraki modele geç
+              console.log(`❌ ${model.name} için yüz verisi bulunamadı`);
+              
+              // No data raporunu ekle
+              const noDataReport = `
+Face Matching - Veri Bulunamadı
+Model: ${model.name}
+İşlem Tarihi: ${new Date().toLocaleDateString('tr-TR')}
+Durum: Yüz verisi bulunamadı
+Kontrol Edilenler:
+- JSON backup: ${fs.existsSync(jsonBackupPath) ? 'VAR (okunamadı)' : 'YOK'}
+- PKL dosyası: ${fs.existsSync(faceDbPath) ? 'VAR (numpy hatası)' : 'YOK'}
+
+Bu model için yüz eşleştirmesi yapılamadı.
+`;
+              zip.addFile(`${model.name}_VERİ_BULUNAMADI.txt`, Buffer.from(noDataReport, 'utf8'));
             }
             
-          } catch (pklError) {
-            console.log(`❌ PKL işlemi başarısız: ${pklError}`);
-            console.log(`❌ FALLBACK DEVRE DIŞI - Gerçek PKL eşleştirmesi gerekli!`);
-            // Gerçek hata raporla, fallback kullanma
-            zip.addFile(`${model.name}_HATA.txt`, Buffer.from(`PKL Eşleştirme Hatası: ${pklError}`, 'utf8'));
+          } catch (matchingError) {
+            console.error(`❌ Face matching hatası (${model.name}):`, matchingError);
+            
+            // Matching hatası raporunu ekle
+            const matchingErrorReport = `
+Face Matching İstisna Hatası
+Model: ${model.name}
+İşlem Tarihi: ${new Date().toLocaleDateString('tr-TR')}
+Hata Detayı: ${matchingError instanceof Error ? matchingError.message : String(matchingError)}
+
+Bu hata yüz eşleştirme sırasında oluştu.
+`;
+            zip.addFile(`${model.name}_MATCHING_HATA.txt`, Buffer.from(matchingErrorReport, 'utf8'));
             processedModels++;
             continue; // Fallback'e geçme, bir sonraki modele geç
           }

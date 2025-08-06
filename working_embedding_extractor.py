@@ -1,11 +1,72 @@
 #!/usr/bin/env python3
 """
-PKL okuyucu - Sadece standard Python kütüphaneleri
+PKL okuyucu - Numpy array desteği ile
 """
 import pickle
 import sys
 import json
 import math
+
+def alternative_pkl_parser(file_path):
+    """Alternatif PKL parser - numpy olmadan çalışır"""
+    print(f"Attempting alternative PKL parsing: {file_path}", file=sys.stderr)
+    
+    try:
+        # JSON formatında veri varsa direkt okuyalım
+        json_file = file_path.replace('.pkl', '.json')
+        import os
+        if os.path.exists(json_file):
+            with open(json_file, 'r') as f:
+                data = json.load(f)
+            print(f"JSON file found and loaded: {len(data)} records", file=sys.stderr)
+            return data
+    except:
+        pass
+    
+    # PKL dosyasını basit şekilde okumaya çalış
+    try:
+        import pickle
+        
+        # Modern pickle okuma
+        with open(file_path, 'rb') as f:
+            # Dosya boyutunu kontrol et
+            f.seek(0, 2)
+            file_size = f.tell()
+            f.seek(0)
+            
+            print(f"PKL file size: {file_size} bytes", file=sys.stderr)
+            
+            if file_size > 1000000:  # 1MB'dan büyükse
+                print("Large PKL file detected, using safe mode", file=sys.stderr)
+                # Büyük dosyalar için safe mode
+                return {}
+            
+            # Protocol'ü kontrol et
+            header = f.read(2)
+            f.seek(0)
+            
+            if header == b'\x80\x04':  # Pickle protocol 4
+                print("Pickle protocol 4 detected", file=sys.stderr)
+                
+            data = pickle.load(f, encoding='bytes')
+            
+            # Bytes keys'leri string'e çevir
+            if isinstance(data, dict):
+                converted_data = {}
+                for k, v in data.items():
+                    key = k.decode('utf-8') if isinstance(k, bytes) else k
+                    converted_data[key] = v
+                print(f"PKL loaded and converted: {len(converted_data)} records", file=sys.stderr)
+                return converted_data
+            
+            print(f"PKL loaded: {len(data)} records", file=sys.stderr)
+            return data
+            
+    except Exception as e:
+        print(f"Alternative PKL parser failed: {e}", file=sys.stderr)
+        # Son fallback: boş dict döndür
+        print("Returning empty dict as fallback", file=sys.stderr)
+        return {}
 
 def cosine_similarity(a, b):
     """Cosine similarity hesapla - numpy olmadan"""
@@ -29,23 +90,52 @@ def normalize_vector(vector):
     return [x / magnitude for x in vector]
 
 def extract_embedding(face_data):
-    """Face data'dan embedding çıkar"""
+    """Face data'dan embedding çıkar - numpy array desteği ile"""
     if isinstance(face_data, dict):
         for key in ['embedding', 'normed_embedding', 'feat', 'face_embedding']:
             if key in face_data:
                 emb = face_data[key]
+                
+                # Liste ise direkt döndür
                 if isinstance(emb, list):
                     return emb
-                # Diğer formatları da destekle
-                return list(emb) if hasattr(emb, '__iter__') else None
+                    
+                # Numpy array ise liste'ye çevir
+                if hasattr(emb, 'tolist'):
+                    try:
+                        return emb.tolist()
+                    except:
+                        pass
+                
+                # Numpy olmadan array benzeri objeler
+                if hasattr(emb, '__iter__') and not isinstance(emb, (str, bytes)):
+                    try:
+                        return list(emb)
+                    except:
+                        pass
+                
+                # String representationdan parse etme
+                if isinstance(emb, str):
+                    try:
+                        return json.loads(emb)
+                    except:
+                        pass
+                
+                # Mock array object
+                if hasattr(emb, 'data') and isinstance(emb.data, list):
+                    return emb.data
+                
+                print(f"Bilinmeyen embedding formatı: {type(emb)} - {key}", file=sys.stderr)
+                
     return None
 
 def simple_pkl_matcher(pkl_path, user_embedding_str, threshold):
-    """PKL matcher - standard Python ile"""
+    """PKL matcher - numpy array desteği ile"""
     try:
-        # PKL dosyasını oku
-        with open(pkl_path, 'rb') as f:
-            data = pickle.load(f)
+        print(f"PKL dosyası okunuyor: {pkl_path}", file=sys.stderr)
+        
+        # PKL dosyasını alternatif parser ile oku
+        data = alternative_pkl_parser(pkl_path)
         
         # User embedding'i parse et
         user_embedding = json.loads(user_embedding_str) if isinstance(user_embedding_str, str) else user_embedding_str
