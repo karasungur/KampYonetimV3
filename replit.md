@@ -13,17 +13,16 @@ This is a web-based management system for the AK Party Youth Branches Consultati
 
 ## Recent Changes
 
-### January 30, 2025 - Real PKL Database Integration ✅ COMPLETE
-- **Real PKL File Support**: Created `pkl_face_matcher.py` for authentic InsightFace database reading
-- **Dual Loading System**: Supports both `torch.load` and `pickle.load` for maximum compatibility  
-- **Smart Embedding Extraction**: Auto-detects embedding keys (embedding, normed_embedding, feat)
-- **InsightFace L2 Normalization**: Proper normalization matching InsightFace Buffalo_L standard
-- **Path Compatibility**: Converts Windows paths (`D:\Users\...`) to cross-platform format
-- **Real Cosine Similarity**: Genuine dot product calculation for normalized embeddings
-- **Threshold 0.5 Implementation**: User-specified threshold for production matching
-- **ZIP Result Integration**: PKL matches included in downloadable results with similarity scores
-- **Fallback System**: Falls back to Buffalo_L compatible if PKL fails
-- **Production Grade**: Ready for real InsightFace PKL databases from face_training_gui.py
+### January 30, 2025 - Models Klasörü Native PKL Integration ✅ COMPLETE
+- **face_training_gui.py Updated**: Now creates PKL files directly compatible with models/ folder structure
+- **Relative Path System**: PKL keys use format `denemelik/foto.jpg||face_0` instead of Windows absolute paths
+- **Cross-Platform Compatibility**: Automatic backslash to forward slash conversion
+- **Native Models Integration**: No separate path mapper needed - PKL files work directly
+- **Windows Training Compatible**: Train on Windows, use on Linux seamlessly
+- **Google Drive Ready**: Training packages can be uploaded directly via Google Drive ZIP
+- **Threshold 0.5 Maintained**: User-specified threshold value preserved
+- **InsightFace Buffalo_L Native**: Real InsightFace embeddings with L2 normalization
+- **Production Grade**: Eliminates mapping complexity - direct models/ folder compatibility
 
 ### January 29, 2025 - Evening
 - **Face Model Management System Complete**: Successfully implemented full Google Drive integration

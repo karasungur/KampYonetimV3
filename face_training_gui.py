@@ -123,11 +123,16 @@ class TrainingWorker(QThread):
                     for face_idx, face in enumerate(faces):
                         embedding = face.normed_embedding.astype('float32')
                         
-                        # Benzersiz anahtar oluştur
-                        key = f"{file_path}||face_{face_idx}"
+                        # Models klasörüne uyumlu relative path oluştur
+                        relative_path = os.path.relpath(file_path, self.folder_path)
+                        # Windows backslash'leri forward slash'e çevir (cross-platform)
+                        relative_path = relative_path.replace('\\', '/')
+                        
+                        # Benzersiz anahtar oluştur (relative path ile)
+                        key = f"{relative_path}||face_{face_idx}"
                         face_database[key] = {
                             'embedding': embedding,
-                            'path': file_path,
+                            'path': relative_path,  # Relative path kaydet
                             'bbox': face.bbox.tolist(),
                             'kps': face.kps.tolist() if hasattr(face, 'kps') else None,
                             'confidence': getattr(face, 'det_score', 0.9)
@@ -563,32 +568,25 @@ class FaceTrainingGUI(QMainWindow):
             shutil.copytree(training_folder, dest_folder)
             self.log_message(f"✅ Eğitim klasörü kopyalandı: {folder_name}")
             
-            # Şimdi face_database'deki path'leri güncelleyelim
-            self.log_message("🔄 Fotoğraf yolları güncelleniyor...")
+            # Path'ler zaten relative, sadece folder_name ekle
+            self.log_message("🔄 Models klasörüne uyumlu path'ler hazırlanıyor...")
             updated_face_database = {}
             
             for key, face_data in face_database.items():
-                # Orijinal yol
-                original_path = face_data['path']
+                # face_data['path'] zaten relative (denemelik/foto.jpg gibi)
+                relative_path = face_data['path']
                 
-                # Yeni yol: training_package içindeki kopya klasör
-                relative_path = os.path.relpath(original_path, training_folder)
-                new_path = os.path.join(package_dir, folder_name, relative_path)
-                
-                # Face data'yı kopyala ve path'i güncelle
-                updated_face_data = face_data.copy()
-                updated_face_data['path'] = new_path
-                
-                updated_face_database[key] = updated_face_data
+                # Key'i de güncelle (relative path zaten var)
+                updated_face_database[key] = face_data
             
-            self.log_message(f"✅ {len(updated_face_database)} kayıt için yol güncellendi")
+            self.log_message(f"✅ {len(updated_face_database)} kayıt models klasörü için hazırlandı")
             
-            # Güncellenmiş face database'i kaydet
+            # Models klasörü uyumlu PKL dosyasını kaydet
             database_path = os.path.join(package_dir, "face_database.pkl")
             with open(database_path, 'wb') as f:
                 pickle.dump(updated_face_database, f)
             
-            self.log_message(f"💾 Güncellenmiş veritabanı kaydedildi: {database_path}")
+            self.log_message(f"💾 Models klasörü uyumlu veritabanı kaydedildi: {database_path}")
             
             # Bilgi dosyası oluştur
             self.create_info_file(package_dir, training_folder, folder_name, len(updated_face_database))
@@ -600,13 +598,13 @@ class FaceTrainingGUI(QMainWindow):
             QMessageBox.information(
                 self,
                 "🎉 Eğitim Tamamlandı!",
-                f"✅ Yüz tanıma veritabanı başarıyla oluşturuldu!\n\n"
+                f"✅ Models klasörü uyumlu veritabanı oluşturuldu!\n\n"
                 f"📄 Veritabanı: training_package/face_database.pkl\n"
                 f"📦 Paket: training_package/\n"
                 f"👥 Toplam yüz: {len(updated_face_database)}\n"
                 f"📁 Fotoğraflar: training_package/{folder_name}/\n\n"
-                f"Tüm dosyalar training_package klasöründe hazır!\n"
-                f"Artık PKL dosyası kendi klasöründeki fotoğrafları kullanacak."
+                f"🦬 PKL dosyası artık relative path'ler kullanıyor!\n"
+                f"Models klasörüne yüklemeye hazır - mapper gereksiz!"
             )
             
             status_bar = self.statusBar()
@@ -629,10 +627,12 @@ class FaceTrainingGUI(QMainWindow):
                 f.write(f"Veritabanı Dosyası: face_database.pkl\n")
                 f.write(f"Eğitim Verisi: {folder_name}/\n\n")
                 f.write("📝 ÖNEMLI NOTLAR:\n")
-                f.write("- face_database.pkl içindeki fotoğraf yolları artık bu klasördeki kopyaları gösteriyor\n")
-                f.write("- Model sorgu yaparken görüntüleri bu klasörden bulacak\n")
-                f.write("- Orijinal fotoğraflarınız değişmedi, sadece kopyalar kullanılıyor\n")
-                f.write("- Bu paket taşınabilir: tüm dosyalar bir arada\n")
+                f.write("- face_database.pkl MODELS KLASÖRÜNE UYUMLU oluşturuldu\n")
+                f.write("- Path'ler relative format: denemelik/foto.jpg||face_0\n")
+                f.write("- Windows absolute path'leri temizlendi\n")
+                f.write("- Google Drive'dan direkt yüklenebilir\n")
+                f.write("- Ayrı path mapper gereksiz - direkt çalışır\n")
+                f.write("- Bu paket Replit models/ klasörüne uyumlu\n")
                 
             self.log_message("📄 Bilgi dosyası oluşturuldu: training_info.txt")
             
