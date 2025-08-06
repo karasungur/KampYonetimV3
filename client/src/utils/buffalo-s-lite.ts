@@ -71,7 +71,8 @@ class BuffaloSLite {
       canvas.height = imageElement.height;
       ctx.drawImage(imageElement, 0, 0);
       
-      // Use Vladimir Mandic Face-API for accurate face detection
+      // Use Vladimir Mandic Face-API for accurate face detection  
+      console.log(`🖼️ Canvas boyutu: ${canvas.width}x${canvas.height}`);
       const vladimirDetections = await this.vladimirMandricFaceDetection(canvas);
       console.log(`👤 Vladimir Mandic algıladı: ${vladimirDetections.length} yüz`);
       
@@ -134,10 +135,11 @@ class BuffaloSLite {
       // CDN model path'i
       const modelPath = 'https://vladmandic.github.io/face-api/model/';
       
-      // Load the models from CDN
+      // Load the models from CDN (önceden çalışan modeller)
       await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri(modelPath),
-        faceapi.nets.faceLandmark68Net.loadFromUri(modelPath)
+        faceapi.nets.ssdMobilenetv1.loadFromUri(modelPath),
+        faceapi.nets.faceLandmark68Net.loadFromUri(modelPath),
+        faceapi.nets.tinyFaceDetector.loadFromUri(modelPath) // Backup model
       ]);
       
       this.vladimirLoaded = true;
@@ -170,16 +172,37 @@ class BuffaloSLite {
         }));
       }
 
-      // Use TinyFaceDetector for better performance
-      const detections = await faceapi
-        .detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+      console.log(`🔍 Vladimir Mandic face detection başlatılıyor...`);
+      
+      // Önce SSD MobileNet dene (daha doğru)
+      let detections = await faceapi
+        .detectAllFaces(canvas, new faceapi.SsdMobilenetv1Options({ 
+          minConfidence: 0.3,
+          maxResults: 50
+        }))
         .withFaceLandmarks();
 
-      console.log(`👤 Vladimir Mandic algıladı: ${detections.length} yüz`);
+      console.log(`📊 SSD MobileNet algıladı: ${detections.length} yüz`);
+
+      // Eğer hiç yüz bulunamazsa TinyFaceDetector dene
+      if (detections.length === 0) {
+        console.log(`🔄 SSD hiç yüz bulamadı, TinyFaceDetector deneniyor...`);
+        detections = await faceapi
+          .detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions({ 
+            inputSize: 416,
+            scoreThreshold: 0.3 
+          }))
+          .withFaceLandmarks();
+        console.log(`📊 TinyFaceDetector algıladı: ${detections.length} yüz`);
+      }
+
+      console.log(`✅ Vladimir Mandic toplam algıladı: ${detections.length} yüz`);
 
       const results = detections.map((detection, index) => {
         const box = detection.detection.box;
         const landmarks = detection.landmarks?.positions.map(pos => ({ x: pos.x, y: pos.y })) || null;
+        
+        console.log(`👤 Yüz ${index + 1}: (${Math.floor(box.x)},${Math.floor(box.y)}) ${Math.floor(box.width)}x${Math.floor(box.height)}, confidence: ${detection.detection.score.toFixed(2)}`);
         
         return {
           boundingBox: {
@@ -197,10 +220,14 @@ class BuffaloSLite {
 
     } catch (error) {
       console.error('❌ Vladimir Mandic detection hatası:', error);
+      console.log('🔄 Fallback: Buffalo-S Lite detection kullanılıyor...');
+      
       // Fall back to Buffalo-S Lite detection
       const imageData = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
       const grayData = this.convertToGrayscale(imageData);
       const regions = this.detectFaceRegions(grayData, canvas.width, canvas.height);
+      
+      console.log(`📊 Buffalo-S Lite fallback algıladı: ${regions.length} yüz`);
       
       return regions.map(region => ({
         boundingBox: region,
