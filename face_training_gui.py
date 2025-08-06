@@ -639,9 +639,10 @@ class FaceTrainingGUI(QMainWindow):
                 # Value'dan embedding'i çıkar ve listeye çevir
                 json_value = {
                     "embedding": value["embedding"].tolist() if hasattr(value["embedding"], 'tolist') else list(value["embedding"]),
-                    "normed_embedding": value["normed_embedding"].tolist() if hasattr(value["normed_embedding"], 'tolist') else list(value["normed_embedding"]),
-                    "confidence": float(value.get("confidence", 0.95)),
-                    "quality": value.get("quality", "good")
+                    "path": value.get("path", ""),
+                    "bbox": value.get("bbox", []),
+                    "kps": value.get("kps", None),
+                    "confidence": float(value.get("confidence", 0.95))
                 }
                 json_database[str_key] = json_value
             
