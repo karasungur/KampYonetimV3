@@ -210,7 +210,7 @@ export default function MainMenuPage() {
       const result = await response.json();
       
       if (result.success && result.embedding) {
-        console.log(`✅ Buffalo_L embedding çıkarıldı: ${result.embedding.length} boyut`);
+        console.log(`✅ Buffalo_L embedding çıkarıldı: ${result.embedding_size || result.embedding.length} boyut`);
         return result.embedding;
       } else {
         console.error('❌ Embedding çıkarma başarısız:', result.error);
@@ -229,6 +229,19 @@ export default function MainMenuPage() {
       setIsLoadingModels(true);
       
       try {
+        // CPU fallback for environments without WebGL/WASM support
+        try {
+          console.log('Attempting to set CPU backend as fallback...');
+          const tf = (faceapi as any).tf;
+          if (tf && tf.setBackend) {
+            await tf.setBackend('cpu');
+            await tf.ready();
+            console.log('✅ TensorFlow.js CPU backend ready');
+          }
+        } catch (backendError) {
+          console.log('⚠️ Backend setting failed, continuing with default:', backendError);
+        }
+        
         // Vladimir Mandic's face-api uses different model URLs and structure
         const modelPath = 'https://vladmandic.github.io/face-api/model';
         
