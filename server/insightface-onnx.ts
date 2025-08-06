@@ -84,16 +84,23 @@ class NodeInsightFace {
         const hexValue = parseInt(hashChunk, 16) || 128;
         
         // Gaussian distribution için Box-Muller transform
-        const u1 = hexValue / 255.0;
+        const u1 = Math.max(0.001, hexValue / 255.0); // Ensure positive
         const u2 = (parseInt(hashToUse.charAt((i + 1) % hashToUse.length), 16) || 8) / 15.0;
-        const gaussian = Math.sqrt(-2 * Math.log(u1 + 0.001)) * Math.cos(2 * Math.PI * u2);
         
-        return gaussian * 0.5; // Scale down for better distribution
+        // Validate inputs before calculation
+        if (isNaN(u1) || isNaN(u2) || u1 <= 0) {
+          return (hexValue - 128) / 128.0; // Simple normalization fallback
+        }
+        
+        const gaussian = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+        
+        // Validate output
+        return isNaN(gaussian) ? (hexValue - 128) / 128.0 : gaussian * 0.5;
       });
       
-      // L2 normalizasyonu
-      const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
-      const normalizedEmbedding = embedding.map(val => val / magnitude);
+      // L2 normalizasyonu (NaN kontrolü ile)
+      const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + (val || 0) * (val || 0), 0));
+      const normalizedEmbedding = magnitude > 0 ? embedding.map(val => (val || 0) / magnitude) : embedding.map(() => 0);
       
       console.log(`✅ Node.js hash-based embedding oluşturuldu: boyut=${normalizedEmbedding.length}, norm=${magnitude.toFixed(6)}`);
       

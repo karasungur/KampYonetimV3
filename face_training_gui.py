@@ -19,10 +19,14 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
 from PyQt5.QtGui import QPixmap, QImage, QIcon, QFont
+# Buffalo-S Lite ONNX approach (unified architecture)
 try:
-    from insightface.app import FaceAnalysis
+    import onnxruntime as ort
+    # Buffalo-S Lite model support (will replace InsightFace)
+    BuffaloSLiteAvailable = True
 except ImportError:
-    FaceAnalysis = None
+    ort = None
+    BuffaloSLiteAvailable = False
 
 # Uyarıları bastır
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*rcond parameter.*")
