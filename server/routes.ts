@@ -1706,12 +1706,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             console.log(`🦬 PKL eşleştirmesi başlatılıyor...`);
             
+            // Çalışan PKL okuyucu kullan (dependency olmadan)
+            console.log(`🐍 PKL Matcher başlatılıyor: ${faceDbPath}`);
             const pythonProcess = spawn('python3', [
-              'pkl_face_matcher.py',
+              'working_embedding_extractor.py',
               faceDbPath,
               userEmbeddingJson,
-              threshold.toString(),
-              modelPath  // Model klasör yolunu gönder
+              threshold.toString()
             ]);
             
             let pythonOutput = '';
@@ -1811,233 +1812,28 @@ ${pklResult.matches.map((match: any, i: number) =>
               
             } else {
               console.log(`❌ PKL eşleştirmesi başarısız: ${pklResult.error}`);
-              // Fallback'e geç
+              console.log(`❌ FALLBACK DEVRE DIŞI - Gerçek PKL sonucu gerekli!`);
+              zip.addFile(`${model.name}_PKL_HATASI.txt`, Buffer.from(`PKL Eşleştirme Hatası: ${pklResult.error}`, 'utf8'));
+              processedModels++;
+              continue; // Fallback'e geçme, bir sonraki modele geç
             }
             
           } catch (pklError) {
             console.log(`❌ PKL işlemi başarısız: ${pklError}`);
-            console.log(`🔄 Fallback algoritma'ya geçiliyor...`);
-            // Fallback'e geç
-          }
-          
-          processedModels++;
-          console.log(`✅ Model işleniyor: ${model.name}`);
-          
-          // Gerçek yüz eşleştirmesi yap
-          if (Array.isArray(userFaceData) && userFaceData[0]?.embedding) {
-            try {
-              const userEmbedding = userFaceData[0].embedding;
-              console.log(`🔍 Node.js yüz eşleştirmesi başlıyor...`);
-              console.log(`📊 User embedding boyutu: ${userEmbedding.length}`);
-              
-              // Model klasöründeki tüm fotoğrafları bul (Python GUI uyumlu recursive arama)
-              const photoExtensions = ['.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG'];
-              const allPhotos: string[] = [];
-              
-              // Recursive fonksiyon (Python GUI'deki os.walk gibi)
-              const findPhotosRecursive = (dirPath: string) => {
-                const items = fs.readdirSync(dirPath);
-                for (const item of items) {
-                  const itemPath = path.join(dirPath, item);
-                  const stats = fs.statSync(itemPath);
-                  
-                  if (stats.isDirectory()) {
-                    // Sistem dosyalarını atla
-                    if (!item.startsWith('.') && item !== 'node_modules') {
-                      console.log(`📁 Kişi klasörü bulundu: ${item}`);
-                      findPhotosRecursive(itemPath);
-                    }
-                  } else if (stats.isFile() && photoExtensions.some(ext => item.endsWith(ext))) {
-                    allPhotos.push(itemPath);
-                    console.log(`📸 Fotoğraf bulundu: ${path.relative(modelPath, itemPath)}`);
-                  }
-                }
-              };
-              
-              // Python GUI training_package yapısındaki tüm fotoğrafları bul
-              findPhotosRecursive(modelPath);
-              
-              console.log(`📸 Toplam ${allPhotos.length} fotoğraf bulundu`);
-              
-              // GERÇEKLESİTIRİLMİS COSINE SIMILARITY ALGORITMASI (Python koduna dayalı)
-              console.log('🎯 Gerçek cosine similarity hesaplanıyor...');
-              
-              // Kullanıcı tarafından ayarlanan threshold
-              const SIM_THRESHOLD = 0.5; // Kullanıcı talebi ile 0.5'e ayarlandı
-              
-              // Cosine similarity fonksiyonu (normalize edilmiş embeddingler için dot product)
-              const cosineSimilarity = (embA: number[], embB: number[]): number => {
-                if (embA.length !== embB.length) {
-                  console.warn('⚠️ Embedding boyutları uyuşmuyor:', embA.length, 'vs', embB.length);
-                  return 0;
-                }
-                
-                let dotProduct = 0;
-                for (let i = 0; i < embA.length; i++) {
-                  dotProduct += embA[i] * embB[i];
-                }
-                return dotProduct; // Normalize edilmiş embeddingler için dot product = cosine similarity
-              };
-              
-              // Her fotoğraf için gerçek embedding simüle et (PKL database yerine)
-              // Python kodundaki gibi her fotoğraf için normalize edilmiş embedding
-              const photoEmbeddings = new Map<string, number[]>();
-              for (const photoPath of allPhotos) {
-                // Her fotoğraf için farklı ama tutarlı embedding oluştur
-                const photoSeed = photoPath.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-                const rng = () => {
-                  const x = Math.sin(photoSeed * 9999) * 10000;
-                  return x - Math.floor(x);
-                };
-                
-                // User embedding boyutuna uygun embedding oluştur
-                const embeddingSize = userEmbedding.length; // 128 boyutlu
-                const rawEmbedding = Array.from({length: embeddingSize}, () => (rng() - 0.5) * 2);
-                const magnitude = Math.sqrt(rawEmbedding.reduce((sum, val) => sum + val * val, 0));
-                const normalizedEmbedding = rawEmbedding.map(val => val / magnitude);
-                
-                photoEmbeddings.set(photoPath, normalizedEmbedding);
-              }
-              
-              // Python kodundaki algoritma: Her fotoğraf için similarity hesapla ve threshold'u geç
-              const matches: any[] = [];
-              let checkedPhotos = 0;
-              
-              const photoEntries = Array.from(photoEmbeddings.entries());
-              for (const [photoPath, photoEmbedding] of photoEntries) {
-                checkedPhotos++;
-                
-                // Gerçek cosine similarity hesapla
-                const similarity = cosineSimilarity(userEmbedding, photoEmbedding);
-                
-                if (similarity > SIM_THRESHOLD) {
-                  matches.push({
-                    face_id: `face_${matches.length + 1}`,
-                    similarity: similarity,
-                    image_path: photoPath,
-                    metadata: { 
-                      type: 'real_cosine_similarity',
-                      threshold: SIM_THRESHOLD,
-                      checked_photos: checkedPhotos
-                    }
-                  });
-                }
-              }
-              
-              // Python kodundaki gibi similarity'ye göre sırala (en yüksekten düşüğe)
-              matches.sort((a, b) => b.similarity - a.similarity);
-              
-              console.log(`📊 Gerçek algoritma sonuçları:`);
-              console.log(`- Kontrol edilen fotoğraf: ${checkedPhotos}`);
-              console.log(`- Threshold (${SIM_THRESHOLD}) üzeri eşleşme: ${matches.length}`);
-              console.log(`- En yüksek similarity: ${matches[0]?.similarity.toFixed(3) || 'N/A'}`);
-              console.log(`- En düşük similarity: ${matches[matches.length - 1]?.similarity.toFixed(3) || 'N/A'}`);
-              
-              // Debug: İlk 5 similarity değerini göster
-              if (checkedPhotos > 0) {
-                console.log(`🔍 İlk 5 fotoğraf similarity değerleri:`);
-                const allSimilarities = photoEntries
-                  .map(([path, embedding]) => ({
-                    path: path.split('/').pop(),
-                    similarity: cosineSimilarity(userEmbedding, embedding)
-                  }))
-                  .sort((a, b) => b.similarity - a.similarity)
-                  .slice(0, 5);
-                
-                allSimilarities.forEach((item, index) => {
-                  console.log(`  ${index + 1}. ${item.path}: ${item.similarity.toFixed(3)}`);
-                });
-              }
-              
-              console.log(`✅ Gerçek cosine similarity ile ${matches.length} eşleşme bulundu`);
-              
-              // Eğer eşleşme yoksa threshold'u düşür ve tekrar dene
-              if (matches.length === 0 && checkedPhotos > 0) {
-                console.log(`⚠️ Hiç eşleşme bulunamadı. Threshold ${SIM_THRESHOLD} çok yüksek olabilir.`);
-                const FALLBACK_THRESHOLD = 0.3; // Fallback threshold da yükseltildi
-                console.log(`🔄 Fallback threshold ${FALLBACK_THRESHOLD} ile tekrar deneniyor...`);
-                
-                for (const [photoPath, photoEmbedding] of photoEntries) {
-                  const similarity = cosineSimilarity(userEmbedding, photoEmbedding);
-                  
-                  if (similarity > FALLBACK_THRESHOLD) {
-                    matches.push({
-                      face_id: `fallback_${matches.length + 1}`,
-                      similarity: similarity,
-                      image_path: photoPath,
-                      metadata: { 
-                        type: 'fallback_match',
-                        original_threshold: SIM_THRESHOLD,
-                        fallback_threshold: FALLBACK_THRESHOLD
-                      }
-                    });
-                  }
-                }
-                
-                matches.sort((a, b) => b.similarity - a.similarity);
-                console.log(`🔄 Fallback ile ${matches.length} eşleşme bulundu`);
-              }
-              
-              // Sonuç raporu oluştur
-              const reportContent = `
-Model: ${model.name}
-İşlem Tarihi: ${new Date().toLocaleDateString('tr-TR')}
-Kullanıcı Embedding Boyutu: ${userEmbedding.length}
-Eşleştirme Threshold: ${SIM_THRESHOLD} (kullanıcı talebi ile ayarlandı)
-Algoritma: Gerçek Cosine Similarity (normalize edilmiş embeddingler)
-Toplam Eşleşme: ${matches.length}
-Kontrol Edilen Fotoğraf: ${allPhotos.length}
-
-EŞLEŞEN YÜZLER:
-${matches.map((match: any, i: number) => 
-  `${i+1}. Similarity: ${match.similarity.toFixed(3)} - ${path.basename(match.image_path)}`
-).join('\n')}
-
-⚠️ NOT: Bu sürümde gerçek yüz embedding karşılaştırması yerine simüle edilmiş 
-eşleştirme sonuçları gösterilmektedir. Gerçek PKL dosyası analizi için 
-Python dependencies gereklidir.
-`;
-
-              zip.addFile(`${model.name}_eşleştirme_raporu.txt`, Buffer.from(reportContent, 'utf8'));
-              totalMatches += matches.length;
-              
-              // Eşleşen fotoğrafları ZIP'e ekle
-              for (let i = 0; i < matches.length; i++) {
-                const match = matches[i];
-                if (fs.existsSync(match.image_path)) {
-                  const photoBuffer = fs.readFileSync(match.image_path);
-                  const similarityStr = match.similarity.toFixed(3).replace('.', '_');
-                  const originalName = path.basename(match.image_path);
-                  const photoFileName = `${model.name}/match_${(i+1).toString().padStart(2, '0')}_sim_${similarityStr}_${originalName}`;
-                  zip.addFile(photoFileName, photoBuffer);
-                  console.log(`📸 ZIP'e eklendi: ${photoFileName}`);
-                }
-              }
-              
-            } catch (error) {
-              console.error(`❌ Yüz eşleştirme hatası: ${error}`);
-              // Hata durumunda da bilgi ekle
-              zip.addFile(`${model.name}_hata_raporu.txt`, Buffer.from(`
-Model: ${model.name}
-Hata: ${(error as Error).message}
-İşlem Tarihi: ${new Date().toLocaleDateString('tr-TR')}
-
-Yüz eşleştirme işlemi başarısız.
-`, 'utf8'));
-            }
-          } else {
-            // User embedding yoksa bilgi ver
-            zip.addFile(`${model.name}_hata.txt`, Buffer.from(`
-Model: ${model.name}
-Hata: Kullanıcı face embedding'i bulunamadı
-İşlem Tarihi: ${new Date().toLocaleDateString('tr-TR')}
-`, 'utf8'));
+            console.log(`❌ FALLBACK DEVRE DIŞI - Gerçek PKL eşleştirmesi gerekli!`);
+            // Gerçek hata raporla, fallback kullanma
+            zip.addFile(`${model.name}_HATA.txt`, Buffer.from(`PKL Eşleştirme Hatası: ${pklError}`, 'utf8'));
+            processedModels++;
+            continue; // Fallback'e geçme, bir sonraki modele geç
           }
           
         } catch (error) {
-          console.error(`Model ${modelId} işlenirken hata:`, error);
+          console.error(`❌ Model ${modelId} işleme hatası:`, error);
         }
       }
+      
+      // Özet oluştur  
+      console.log(`📊 İşlem tamamlandı: ${processedModels} model işlendi, ${totalMatches} toplam eşleşme`);
       
       // Özet dosyası ekle
       zip.addFile('EŞLEŞTIRME_ÖZET.txt', Buffer.from(`

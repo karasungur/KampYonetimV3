@@ -1,141 +1,120 @@
 #!/usr/bin/env python3
 """
-Çalışan embedding extractor - PIL/numpy ile
-İSTEK: InsightFace Buffalo_L benzeri 512 boyutlu embedding
+PKL okuyucu - Sadece standard Python kütüphaneleri
 """
+import pickle
 import sys
-import os
 import json
-import numpy as np
-from PIL import Image
+import math
 
-def extract_face_embedding(image_path):
-    """
-    512 boyutlu normalize edilmiş face embedding çıkarır
-    InsightFace Buffalo_L formatına uyumlu
-    """
+def cosine_similarity(a, b):
+    """Cosine similarity hesapla - numpy olmadan"""
+    if len(a) != len(b):
+        return 0.0
+    
+    dot_product = sum(x * y for x, y in zip(a, b))
+    magnitude_a = math.sqrt(sum(x * x for x in a))
+    magnitude_b = math.sqrt(sum(x * x for x in b))
+    
+    if magnitude_a == 0 or magnitude_b == 0:
+        return 0.0
+    
+    return dot_product / (magnitude_a * magnitude_b)
+
+def normalize_vector(vector):
+    """Vector normalize et - numpy olmadan"""
+    magnitude = math.sqrt(sum(x * x for x in vector))
+    if magnitude == 0:
+        return vector
+    return [x / magnitude for x in vector]
+
+def extract_embedding(face_data):
+    """Face data'dan embedding çıkar"""
+    if isinstance(face_data, dict):
+        for key in ['embedding', 'normed_embedding', 'feat', 'face_embedding']:
+            if key in face_data:
+                emb = face_data[key]
+                if isinstance(emb, list):
+                    return emb
+                # Diğer formatları da destekle
+                return list(emb) if hasattr(emb, '__iter__') else None
+    return None
+
+def simple_pkl_matcher(pkl_path, user_embedding_str, threshold):
+    """PKL matcher - standard Python ile"""
     try:
-        print(f"📸 Görüntü yükleniyor: {image_path}", file=sys.stderr)
+        # PKL dosyasını oku
+        with open(pkl_path, 'rb') as f:
+            data = pickle.load(f)
         
-        # PIL ile görüntüyü yükle
-        img = Image.open(image_path)
-        if img is None:
-            raise ValueError(f"Görüntü yüklenemedi: {image_path}")
+        # User embedding'i parse et
+        user_embedding = json.loads(user_embedding_str) if isinstance(user_embedding_str, str) else user_embedding_str
+        user_emb_normalized = normalize_vector(user_embedding)
         
-        print(f"📐 Orijinal boyut: {img.size}", file=sys.stderr)
+        matches = []
+        checked = 0
         
-        # RGB'ye çevir
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
+        print(f"PKL'den {len(data)} kayıt okundu", file=sys.stderr)
+        print(f"User embedding boyutu: {len(user_embedding)}", file=sys.stderr)
         
-        # 112x112 boyutuna resize et (InsightFace standart boyutu)
-        img_resized = img.resize((112, 112), Image.LANCZOS)
-        
-        # Numpy array'e çevir ve normalize et
-        img_array = np.array(img_resized, dtype=np.float32) / 255.0
-        
-        print(f"🔧 İşlenmiş boyut: {img_array.shape}", file=sys.stderr)
-        
-        # InsightFace Buffalo_L benzeri feature extraction
-        # 1. Spatial pooling ve dimension reduction
-        # 2. Channel-wise feature extraction
-        # 3. Global average pooling
-        
-        # Flatten the image
-        flattened = img_array.flatten()  # 112*112*3 = 37632 feature
-        
-        # 512 boyutlu embedding oluştur (downsampling + feature engineering)
-        target_size = 512
-        
-        # Stride ile downsample
-        stride = len(flattened) // target_size
-        base_embedding = flattened[::stride][:target_size]
-        
-        # Eksik boyutları doldur
-        if len(base_embedding) < target_size:
-            # Spatial ve channel statistics ekle
-            mean_vals = [img_array[:,:,i].mean() for i in range(3)]
-            std_vals = [img_array[:,:,i].std() for i in range(3)]
-            max_vals = [img_array[:,:,i].max() for i in range(3)]
-            min_vals = [img_array[:,:,i].min() for i in range(3)]
+        # Her kayıt için eşleştirme yap  
+        for key, face_data in data.items():
+            checked += 1
             
-            # Edge detection benzeri features
-            grad_x = np.diff(img_array, axis=1).mean()
-            grad_y = np.diff(img_array, axis=0).mean()
+            # Embedding çıkar
+            embedding = extract_embedding(face_data)
             
-            # Texture features
-            texture_features = []
-            for i in range(3):
-                channel = img_array[:,:,i]
-                texture_features.extend([
-                    np.var(channel),
-                    np.mean(np.abs(np.diff(channel, axis=0))),
-                    np.mean(np.abs(np.diff(channel, axis=1)))
-                ])
-            
-            # Additional features
-            additional_features = mean_vals + std_vals + max_vals + min_vals + [grad_x, grad_y] + texture_features
-            
-            # Padding ile 512 boyutuna tamamla
-            padding_needed = target_size - len(base_embedding)
-            if len(additional_features) >= padding_needed:
-                padding = additional_features[:padding_needed]
-            else:
-                # Zero padding if needed
-                padding = additional_features + [0.0] * (padding_needed - len(additional_features))
-            
-            embedding = np.concatenate([base_embedding, padding])
-        else:
-            embedding = base_embedding
+            if embedding and len(embedding) > 0:
+                # Normalize et
+                normalized_emb = normalize_vector(embedding)
+                
+                # Cosine similarity hesapla
+                similarity = cosine_similarity(user_emb_normalized, normalized_emb)
+                
+                if similarity > threshold:
+                    # Key format: "IMG_2072.JPG||face_3" veya direkt "IMG_2072.JPG"
+                    image_name = key.split('||')[0] if '||' in key else key
+                    
+                    matches.append({
+                        'face_id': key,
+                        'similarity': round(similarity, 6),
+                        'image_path': image_name,
+                        'relative_path': f'denemelik/{image_name}'
+                    })
+                    
+                    print(f"Eşleşme: {image_name} - similarity: {similarity:.3f}", file=sys.stderr)
         
-        # L2 normalizasyonu (InsightFace Buffalo_L standart işlemi)
-        norm = np.linalg.norm(embedding)
-        normalized_embedding = embedding / norm if norm > 0 else embedding
+        # Similarity'e göre sırala
+        matches.sort(key=lambda x: x['similarity'], reverse=True)
         
-        print(f"✅ 512 boyutlu embedding çıkarıldı", file=sys.stderr)
-        print(f"🔢 Embedding değer aralığı: [{normalized_embedding.min():.3f}, {normalized_embedding.max():.3f}]", file=sys.stderr)
-        print(f"🔄 L2 normalize edildi: norm={norm:.3f}", file=sys.stderr)
-        
-        return {
-            "success": True,
-            "embedding": normalized_embedding.tolist(),
-            "embedding_size": len(normalized_embedding),
-            "model": "PIL-based Buffalo_L Compatible Extractor",
-            "normalized": True,
-            "confidence": 0.92,  # Yüksek confidence
-            "note": "512-dimensional normalized embedding compatible with InsightFace Buffalo_L format"
+        result = {
+            'success': True,
+            'matches': matches,
+            'total_faces': checked,
+            'threshold': threshold,
+            'algorithm': 'Standard Python PKL Reader',
+            'user_embedding_size': len(user_embedding)
         }
+        
+        print(json.dumps(result))
+        return True
         
     except Exception as e:
-        print(f"❌ Embedding çıkarma hatası: {e}", file=sys.stderr)
-        import traceback
-        print(f"🔍 Detay: {traceback.format_exc()}", file=sys.stderr)
-        return {
-            "success": False,
-            "error": str(e),
-            "embedding": None,
-            "embedding_size": 0
+        result = {
+            'success': False,
+            'error': str(e),
+            'matches': []
         }
-
-def main():
-    if len(sys.argv) != 2:
-        print(json.dumps({"success": False, "error": "Usage: python3 working_embedding_extractor.py <image_path>"}))
-        sys.exit(1)
-    
-    image_path = sys.argv[1]
-    
-    if not os.path.exists(image_path):
-        print(json.dumps({"success": False, "error": f"File not found: {image_path}"}))
-        sys.exit(1)
-    
-    print(f"🎯 512-boyutlu BuffaloL-compatible embedding çıkarma başlıyor...", file=sys.stderr)
-    print(f"📁 Dosya: {image_path}", file=sys.stderr)
-    
-    # Embedding çıkar
-    result = extract_face_embedding(image_path)
-    
-    # JSON olarak stdout'a yazdır
-    print(json.dumps(result))
+        print(json.dumps(result))
+        return False
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) != 4:
+        print("Usage: python3 working_embedding_extractor.py <pkl_path> <user_embedding_json> <threshold>")
+        sys.exit(1)
+    
+    pkl_path = sys.argv[1] 
+    user_embedding = sys.argv[2]
+    threshold = float(sys.argv[3])
+    
+    simple_pkl_matcher(pkl_path, user_embedding, threshold)

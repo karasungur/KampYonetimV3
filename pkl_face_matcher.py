@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import os
+os.environ['PYTHONPATH'] = '/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages'
 """
 PKL Face Database Reader and Matcher - Yeni Format Destekli
 Gerçek PKL dosyasından yüz embeddinglerini okur ve eşleştirme yapar

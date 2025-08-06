@@ -1,97 +1,109 @@
 #!/usr/bin/env python3
 """
-Basit embedding extractor - InsightFace yerine OpenCV ile
+Basit PKL okuyucu - Torch olmadan çalışır
 """
+import pickle
 import sys
-import os
 import json
 import numpy as np
-import cv2
 
-def extract_simple_embedding(image_path):
-    """
-    Basit embedding çıkarma (InsightFace alternatifi)
-    """
+def simple_pkl_reader(pkl_path, user_embedding, threshold):
+    """PKL'i torch olmadan okur ve eşleştirme yapar"""
     try:
-        print(f"📸 Görüntü yükleniyor: {image_path}", file=sys.stderr)
+        print(f"🔍 PKL okuma başlıyor: {pkl_path}", file=sys.stderr)
         
-        # Görüntüyü yükle
-        img = cv2.imread(image_path)
-        if img is None:
-            raise ValueError(f"Görüntü yüklenemedi: {image_path}")
+        # PKL dosyasını oku
+        with open(pkl_path, 'rb') as f:
+            data = pickle.load(f)
         
-        print(f"📐 Görüntü boyutu: {img.shape}", file=sys.stderr)
+        print(f"✅ PKL yüklendi: {len(data)} kayıt", file=sys.stderr)
         
-        # 112x112 boyutuna resize et (InsightFace standart boyutu)
-        img_resized = cv2.resize(img, (112, 112))
+        # User embedding'i numpy array'e çevir
+        if isinstance(user_embedding, str):
+            user_embedding = json.loads(user_embedding)
         
-        # RGB'ye çevir ve normalize et
-        img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
-        img_normalized = img_rgb.astype(np.float32) / 255.0
+        user_emb = np.array(user_embedding, dtype=np.float32)
+        user_emb = user_emb / np.linalg.norm(user_emb)  # Normalize
         
-        # Basit feature extraction (512 boyutlu embedding simülasyonu)
-        # Gerçek InsightFace'in yaptığına benzer şekilde:
-        # 1. Görüntüyü flatten et
-        # 2. Boyutu 512'ye düşür 
-        # 3. L2 normalize et
+        print(f"📊 User embedding: boyut={len(user_emb)}, norm={np.linalg.norm(user_emb):.3f}", file=sys.stderr)
         
-        flattened = img_normalized.flatten()
+        matches = []
+        checked = 0
         
-        # 512 boyutlu embedding'e düşür (basit downsampling)
-        target_size = 512
-        step = len(flattened) // target_size
-        embedding = flattened[::step][:target_size]
+        # Her kayıt için eşleştirme yap
+        for key, face_data in data.items():
+            checked += 1
+            
+            # Embedding'i bul
+            embedding = None
+            if isinstance(face_data, dict):
+                for emb_key in ['embedding', 'normed_embedding', 'feat']:
+                    if emb_key in face_data:
+                        embedding = face_data[emb_key]
+                        break
+            
+            if embedding is not None:
+                # Numpy array'e çevir
+                if isinstance(embedding, list):
+                    embedding = np.array(embedding, dtype=np.float32)
+                
+                embedding = embedding.flatten()
+                
+                # Normalize et
+                if np.linalg.norm(embedding) > 0:
+                    embedding = embedding / np.linalg.norm(embedding)
+                    
+                    # Cosine similarity hesapla
+                    similarity = float(np.dot(user_emb, embedding))
+                    
+                    if similarity > threshold:
+                        # Key'den image path çıkar (yeni format: "IMG_2072.JPG||face_3")
+                        image_name = key.split('||')[0] if '||' in key else key
+                        
+                        matches.append({
+                            'face_id': key,
+                            'similarity': similarity,
+                            'image_path': image_name,
+                            'relative_path': f'denemelik/{image_name}'
+                        })
+                        
+                        print(f"🎯 Eşleşme: {image_name} - {similarity:.3f}", file=sys.stderr)
         
-        # Eksik boyutları sıfırla doldur
-        if len(embedding) < target_size:
-            padding = np.zeros(target_size - len(embedding))
-            embedding = np.concatenate([embedding, padding])
+        # Similarity'e göre sırala
+        matches.sort(key=lambda x: x['similarity'], reverse=True)
         
-        # L2 normalizasyonu
-        norm = np.linalg.norm(embedding)
-        normalized_embedding = embedding / norm if norm > 0 else embedding
+        print(f"✅ {checked} kayıt kontrol edildi, {len(matches)} eşleşme bulundu", file=sys.stderr)
         
-        print(f"✅ Embedding çıkarıldı: {len(normalized_embedding)} boyut", file=sys.stderr)
-        print(f"🔢 Embedding değer aralığı: [{normalized_embedding.min():.3f}, {normalized_embedding.max():.3f}]", file=sys.stderr)
-        print(f"🔄 L2 normalize edildi: norm={norm:.3f}", file=sys.stderr)
-        
-        return {
-            "success": True,
-            "embedding": normalized_embedding.tolist(),
-            "embedding_size": len(normalized_embedding),
-            "model": "OpenCV-based Simple Extractor (InsightFace alternative)",
-            "normalized": True,
-            "confidence": 0.85  # Sabit confidence değeri
+        # JSON çıktı ver
+        result = {
+            'success': True,
+            'matches': matches,
+            'total_faces': checked,
+            'threshold': threshold,
+            'algorithm': 'Simple PKL Reader (No Torch)',
+            'user_embedding_norm': float(np.linalg.norm(user_emb))
         }
+        
+        print(json.dumps(result))
+        return True
         
     except Exception as e:
-        print(f"❌ Embedding çıkarma hatası: {e}", file=sys.stderr)
-        return {
-            "success": False,
-            "error": str(e),
-            "embedding": None,
-            "embedding_size": 0
+        print(f"❌ Hata: {e}", file=sys.stderr)
+        result = {
+            'success': False,
+            'error': str(e),
+            'matches': []
         }
-
-def main():
-    if len(sys.argv) != 2:
-        print(json.dumps({"success": False, "error": "Invalid arguments"}))
-        sys.exit(1)
-    
-    image_path = sys.argv[1]
-    
-    if not os.path.exists(image_path):
-        print(json.dumps({"success": False, "error": f"File not found: {image_path}"}))
-        sys.exit(1)
-    
-    print(f"🎯 Simple embedding extraction başlıyor...", file=sys.stderr)
-    print(f"📁 Dosya: {image_path}", file=sys.stderr)
-    
-    # Embedding çıkar
-    result = extract_simple_embedding(image_path)
-    
-    # JSON olarak stdout'a yazdır
-    print(json.dumps(result))
+        print(json.dumps(result))
+        return False
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) != 4:
+        print("Usage: python3 simple_embedding_extractor.py <pkl_path> <user_embedding_json> <threshold>")
+        sys.exit(1)
+    
+    pkl_path = sys.argv[1] 
+    user_embedding = sys.argv[2]
+    threshold = float(sys.argv[3])
+    
+    simple_pkl_reader(pkl_path, user_embedding, threshold)
