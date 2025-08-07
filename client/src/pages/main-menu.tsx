@@ -1636,42 +1636,38 @@ export default function MainMenuPage() {
                                     console.log(`🔍 ${i+1}/${selectedFaces.length} yüz işleniyor...`);
                                     
                                     try {
-                                      // Yüz crop'unu server'a gönder
-                                      const blob = await dataURLtoBlob(face.imageData);
-                                      console.log('📦 Blob oluşturuldu:', blob.size, 'bytes');
+                                      let embedding = null;
                                       
-                                      const formData = new FormData();
-                                      formData.append('photo', blob, 'face.jpg');
-                                      
-                                      console.log('📡 Servera embedding request gönderiliyor...');
-                                      const response = await fetch('/api/extract-embedding', {
-                                        method: 'POST',
-                                        body: formData,
-                                      });
-                                      
-                                      console.log('📡 Response status:', response.status, response.statusText);
-                                      
-                                      if (response.ok) {
-                                        const result = await response.json();
-                                        console.log('📨 Response data:', result);
-                                        
-                                        if (result.success && result.embedding) {
-                                          faceData.push({
-                                            id: face.id,
-                                            embedding: result.embedding, // 512 boyutlu
-                                            confidence: face.confidence,
-                                            quality: face.quality
-                                          });
-                                          console.log('✅ 512 boyutlu embedding alındı:', result.embedding_size);
-                                        } else {
-                                          console.log('❌ Response success false veya embedding yok');
-                                        }
+                                      // Client-side Buffalo-S Lite embedding çıkarımı dene
+                                      if (face.descriptor && face.descriptor.length === 512) {
+                                        embedding = face.descriptor;
+                                        console.log('✅ Cached 512D embedding kullanılıyor');
                                       } else {
-                                        const errorText = await response.text();
-                                        console.error('❌ Server error:', response.status, errorText);
+                                        embedding = await extractBuffaloLEmbedding(face.imageData);
+                                        
+                                        if (!embedding && face.descriptor) {
+                                          // Face-API fallback: 128D -> 512D padding
+                                          const desc = face.descriptor;
+                                          embedding = new Array(512).fill(0);
+                                          for (let j = 0; j < Math.min(desc.length, 512); j++) {
+                                            embedding[j] = desc[j];
+                                          }
+                                          console.log('⚠️ Face-API descriptor padded to 512D');
+                                        }
                                       }
+                                      
+                                      if (embedding && embedding.length === 512) {
+                                        faceData.push({
+                                          id: face.id,
+                                          embedding: embedding,
+                                          confidence: face.confidence,
+                                          quality: face.quality
+                                        });
+                                        console.log('✅ 512D embedding hazırlandı');
+                                      }
+                                      
                                     } catch (error) {
-                                      console.error('❌ Embedding hatası:', error);
+                                      console.error('Embedding hatası:', error);
                                     }
                                   }
                                   

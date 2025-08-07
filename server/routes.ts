@@ -1478,9 +1478,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Node.js InsightFace Buffalo_L Embedding Endpoint
-  // CLIENT-ONLY BUFFALO-S LITE: Extract-embedding endpoint artık client tarafında yapılacak
-  // Bu endpoint kaldırıldı - tüm embedding işlemleri client Buffalo-S Lite ile
+  // Hybrid approach: Client-side embedding + server-side matching
+  app.post('/api/extract-embedding', async (req, res) => {
+    try {
+      console.log('📥 Client tarafından embedding verisi alındı');
+      
+      // Client'tan gelen embedding data'sını validate et
+      if (!req.body || !req.body.embedding || !req.body.tcNumber) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Embedding veya TC numarası eksik' 
+        });
+      }
+      
+      const { embedding, tcNumber, faceId } = req.body;
+      
+      // Embedding boyutu kontrolü (512D olmalı)
+      if (!Array.isArray(embedding) || embedding.length !== 512) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `Geçersiz embedding boyutu: ${embedding?.length || 'undefined'}, 512 olmalı` 
+        });
+      }
+      
+      console.log(`✅ Valid 512D embedding alındı - TC: ${tcNumber}, Face ID: ${faceId}`);
+      
+      // Bu endpoint artık sadece validation yapar
+      // Gerçek eşleştirme photo-requests endpoint'inde yapılır
+      res.json({
+        success: true,
+        message: 'Embedding başarıyla alındı',
+        embeddingLength: embedding.length
+      });
+      
+    } catch (error) {
+      console.error('❌ Extract embedding hatası:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Server hatası: ' + (error as Error).message 
+      });
+    }
+  });
 
   // Yeni fotoğraf talebi oluşturma
   app.post('/api/photo-requests', async (req, res) => {

@@ -12,9 +12,10 @@ class BuffaloSLiteClientONNX {
   private modelUrl = 'https://huggingface.co/MonsterMMORPG/buffalo_s/resolve/main/w600k_r50.onnx';
 
   constructor() {
-    // ONNX Runtime Web için optimize edilmiş ayarlar
-    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/';
-    ort.env.wasm.numThreads = 1; // Daha stabil için tek thread
+    // ONNX Runtime Web için basitleştirilmiş CDN ayarları
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@latest/dist/';
+    ort.env.wasm.numThreads = 1; // Stabil için tek thread
+    ort.env.wasm.simd = false; // SIMD deaktif, daha stabil
   }
 
   async loadModel(): Promise<boolean> {
@@ -22,13 +23,12 @@ class BuffaloSLiteClientONNX {
       console.log('🦬 Buffalo-S Lite client-side yükleniyor...');
       console.log('📦 Model URL:', this.modelUrl);
       
-      // Buffalo-S Lite client-side ONNX
+      // Buffalo-S Lite client-side ONNX - basitleştirilmiş config
       this.session = await ort.InferenceSession.create(this.modelUrl, {
-        executionProviders: ['wasm', 'cpu'],
-        graphOptimizationLevel: 'all',
+        executionProviders: ['wasm'],
+        executionMode: 'sequential',
         enableCpuMemArena: false,
-        enableMemPattern: false,
-        executionMode: 'sequential'
+        enableMemPattern: false
       });
       
       console.log('✅ Buffalo-S Lite client model yüklendi');
