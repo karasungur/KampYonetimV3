@@ -1,0 +1,78 @@
+chunk-XQLYTHWV.js?v=0f03bac2:21551 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+(index):1 Unchecked runtime.lastError: The message port closed before a response was received.
+main-menu.tsx:211 Vladimir Mandic Face-API initialization started...
+main-menu.tsx:217 Attempting to set CPU backend as fallback...
+main-menu.tsx:222 ✅ TensorFlow.js CPU backend ready
+main-menu.tsx:231 Loading TinyFaceDetector model...
+main-menu.tsx:233 TinyFaceDetector loaded
+main-menu.tsx:235 Loading FaceLandmark68Net model...
+main-menu.tsx:237 FaceLandmark68Net loaded
+main-menu.tsx:239 Loading FaceRecognitionNet model...
+main-menu.tsx:241 FaceRecognitionNet loaded
+main-menu.tsx:200 🦬 Server-based gerçek InsightFace sistemi aktif
+main-menu.tsx:201 ✅ Client tarafında model yükleme gerekmez - server embedding çıkarımı
+main-menu.tsx:248 Vladimir Mandic Face-API initialized successfully
+main-menu.tsx:379 🔍 Yüz 1 detect edildi - embedding server-side yapılacak
+main-menu.tsx:379 🔍 Yüz 2 detect edildi - embedding server-side yapılacak
+main-menu.tsx:1600 🔄 Seçilen yüzler için embedding çıkarılıyor... 1 yüz
+main-menu.tsx:1604 🔍 1/1 yüz işleniyor...
+main-menu.tsx:1615 📡 Server-side Buffalo-L embedding isteği...
+main-menu.tsx:1616  POST https://d9a1461f-e186-4356-8fff-39e55f7f0939-00-16f3kwvkss5sp.pike.replit.dev/api/extract-embedding 500 (Internal Server Error)
+onClick @ main-menu.tsx:1616
+await in onClick
+callCallback2 @ chunk-XQLYTHWV.js?v=0f03bac2:3674
+invokeGuardedCallbackDev @ chunk-XQLYTHWV.js?v=0f03bac2:3699
+invokeGuardedCallback @ chunk-XQLYTHWV.js?v=0f03bac2:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-XQLYTHWV.js?v=0f03bac2:3736
+executeDispatch @ chunk-XQLYTHWV.js?v=0f03bac2:7014
+processDispatchQueueItemsInOrder @ chunk-XQLYTHWV.js?v=0f03bac2:7034
+processDispatchQueue @ chunk-XQLYTHWV.js?v=0f03bac2:7043
+dispatchEventsForPlugins @ chunk-XQLYTHWV.js?v=0f03bac2:7051
+(anonymous) @ chunk-XQLYTHWV.js?v=0f03bac2:7174
+batchedUpdates$1 @ chunk-XQLYTHWV.js?v=0f03bac2:18913
+batchedUpdates @ chunk-XQLYTHWV.js?v=0f03bac2:3579
+dispatchEventForPluginEventSystem @ chunk-XQLYTHWV.js?v=0f03bac2:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-XQLYTHWV.js?v=0f03bac2:5478
+dispatchEvent @ chunk-XQLYTHWV.js?v=0f03bac2:5472
+dispatchDiscreteEvent @ chunk-XQLYTHWV.js?v=0f03bac2:5449
+main-menu.tsx:1634 ❌ Server Buffalo-L embedding hatası: Error: Server error: 500 - {"success":false,"error":"Buffalo-L model hatası: Command failed: python3 -c \"\nimport sys\nimport os\nimport numpy as np\nimport cv2\nfrom insightface.app import FaceAnalysis\nimport base64\nimport json\n\ntry:\n    # Buffalo-L model yükle\n    app = FaceAnalysis(name='buffalo_l', allowed_modules=['recognition'])\n    app.prepare(ctx_id=-1, det_size=(640, 640))\n    \n    # Resmi oku\n    image_path = sys.argv[1]\n    img = cv2.imread(image_path)\n    \n    if img is None:\n        raise Exception(\\\"Resim okunamadı\\\")\n    \n    # Yüz detect ve embedding çıkar\n    faces = app.get(img)\n    \n    if len(faces) == 0:\n        print(json.dumps({\\\"success\\\": False, \\\"error\\\": \\\"Yüz bulunamadı\\\"}))\n    else:\n        # İlk yüzün embedding'ini al\n        face = faces[0]\n        embedding = face.embedding.tolist()  # 512D embedding\n        \n        result = {\n            \\\"success\\\": True,\n            \\\"embedding\\\": embedding,\n            \\\"embedding_size\\\": len(embedding),\n            \\\"confidence\\\": float(face.det_score) if hasattr(face, 'det_score') else 1.0\n        }\n        print(json.dumps(result))\n        \nexcept Exception as e:\n    print(json.dumps({\\\"success\\\": False, \\\"error\\\": str(e)}))\n\" \"/tmp/face_1754569127926.jpg\"\nError processing line 1 of /home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/_virtualenv.pth:\n\n  Traceback (most recent call last):\n    File \"<frozen site>\", line 195, in addpackage\n    File \"<string>\", line 1, in <module>\n  ModuleNotFoundError: No module named '_virtualenv'\n\nRemainder of file ignored\nTraceback (most recent call last):\n  File \"<string>\", line 6, in <module>\nImportError: cannot import name 'FaceAnalysis' from 'insightface.app' (unknown location)\n"}
+    at onClick (main-menu.tsx:1631:49)
+onClick @ main-menu.tsx:1634
+await in onClick
+callCallback2 @ chunk-XQLYTHWV.js?v=0f03bac2:3674
+invokeGuardedCallbackDev @ chunk-XQLYTHWV.js?v=0f03bac2:3699
+invokeGuardedCallback @ chunk-XQLYTHWV.js?v=0f03bac2:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-XQLYTHWV.js?v=0f03bac2:3736
+executeDispatch @ chunk-XQLYTHWV.js?v=0f03bac2:7014
+processDispatchQueueItemsInOrder @ chunk-XQLYTHWV.js?v=0f03bac2:7034
+processDispatchQueue @ chunk-XQLYTHWV.js?v=0f03bac2:7043
+dispatchEventsForPlugins @ chunk-XQLYTHWV.js?v=0f03bac2:7051
+(anonymous) @ chunk-XQLYTHWV.js?v=0f03bac2:7174
+batchedUpdates$1 @ chunk-XQLYTHWV.js?v=0f03bac2:18913
+batchedUpdates @ chunk-XQLYTHWV.js?v=0f03bac2:3579
+dispatchEventForPluginEventSystem @ chunk-XQLYTHWV.js?v=0f03bac2:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-XQLYTHWV.js?v=0f03bac2:5478
+dispatchEvent @ chunk-XQLYTHWV.js?v=0f03bac2:5472
+dispatchDiscreteEvent @ chunk-XQLYTHWV.js?v=0f03bac2:5449
+main-menu.tsx:1655 Embedding hatası: Error: Server error: 500 - {"success":false,"error":"Buffalo-L model hatası: Command failed: python3 -c \"\nimport sys\nimport os\nimport numpy as np\nimport cv2\nfrom insightface.app import FaceAnalysis\nimport base64\nimport json\n\ntry:\n    # Buffalo-L model yükle\n    app = FaceAnalysis(name='buffalo_l', allowed_modules=['recognition'])\n    app.prepare(ctx_id=-1, det_size=(640, 640))\n    \n    # Resmi oku\n    image_path = sys.argv[1]\n    img = cv2.imread(image_path)\n    \n    if img is None:\n        raise Exception(\\\"Resim okunamadı\\\")\n    \n    # Yüz detect ve embedding çıkar\n    faces = app.get(img)\n    \n    if len(faces) == 0:\n        print(json.dumps({\\\"success\\\": False, \\\"error\\\": \\\"Yüz bulunamadı\\\"}))\n    else:\n        # İlk yüzün embedding'ini al\n        face = faces[0]\n        embedding = face.embedding.tolist()  # 512D embedding\n        \n        result = {\n            \\\"success\\\": True,\n            \\\"embedding\\\": embedding,\n            \\\"embedding_size\\\": len(embedding),\n            \\\"confidence\\\": float(face.det_score) if hasattr(face, 'det_score') else 1.0\n        }\n        print(json.dumps(result))\n        \nexcept Exception as e:\n    print(json.dumps({\\\"success\\\": False, \\\"error\\\": str(e)}))\n\" \"/tmp/face_1754569127926.jpg\"\nError processing line 1 of /home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/_virtualenv.pth:\n\n  Traceback (most recent call last):\n    File \"<frozen site>\", line 195, in addpackage\n    File \"<string>\", line 1, in <module>\n  ModuleNotFoundError: No module named '_virtualenv'\n\nRemainder of file ignored\nTraceback (most recent call last):\n  File \"<string>\", line 6, in <module>\nImportError: cannot import name 'FaceAnalysis' from 'insightface.app' (unknown location)\n"}
+    at onClick (main-menu.tsx:1631:49)
+onClick @ main-menu.tsx:1655
+await in onClick
+callCallback2 @ chunk-XQLYTHWV.js?v=0f03bac2:3674
+invokeGuardedCallbackDev @ chunk-XQLYTHWV.js?v=0f03bac2:3699
+invokeGuardedCallback @ chunk-XQLYTHWV.js?v=0f03bac2:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-XQLYTHWV.js?v=0f03bac2:3736
+executeDispatch @ chunk-XQLYTHWV.js?v=0f03bac2:7014
+processDispatchQueueItemsInOrder @ chunk-XQLYTHWV.js?v=0f03bac2:7034
+processDispatchQueue @ chunk-XQLYTHWV.js?v=0f03bac2:7043
+dispatchEventsForPlugins @ chunk-XQLYTHWV.js?v=0f03bac2:7051
+(anonymous) @ chunk-XQLYTHWV.js?v=0f03bac2:7174
+batchedUpdates$1 @ chunk-XQLYTHWV.js?v=0f03bac2:18913
+batchedUpdates @ chunk-XQLYTHWV.js?v=0f03bac2:3579
+dispatchEventForPluginEventSystem @ chunk-XQLYTHWV.js?v=0f03bac2:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-XQLYTHWV.js?v=0f03bac2:5478
+dispatchEvent @ chunk-XQLYTHWV.js?v=0f03bac2:5472
+dispatchDiscreteEvent @ chunk-XQLYTHWV.js?v=0f03bac2:5449
+main-menu.tsx:1659 🏁 Embedding extraction tamamlandı. FaceData: 0 adet
+main-menu.tsx:1669 📡 Photo request gönderiliyor: {tcNumber: '99574628796', faceData: Array(0), selectedCampDays: Array(1), uploadedFilesCount: 1}
+main-menu.tsx:1681 ✅ Photo request başarıyla oluşturuldu: {id: 'a4379de4-b435-4f13-bd80-49e923f27487', tcNumber: '99574628796', uploadedPhotoPath: null, selectedFaceData: Array(0), selectedModelIds: Array(1), …}

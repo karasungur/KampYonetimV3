@@ -1,0 +1,1179 @@
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AK Parti Gençlik Kolları İstişare Kampı Yönetim Sistemi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'ak-yellow': '#ED8B00',
+                        'ak-yellow-dark': '#C57A00',
+                        'ak-blue': '#0072CE',
+                        'ak-blue-dark': '#005BB5',
+                        'ak-text': '#231F20',
+                        'ak-gray': '#666666',
+                        'ak-light-gray': '#F5F5F5'
+                    }
+                }
+            }
+        };
+    </script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 font-sans">
+    <!-- Full Screen GIF Animation (Initial Load) -->
+    <div id="gifScreen" class="fixed inset-0 bg-white z-50 flex items-center justify-center">
+        <!-- AK Party logo and loading animation placeholder -->
+        <div class="text-center">
+            <div class="w-32 h-32 mx-auto mb-6 bg-ak-yellow rounded-full flex items-center justify-center">
+                <i class="fas fa-users text-white text-4xl"></i>
+            </div>
+            <h1 class="text-2xl font-bold text-ak-text mb-4">AK Parti Gençlik Kolları</h1>
+            <p class="text-ak-gray">İstişare Kampı Yönetim Sistemi</p>
+            <!-- GIF Animation Placeholder -->
+            <div class="mt-8 p-4 border-2 border-dashed border-ak-yellow rounded-lg">
+                <p class="text-ak-gray text-sm">GIF Animasyonu Yüklenecek</p>
+                <p class="text-xs text-ak-gray mt-2">Animasyon bitiminde giriş ekranına yönlendirilecek</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="hidden min-h-screen flex items-center justify-center bg-gradient-to-br from-ak-yellow/10 to-ak-blue/10">
+        <div class="max-w-md w-full mx-4">
+            <div class="bg-white rounded-xl shadow-2xl p-8">
+                <div class="text-center mb-8">
+                    <div class="w-16 h-16 mx-auto mb-4 bg-ak-yellow rounded-full flex items-center justify-center">
+                        <i class="fas fa-users text-white text-2xl"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold text-ak-text">Sisteme Giriş</h2>
+                    <p class="text-ak-gray mt-2">AK Parti Gençlik Kolları İstişare Kampı</p>
+                </div>
+                
+                <form class="space-y-6">
+                    <div>
+                        <label for="tcno" class="block text-sm font-medium text-ak-text mb-2">T.C. Kimlik Numarası</label>
+                        <input type="text" id="tcno" name="tcno" maxlength="11" 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ak-yellow focus:border-transparent" 
+                               placeholder="11 haneli T.C. kimlik numaranız">
+                    </div>
+                    
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-ak-text mb-2">Şifre</label>
+                        <input type="password" id="password" name="password" 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ak-yellow focus:border-transparent" 
+                               placeholder="Şifrenizi giriniz">
+                    </div>
+                    
+                    <button type="submit" onclick="showDashboard('adminpro')" 
+                            class="w-full bg-ak-yellow hover:bg-ak-yellow-dark text-white font-semibold py-3 px-4 rounded-lg transition duration-200">
+                        <i class="fas fa-sign-in-alt mr-2"></i>Giriş Yap
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard Container -->
+    <div id="dashboardContainer" class="hidden">
+        <!-- Sidebar Navigation -->
+        <div class="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform -translate-x-full lg:translate-x-0 transition-transform duration-200 ease-in-out" id="sidebar">
+            <div class="flex items-center justify-center h-16 px-4 bg-ak-yellow">
+                <h1 class="text-white font-bold text-lg">İstişare Kampı</h1>
+            </div>
+            
+            <nav class="mt-8">
+                <div class="px-4 mb-4">
+                    <p class="text-xs font-semibold text-ak-gray uppercase tracking-wider">Menü</p>
+                </div>
+                
+                <!-- AdminPro Navigation -->
+                <div id="adminproNav" class="space-y-2 px-4">
+                    <a href="#" onclick="showSection('dashboard')" class="nav-item flex items-center px-3 py-2 text-ak-text hover:bg-ak-light-gray rounded-lg">
+                        <i class="fas fa-tachometer-alt mr-3"></i>Ana Panel
+                    </a>
+                    <a href="#" onclick="showSection('questions')" class="nav-item flex items-center px-3 py-2 text-ak-text hover:bg-ak-light-gray rounded-lg">
+                        <i class="fas fa-question-circle mr-3"></i>Soru Yönetimi
+                    </a>
+                    <a href="#" onclick="showSection('users')" class="nav-item flex items-center px-3 py-2 text-ak-text hover:bg-ak-light-gray rounded-lg">
+                        <i class="fas fa-users mr-3"></i>Kullanıcı Yönetimi
+                    </a>
+                    <a href="#" onclick="showSection('reports')" class="nav-item flex items-center px-3 py-2 text-ak-text hover:bg-ak-light-gray rounded-lg">
+                        <i class="fas fa-chart-bar mr-3"></i>Raporlar
+                    </a>
+                    <a href="#" onclick="showSection('feedback')" class="nav-item flex items-center px-3 py-2 text-ak-text hover:bg-ak-light-gray rounded-lg">
+                        <i class="fas fa-comments mr-3"></i>Geri Bildirimler
+                    </a>
+                    <a href="#" onclick="showSection('logs')" class="nav-item flex items-center px-3 py-2 text-ak-text hover:bg-ak-light-gray rounded-lg">
+                        <i class="fas fa-history mr-3"></i>Sistem Logları
+                    </a>
+                </div>
+
+                <!-- Admin Navigation -->
+                <div id="adminNav" class="hidden space-y-2 px-4">
+                    <a href="#" onclick="showSection('dashboard')" class="nav-item flex items-center px-3 py-2 text-ak-text hover:bg-ak-light-gray rounded-lg">
+                        <i class="fas fa-tachometer-alt mr-3"></i>Ana Panel
+                    </a>
+                    <a href="#" onclick="showSection('reports')" class="nav-item flex items-center px-3 py-2 text-ak-text hover:bg-ak-light-gray rounded-lg">
+                        <i class="fas fa-chart-bar mr-3"></i>Raporlar
+                    </a>
+                    <a href="#" onclick="showSection('logs')" class="nav-item flex items-center px-3 py-2 text-ak-text hover:bg-ak-light-gray rounded-lg">
+                        <i class="fas fa-history mr-3"></i>Sistem Logları
+                    </a>
+                </div>
+
+                <!-- Moderator Navigation -->
+                <div id="moderatorNav" class="hidden space-y-2 px-4">
+                    <a href="#" onclick="showSection('dashboard')" class="nav-item flex items-center px-3 py-2 text-ak-text hover:bg-ak-light-gray rounded-lg">
+                        <i class="fas fa-tachometer-alt mr-3"></i>Ana Panel
+                    </a>
+                    <a href="#" onclick="showSection('questions')" class="nav-item flex items-center px-3 py-2 text-ak-text hover:bg-ak-light-gray rounded-lg">
+                        <i class="fas fa-question-circle mr-3"></i>Sorularım
+                    </a>
+                    <a href="#" onclick="showSection('responses')" class="nav-item flex items-center px-3 py-2 text-ak-text hover:bg-ak-light-gray rounded-lg">
+                        <i class="fas fa-reply mr-3"></i>Cevaplarım
+                    </a>
+                </div>
+            </nav>
+            
+            <div class="absolute bottom-0 w-full p-4 border-t">
+                <button onclick="logout()" class="w-full flex items-center justify-center px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition duration-200">
+                    <i class="fas fa-sign-out-alt mr-2"></i>Güvenli Çıkış
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="lg:ml-64">
+            <!-- Top Header -->
+            <header class="bg-white shadow-sm border-b border-gray-200">
+                <div class="px-4 sm:px-6 lg:px-8">
+                    <div class="flex justify-between items-center h-16">
+                        <div class="flex items-center">
+                            <button class="lg:hidden -ml-2 p-2 rounded-md text-ak-gray hover:text-ak-text hover:bg-gray-100" onclick="toggleSidebar()">
+                                <i class="fas fa-bars text-xl"></i>
+                            </button>
+                            <h1 class="ml-2 text-xl font-semibold text-ak-text" id="pageTitle">Ana Panel</h1>
+                        </div>
+                        
+                        <div class="flex items-center space-x-4">
+                            <div class="text-right">
+                                <p class="text-sm font-medium text-ak-text" id="userFullName">Ahmet Yılmaz</p>
+                                <p class="text-xs text-ak-gray" id="userRole">AdminPro</p>
+                            </div>
+                            <div class="w-8 h-8 bg-ak-yellow rounded-full flex items-center justify-center">
+                                <span class="text-white font-semibold text-sm" id="userInitials">AY</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dashboard Content -->
+            <main class="p-4 sm:p-6 lg:p-8">
+                <!-- Dashboard Section -->
+                <div id="dashboardSection" class="content-section">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <!-- Stats Cards -->
+                        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                            <div class="flex items-center">
+                                <div class="p-3 rounded-lg bg-ak-yellow/10">
+                                    <i class="fas fa-users text-ak-yellow text-xl"></i>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-ak-gray">Toplam Masa</p>
+                                    <p class="text-2xl font-bold text-ak-text">12</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                            <div class="flex items-center">
+                                <div class="p-3 rounded-lg bg-ak-blue/10">
+                                    <i class="fas fa-question-circle text-ak-blue text-xl"></i>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-ak-gray">Toplam Soru</p>
+                                    <p class="text-2xl font-bold text-ak-text">25</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                            <div class="flex items-center">
+                                <div class="p-3 rounded-lg bg-green-100">
+                                    <i class="fas fa-reply text-green-600 text-xl"></i>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-ak-gray">Cevaplanan</p>
+                                    <p class="text-2xl font-bold text-ak-text">187</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                            <div class="flex items-center">
+                                <div class="p-3 rounded-lg bg-red-100">
+                                    <i class="fas fa-clock text-red-600 text-xl"></i>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-ak-gray">Bekleyen</p>
+                                    <p class="text-2xl font-bold text-ak-text">13</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Activity -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+                            <div class="p-6 border-b border-gray-100">
+                                <h3 class="text-lg font-semibold text-ak-text">Son Aktiviteler</h3>
+                            </div>
+                            <div class="p-6">
+                                <div class="space-y-4">
+                                    <div class="flex items-start space-x-3">
+                                        <div class="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
+                                        <div class="flex-1">
+                                            <p class="text-sm text-ak-text">Masa 5 - "Gençlik politikaları" sorusunu yanıtladı</p>
+                                            <p class="text-xs text-ak-gray">2 dakika önce</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-start space-x-3">
+                                        <div class="w-2 h-2 bg-ak-yellow rounded-full mt-2"></div>
+                                        <div class="flex-1">
+                                            <p class="text-sm text-ak-text">Yeni soru eklendi: "Teknoloji ve gençlik"</p>
+                                            <p class="text-xs text-ak-gray">15 dakika önce</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-start space-x-3">
+                                        <div class="w-2 h-2 bg-ak-blue rounded-full mt-2"></div>
+                                        <div class="flex-1">
+                                            <p class="text-sm text-ak-text">Masa 3 - Geri bildirim gönderdi</p>
+                                            <p class="text-xs text-ak-gray">1 saat önce</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+                            <div class="p-6 border-b border-gray-100">
+                                <h3 class="text-lg font-semibold text-ak-text">Masa Durumları</h3>
+                            </div>
+                            <div class="p-6">
+                                <div class="space-y-3">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-ak-text">Masa 1</span>
+                                        <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Aktif</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-ak-text">Masa 2</span>
+                                        <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Aktif</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-ak-text">Masa 3</span>
+                                        <span class="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">Beklemede</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-ak-text">Masa 4</span>
+                                        <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Aktif</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Questions Management Section (AdminPro) -->
+                <div id="questionsSection" class="content-section hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-ak-text">Soru Yönetimi</h2>
+                        <button onclick="showModal('newQuestionModal')" class="bg-ak-yellow hover:bg-ak-yellow-dark text-white px-4 py-2 rounded-lg font-medium">
+                            <i class="fas fa-plus mr-2"></i>Yeni Soru Ekle
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+                        <div class="p-6 border-b border-gray-100">
+                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+                                <div class="flex space-x-4">
+                                    <select class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                        <option>Tüm Sorular</option>
+                                        <option>Genel Sorular</option>
+                                        <option>Masa Özel Sorular</option>
+                                    </select>
+                                    <input type="text" placeholder="Soru ara..." class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="bg-ak-light-gray">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Soru</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Tür</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Atanmış Masalar</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Cevap Sayısı</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Tarih</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">İşlemler</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="text-sm font-medium text-ak-text">Gençlik politikalarına yönelik önerileriniz nelerdir?</div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="px-2 py-1 bg-ak-blue/10 text-ak-blue text-xs rounded-full">Genel</span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">Tüm Masalar</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-text">8</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">15.01.2024</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                            <button class="text-ak-blue hover:text-ak-blue-dark"><i class="fas fa-edit"></i></button>
+                                            <button class="text-red-600 hover:text-red-800"><i class="fas fa-trash"></i></button>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="text-sm font-medium text-ak-text">Teknoloji ve gençlik konusundaki görüşleriniz?</div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="px-2 py-1 bg-ak-yellow/10 text-ak-yellow text-xs rounded-full">Özel</span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">Masa 1, 3, 5</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-text">3</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">14.01.2024</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                            <button class="text-ak-blue hover:text-ak-blue-dark"><i class="fas fa-edit"></i></button>
+                                            <button class="text-red-600 hover:text-red-800"><i class="fas fa-trash"></i></button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Users Management Section (AdminPro) -->
+                <div id="usersSection" class="content-section hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-ak-text">Kullanıcı Yönetimi</h2>
+                        <button onclick="showModal('newUserModal')" class="bg-ak-yellow hover:bg-ak-yellow-dark text-white px-4 py-2 rounded-lg font-medium">
+                            <i class="fas fa-user-plus mr-2"></i>Yeni Kullanıcı Ekle
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                            <h3 class="text-lg font-semibold text-ak-text mb-4">Kullanıcı Rolleri</h3>
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm text-ak-text">AdminPro</span>
+                                    <span class="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">2</span>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm text-ak-text">Admin</span>
+                                    <span class="px-2 py-1 bg-ak-yellow/20 text-ak-yellow text-xs rounded-full">3</span>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm text-ak-text">Moderatör</span>
+                                    <span class="px-2 py-1 bg-ak-blue/20 text-ak-blue text-xs rounded-full">12</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                            <h3 class="text-lg font-semibold text-ak-text mb-4">Aktif Kullanıcılar</h3>
+                            <div class="text-center">
+                                <div class="text-3xl font-bold text-green-600 mb-2">15</div>
+                                <p class="text-sm text-ak-gray">Şu anda çevrimiçi</p>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                            <h3 class="text-lg font-semibold text-ak-text mb-4">Son Giriş</h3>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-ak-text">Masa 5</span>
+                                    <span class="text-ak-gray">2 dk önce</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-ak-text">Masa 3</span>
+                                    <span class="text-ak-gray">5 dk önce</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+                        <div class="p-6 border-b border-gray-100">
+                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+                                <div class="flex space-x-4">
+                                    <select class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                        <option>Tüm Roller</option>
+                                        <option>AdminPro</option>
+                                        <option>Admin</option>
+                                        <option>Moderatör</option>
+                                    </select>
+                                    <input type="text" placeholder="Kullanıcı ara..." class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="bg-ak-light-gray">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Kullanıcı</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">T.C. Kimlik No</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Rol</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Masa No</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Son Giriş</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Durum</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">İşlemler</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center">
+                                                <div class="w-8 h-8 bg-ak-yellow rounded-full flex items-center justify-center mr-3">
+                                                    <span class="text-white text-xs font-semibold">AY</span>
+                                                </div>
+                                                <div>
+                                                    <div class="text-sm font-medium text-ak-text">Ahmet Yılmaz</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">12345678901</td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">AdminPro</span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">-</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">Şimdi</td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Aktif</span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                            <button class="text-ak-blue hover:text-ak-blue-dark"><i class="fas fa-edit"></i></button>
+                                            <button class="text-red-600 hover:text-red-800"><i class="fas fa-user-lock"></i></button>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center">
+                                                <div class="w-8 h-8 bg-ak-blue rounded-full flex items-center justify-center mr-3">
+                                                    <span class="text-white text-xs font-semibold">FK</span>
+                                                </div>
+                                                <div>
+                                                    <div class="text-sm font-medium text-ak-text">Fatma Kaya</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">98765432109</td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="px-2 py-1 bg-ak-blue/20 text-ak-blue text-xs rounded-full">Moderatör</span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-text font-medium">Masa 1</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">2 dk önce</td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Aktif</span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                            <button class="text-ak-blue hover:text-ak-blue-dark"><i class="fas fa-edit"></i></button>
+                                            <button class="text-red-600 hover:text-red-800"><i class="fas fa-user-lock"></i></button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reports Section -->
+                <div id="reportsSection" class="content-section hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-ak-text">Raporlar ve Analizler</h2>
+                        <div class="flex space-x-3">
+                            <button class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium">
+                                <i class="fas fa-file-excel mr-2"></i>Excel İndir
+                            </button>
+                            <button class="bg-ak-blue hover:bg-ak-blue-dark text-white px-4 py-2 rounded-lg font-medium">
+                                <i class="fas fa-file-csv mr-2"></i>CSV İndir
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Filter Section -->
+                    <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mb-6">
+                        <h3 class="text-lg font-semibold text-ak-text mb-4">Filtreleme Seçenekleri</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-ak-gray mb-2">Tarih Aralığı</label>
+                                <select class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                    <option>Son 7 gün</option>
+                                    <option>Son 30 gün</option>
+                                    <option>Özel aralık</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-ak-gray mb-2">Masa Seçimi</label>
+                                <select class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                    <option>Tüm Masalar</option>
+                                    <option>Masa 1</option>
+                                    <option>Masa 2</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-ak-gray mb-2">Soru Kategorisi</label>
+                                <select class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                    <option>Tüm Sorular</option>
+                                    <option>Genel Sorular</option>
+                                    <option>Özel Sorular</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <button class="w-full bg-ak-yellow hover:bg-ak-yellow-dark text-white px-4 py-2 rounded-lg font-medium">
+                                    <i class="fas fa-filter mr-2"></i>Filtrele
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Summary Stats -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                            <h4 class="text-lg font-semibold text-ak-text mb-4">Cevap Verme Oranı</h4>
+                            <div class="text-center">
+                                <div class="text-4xl font-bold text-green-600 mb-2">87%</div>
+                                <p class="text-sm text-ak-gray">Masaların cevaplama oranı</p>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                            <h4 class="text-lg font-semibold text-ak-text mb-4">En Aktif Masa</h4>
+                            <div class="text-center">
+                                <div class="text-4xl font-bold text-ak-yellow mb-2">5</div>
+                                <p class="text-sm text-ak-gray">23 cevap ile</p>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                            <h4 class="text-lg font-semibold text-ak-text mb-4">Ortalama Yanıt Süresi</h4>
+                            <div class="text-center">
+                                <div class="text-4xl font-bold text-ak-blue mb-2">12</div>
+                                <p class="text-sm text-ak-gray">dakika</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Detailed Reports Table -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+                        <div class="p-6 border-b border-gray-100">
+                            <h3 class="text-lg font-semibold text-ak-text">Detaylı Cevap Raporu</h3>
+                        </div>
+                        
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="bg-ak-light-gray">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Masa</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Soru</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Cevap</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Tarih</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">İşlemler</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="px-2 py-1 bg-ak-yellow/20 text-ak-yellow text-xs rounded-full font-medium">Masa 1</span>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div class="text-sm text-ak-text max-w-xs truncate">Gençlik politikalarına yönelik önerileriniz nelerdir?</div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div class="text-sm text-ak-gray max-w-md truncate">Gençlerin teknolojiye erişimi artırılmalı, eğitim kalitesi yükseltilmeli...</div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">15.01.2024 14:30</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                            <button class="text-ak-blue hover:text-ak-blue-dark"><i class="fas fa-eye"></i></button>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="px-2 py-1 bg-ak-blue/20 text-ak-blue text-xs rounded-full font-medium">Masa 3</span>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div class="text-sm text-ak-text max-w-xs truncate">Teknoloji ve gençlik konusundaki görüşleriniz?</div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div class="text-sm text-ak-gray max-w-md truncate">Dijital okuryazarlık programları geliştirilmeli...</div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">15.01.2024 13:45</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                            <button class="text-ak-blue hover:text-ak-blue-dark"><i class="fas fa-eye"></i></button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feedback Section (AdminPro) -->
+                <div id="feedbackSection" class="content-section hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-ak-text">Geri Bildirimler</h2>
+                        <div class="flex space-x-3">
+                            <select class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                <option>Tüm Durumlar</option>
+                                <option>Okunmamış</option>
+                                <option>Okunmuş</option>
+                                <option>Çözüldü</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-6">
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+                            <div class="p-6 border-b border-gray-100">
+                                <div class="flex items-start justify-between">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="w-10 h-10 bg-ak-blue rounded-full flex items-center justify-center">
+                                            <span class="text-white font-semibold text-sm">M3</span>
+                                        </div>
+                                        <div>
+                                            <h4 class="text-lg font-semibold text-ak-text">Masa 3 - Fatma Kaya</h4>
+                                            <p class="text-sm text-ak-gray">15.01.2024 16:45</p>
+                                        </div>
+                                    </div>
+                                    <span class="px-3 py-1 bg-red-100 text-red-800 text-xs rounded-full">Okunmamış</span>
+                                </div>
+                            </div>
+                            <div class="p-6">
+                                <h5 class="font-medium text-ak-text mb-2">Soru: "Gençlik politikalarına yönelik önerileriniz nelerdir?"</h5>
+                                <p class="text-ak-gray mb-4">"Bu soru çok genel kalmış. Hangi alanlar hakkında öneride bulunmamız gerekiyor? Eğitim, istihdam, spor gibi alt kategoriler belirtilse daha detaylı cevap verebiliriz."</p>
+                                <div class="flex space-x-3">
+                                    <button class="bg-ak-yellow hover:bg-ak-yellow-dark text-white px-4 py-2 rounded-lg text-sm">
+                                        <i class="fas fa-check mr-1"></i>Okundu İşaretle
+                                    </button>
+                                    <button class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm">
+                                        <i class="fas fa-reply mr-1"></i>Yanıtla
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+                            <div class="p-6 border-b border-gray-100">
+                                <div class="flex items-start justify-between">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="w-10 h-10 bg-ak-yellow rounded-full flex items-center justify-center">
+                                            <span class="text-white font-semibold text-sm">M7</span>
+                                        </div>
+                                        <div>
+                                            <h4 class="text-lg font-semibold text-ak-text">Masa 7 - Ali Demir</h4>
+                                            <p class="text-sm text-ak-gray">14.01.2024 11:20</p>
+                                        </div>
+                                    </div>
+                                    <span class="px-3 py-1 bg-green-100 text-green-800 text-xs rounded-full">Çözüldü</span>
+                                </div>
+                            </div>
+                            <div class="p-6">
+                                <h5 class="font-medium text-ak-text mb-2">Soru: "Teknoloji ve gençlik konusundaki görüşleriniz?"</h5>
+                                <p class="text-ak-gray mb-4">"Sorudaki 'teknoloji' kavramı çok geniş. Sosyal medya mı, yapay zeka mı, eğitim teknolojileri mi kastettiniz? Netleştirirseniz daha kapsamlı cevap verebiliriz."</p>
+                                <div class="bg-ak-light-gray p-3 rounded-lg">
+                                    <p class="text-sm text-ak-gray"><strong>AdminPro Yanıtı:</strong> Soru güncellendi ve alt kategoriler eklendi. Teşekkürler.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logs Section -->
+                <div id="logsSection" class="content-section hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-ak-text">Sistem Logları</h2>
+                        <div class="flex space-x-3">
+                            <select class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                <option>Tüm İşlemler</option>
+                                <option>Giriş/Çıkış</option>
+                                <option>Soru İşlemleri</option>
+                                <option>Cevap İşlemleri</option>
+                                <option>Kullanıcı İşlemleri</option>
+                            </select>
+                            <input type="date" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="bg-ak-light-gray">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Zaman</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Kullanıcı</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">İşlem</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">Detay</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-ak-gray uppercase tracking-wider">IP Adresi</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">15.01.2024 16:45:12</td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center">
+                                                <div class="w-6 h-6 bg-ak-blue rounded-full flex items-center justify-center mr-2">
+                                                    <span class="text-white text-xs">M3</span>
+                                                </div>
+                                                <span class="text-sm text-ak-text">Masa 3</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Cevap Eklendi</span>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-ak-gray">Soru ID: 5 için yeni cevap</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">192.168.1.105</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">15.01.2024 16:30:25</td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center">
+                                                <div class="w-6 h-6 bg-ak-yellow rounded-full flex items-center justify-center mr-2">
+                                                    <span class="text-white text-xs">AP</span>
+                                                </div>
+                                                <span class="text-sm text-ak-text">AdminPro</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="px-2 py-1 bg-ak-blue/20 text-ak-blue text-xs rounded-full">Soru Eklendi</span>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-ak-gray">Yeni genel soru: "Sosyal sorumluluk projeleriniz"</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">192.168.1.100</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">15.01.2024 16:15:18</td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center">
+                                                <div class="w-6 h-6 bg-ak-blue rounded-full flex items-center justify-center mr-2">
+                                                    <span class="text-white text-xs">M5</span>
+                                                </div>
+                                                <span class="text-sm text-ak-text">Masa 5</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">Giriş</span>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-ak-gray">Sisteme başarılı giriş</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-ak-gray">192.168.1.108</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Moderator Specific Sections -->
+                <!-- Questions for Moderator -->
+                <div id="moderatorQuestionsSection" class="content-section hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-ak-text">Atanmış Sorularım</h2>
+                        <div class="bg-ak-yellow/10 px-4 py-2 rounded-lg">
+                            <span class="text-ak-yellow font-medium">Masa 3</span>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-6">
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+                            <div class="p-6 border-b border-gray-100">
+                                <div class="flex items-start justify-between">
+                                    <div>
+                                        <h4 class="text-lg font-semibold text-ak-text mb-2">Gençlik politikalarına yönelik önerileriniz nelerdir?</h4>
+                                        <div class="flex items-center space-x-3 text-sm text-ak-gray">
+                                            <span class="px-2 py-1 bg-ak-blue/10 text-ak-blue rounded-full">Genel Soru</span>
+                                            <span>Eklenme: 15.01.2024</span>
+                                        </div>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-sm text-ak-gray">Cevap Durumu</p>
+                                        <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Cevaplandı</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="p-6">
+                                <p class="text-ak-gray mb-4">Bu soru tüm masalara yöneltilmiştir. Gençlik politikaları konusundaki görüş ve önerilerinizi detaylı şekilde paylaşınız.</p>
+                                <div class="flex space-x-3">
+                                    <button onclick="showModal('answerModal')" class="bg-ak-yellow hover:bg-ak-yellow-dark text-white px-4 py-2 rounded-lg">
+                                        <i class="fas fa-plus mr-2"></i>Cevap Ekle
+                                    </button>
+                                    <button class="bg-ak-blue hover:bg-ak-blue-dark text-white px-4 py-2 rounded-lg">
+                                        <i class="fas fa-eye mr-2"></i>Cevapları Görüntüle
+                                    </button>
+                                    <button class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg">
+                                        <i class="fas fa-comment mr-2"></i>Geri Bildirim Gönder
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+                            <div class="p-6 border-b border-gray-100">
+                                <div class="flex items-start justify-between">
+                                    <div>
+                                        <h4 class="text-lg font-semibold text-ak-text mb-2">Teknoloji ve gençlik konusundaki görüşleriniz?</h4>
+                                        <div class="flex items-center space-x-3 text-sm text-ak-gray">
+                                            <span class="px-2 py-1 bg-ak-yellow/10 text-ak-yellow rounded-full">Özel Soru</span>
+                                            <span>Masa 1, 3, 5</span>
+                                            <span>Eklenme: 14.01.2024</span>
+                                        </div>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-sm text-ak-gray">Cevap Durumu</p>
+                                        <span class="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">Beklemede</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="p-6">
+                                <p class="text-ak-gray mb-4">Bu soru sadece belirli masalara özel olarak atanmıştır. Teknoloji kullanımının gençlik üzerindeki etkilerini değerlendiriniz.</p>
+                                <div class="flex space-x-3">
+                                    <button onclick="showModal('answerModal')" class="bg-ak-yellow hover:bg-ak-yellow-dark text-white px-4 py-2 rounded-lg">
+                                        <i class="fas fa-plus mr-2"></i>Cevap Ekle
+                                    </button>
+                                    <button class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg">
+                                        <i class="fas fa-comment mr-2"></i>Geri Bildirim Gönder
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Responses for Moderator -->
+                <div id="responsesSection" class="content-section hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-ak-text">Cevaplarım</h2>
+                        <div class="bg-ak-yellow/10 px-4 py-2 rounded-lg">
+                            <span class="text-ak-yellow font-medium">Masa 3 - Toplam 5 cevap</span>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-6">
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+                            <div class="p-6 border-b border-gray-100">
+                                <div class="flex items-start justify-between">
+                                    <div>
+                                        <h4 class="text-lg font-semibold text-ak-text">Gençlik politikalarına yönelik önerileriniz nelerdir?</h4>
+                                        <p class="text-sm text-ak-gray mt-1">Cevaplandı: 15.01.2024 14:30</p>
+                                    </div>
+                                    <div class="flex space-x-2">
+                                        <button class="text-ak-blue hover:text-ak-blue-dark text-sm">
+                                            <i class="fas fa-edit mr-1"></i>Düzenle
+                                        </button>
+                                        <button class="text-red-600 hover:text-red-800 text-sm">
+                                            <i class="fas fa-trash mr-1"></i>Sil
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="p-6">
+                                <div class="bg-ak-light-gray p-4 rounded-lg mb-4">
+                                    <h5 class="font-medium text-ak-text mb-2">Cevap #1</h5>
+                                    <p class="text-ak-gray">Gençlerin eğitim kalitesinin artırılması öncelikli hedefimiz olmalıdır. Teknolojiye erişim imkanları geliştirilmeli, beceri geliştirme programları yaygınlaştırılmalıdır. Ayrıca istihdam odaklı eğitim programları ile gençlerin iş hayatına hazırlanması sağlanmalıdır.</p>
+                                    <p class="text-xs text-ak-gray mt-2">Eklenme: 15.01.2024 14:30</p>
+                                </div>
+                                <div class="bg-ak-light-gray p-4 rounded-lg">
+                                    <h5 class="font-medium text-ak-text mb-2">Cevap #2</h5>
+                                    <p class="text-ak-gray">Spor ve sanat alanlarında gençlere sunulan fırsatlar artırılmalıdır. Yerel düzeyde gençlik merkezleri kurularak sosyal aktivitelerin desteklenmesi önemlidir.</p>
+                                    <p class="text-xs text-ak-gray mt-2">Eklenme: 15.01.2024 15:45</p>
+                                </div>
+                                <button onclick="showModal('answerModal')" class="mt-4 bg-ak-yellow hover:bg-ak-yellow-dark text-white px-4 py-2 rounded-lg">
+                                    <i class="fas fa-plus mr-2"></i>Ek Cevap Ekle
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <!-- New Question Modal -->
+    <div id="newQuestionModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="p-6 border-b border-gray-100">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xl font-semibold text-ak-text">Yeni Soru Ekle</h3>
+                    <button onclick="hideModal('newQuestionModal')" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="p-6">
+                <form class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-ak-text mb-2">Soru Metni</label>
+                        <textarea rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-ak-yellow focus:border-transparent" placeholder="Soru metnini giriniz..."></textarea>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-ak-text mb-2">Soru Türü</label>
+                        <div class="space-y-2">
+                            <label class="flex items-center">
+                                <input type="radio" name="questionType" value="general" class="mr-2" checked>
+                                <span class="text-sm text-ak-text">Genel (Tüm masalara açık)</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="radio" name="questionType" value="specific" class="mr-2">
+                                <span class="text-sm text-ak-text">Özel (Belirli masalara)</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div id="tableSelection" class="hidden">
+                        <label class="block text-sm font-medium text-ak-text mb-2">Masa Seçimi</label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <label class="flex items-center">
+                                <input type="checkbox" class="mr-2">
+                                <span class="text-sm text-ak-text">Masa 1</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="checkbox" class="mr-2">
+                                <span class="text-sm text-ak-text">Masa 2</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="checkbox" class="mr-2">
+                                <span class="text-sm text-ak-text">Masa 3</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" onclick="hideModal('newQuestionModal')" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">İptal</button>
+                        <button type="submit" class="px-4 py-2 bg-ak-yellow hover:bg-ak-yellow-dark text-white rounded-lg">Soru Ekle</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- New User Modal -->
+    <div id="newUserModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4">
+            <div class="p-6 border-b border-gray-100">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xl font-semibold text-ak-text">Yeni Kullanıcı Ekle</h3>
+                    <button onclick="hideModal('newUserModal')" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="p-6">
+                <form class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-ak-text mb-2">İsim</label>
+                        <input type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-ak-yellow focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-ak-text mb-2">Soyisim</label>
+                        <input type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-ak-yellow focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-ak-text mb-2">T.C. Kimlik Numarası</label>
+                        <input type="text" maxlength="11" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-ak-yellow focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-ak-text mb-2">Şifre</label>
+                        <input type="password" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-ak-yellow focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-ak-text mb-2">Rol</label>
+                        <select class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-ak-yellow focus:border-transparent">
+                            <option>Moderatör</option>
+                            <option>Admin</option>
+                            <option>AdminPro</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-ak-text mb-2">Masa Numarası</label>
+                        <select class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-ak-yellow focus:border-transparent">
+                            <option>Masa 1</option>
+                            <option>Masa 2</option>
+                            <option>Masa 3</option>
+                            <option>Yeni Masa Oluştur</option>
+                        </select>
+                    </div>
+                    <div class="flex justify-end space-x-3 pt-4">
+                        <button type="button" onclick="hideModal('newUserModal')" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">İptal</button>
+                        <button type="submit" class="px-4 py-2 bg-ak-yellow hover:bg-ak-yellow-dark text-white rounded-lg">Kullanıcı Ekle</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Answer Modal -->
+    <div id="answerModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="p-6 border-b border-gray-100">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xl font-semibold text-ak-text">Cevap Ekle</h3>
+                    <button onclick="hideModal('answerModal')" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="p-6">
+                <div class="mb-4 p-4 bg-ak-light-gray rounded-lg">
+                    <h4 class="font-medium text-ak-text mb-2">Soru:</h4>
+                    <p class="text-ak-gray">Gençlik politikalarına yönelik önerileriniz nelerdir?</p>
+                </div>
+                
+                <form class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-ak-text mb-2">Cevabınız</label>
+                        <textarea rows="6" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-ak-yellow focus:border-transparent" placeholder="Cevabınızı detaylı şekilde yazınız..."></textarea>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" onclick="hideModal('answerModal')" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">İptal</button>
+                        <button type="submit" class="px-4 py-2 bg-ak-yellow hover:bg-ak-yellow-dark text-white rounded-lg">Cevap Kaydet</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // TODO: Implement business logic, API calls, or state management
+        
+        (function() {
+            // Initialize the application
+            let currentUser = {
+                role: 'adminpro',
+                name: 'Ahmet Yılmaz',
+                tableNumber: null
+            };
+
+            // Show GIF screen initially, then transition to login
+            setTimeout(() => {
+                document.getElementById('gifScreen').classList.add('hidden');
+                document.getElementById('loginScreen').classList.remove('hidden');
+            }, 3000); // 3 seconds for demo, actual GIF duration would be used
+
+            // Navigation functions
+            window.showDashboard = function(role) {
+                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('dashboardContainer').classList.remove('hidden');
+                
+                currentUser.role = role;
+                setupRoleBasedNavigation(role);
+                showSection('dashboard');
+            };
+
+            window.setupRoleBasedNavigation = function(role) {
+                // Hide all navigation menus first
+                document.getElementById('adminproNav').classList.add('hidden');
+                document.getElementById('adminNav').classList.add('hidden');
+                document.getElementById('moderatorNav').classList.add('hidden');
+                
+                // Show appropriate navigation based on role
+                if (role === 'adminpro') {
+                    document.getElementById('adminproNav').classList.remove('hidden');
+                    document.getElementById('userRole').textContent = 'AdminPro';
+                } else if (role === 'admin') {
+                    document.getElementById('adminNav').classList.remove('hidden');
+                    document.getElementById('userRole').textContent = 'Admin';
+                } else if (role === 'moderator') {
+                    document.getElementById('moderatorNav').classList.remove('hidden');
+                    document.getElementById('userRole').textContent = 'Moderatör - Masa 3';
+                }
+            };
+
+            window.showSection = function(sectionName) {
+                // Hide all content sections
+                const sections = document.querySelectorAll('.content-section');
+                sections.forEach(section => section.classList.add('hidden'));
+                
+                // Update page title
+                const titles = {
+                    'dashboard': 'Ana Panel',
+                    'questions': currentUser.role === 'moderator' ? 'Atanmış Sorularım' : 'Soru Yönetimi',
+                    'users': 'Kullanıcı Yönetimi',
+                    'reports': 'Raporlar ve Analizler',
+                    'feedback': 'Geri Bildirimler',
+                    'logs': 'Sistem Logları',
+                    'responses': 'Cevaplarım'
+                };
+                
+                document.getElementById('pageTitle').textContent = titles[sectionName] || 'Ana Panel';
+                
+                // Show appropriate section based on role and section name
+                if (currentUser.role === 'moderator') {
+                    if (sectionName === 'questions') {
+                        document.getElementById('moderatorQuestionsSection').classList.remove('hidden');
+                    } else if (sectionName === 'responses') {
+                        document.getElementById('responsesSection').classList.remove('hidden');
+                    } else {
+                        document.getElementById('dashboardSection').classList.remove('hidden');
+                    }
+                } else {
+                    // For admin and adminpro
+                    const sectionId = sectionName + 'Section';
+                    const section = document.getElementById(sectionId);
+                    if (section) {
+                        section.classList.remove('hidden');
+                    } else {
+                        document.getElementById('dashboardSection').classList.remove('hidden');
+                    }
+                }
+                
+                // Update active navigation item
+                const navItems = document.querySelectorAll('.nav-item');
+                navItems.forEach(item => item.classList.remove('bg-ak-yellow', 'text-white'));
+            };
+
+            window.toggleSidebar = function() {
+                const sidebar = document.getElementById('sidebar');
+                sidebar.classList.toggle('-translate-x-full');
+            };
+
+            window.logout = function() {
+                document.getElementById('dashboardContainer').classList.add('hidden');
+                document.getElementById('loginScreen').classList.remove('hidden');
+            };
+
+            window.showModal = function(modalId) {
+                document.getElementById(modalId).classList.remove('hidden');
+            };
+
+            window.hideModal = function(modalId) {
+                document.getElementById(modalId).classList.add('hidden');
+            };
+
+            // Question type radio button handling
+            const questionTypeRadios = document.querySelectorAll('input[name="questionType"]');
+            questionTypeRadios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    const tableSelection = document.getElementById('tableSelection');
+                    if (this.value === 'specific') {
+                        tableSelection.classList.remove('hidden');
+                    } else {
+                        tableSelection.classList.add('hidden');
+                    }
+                });
+            });
+
+            // Initialize with login screen visible after GIF
+            // In real implementation, this would handle the actual GIF completion
+        })();
+    </script>
+</body>
+</html>
