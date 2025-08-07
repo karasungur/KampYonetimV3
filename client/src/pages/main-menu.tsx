@@ -202,39 +202,8 @@ export default function MainMenuPage() {
     return true; // Server-based sistem her zaman hazır
   };
 
-  // CLIENT-SIDE BUFFALO-S LITE: Gerçek ONNX embedding çıkarımı
-  const extractBuffaloLEmbedding = async (faceImageData: string): Promise<number[] | null> => {
-    try {
-      console.log('🦬 Client-side Buffalo-S Lite embedding çıkarılıyor...');
-      
-      // DataURL'yi HTMLImageElement'e yükle
-      const img = new Image();
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-        img.src = faceImageData;
-      });
-      
-      // BuffaloSLiteClientONNX class'ını import et
-      const { BuffaloSLiteClientONNX } = await import('@/utils/insightface-onnx');
-      const buffalo = new BuffaloSLiteClientONNX();
-      await buffalo.loadModel();
-      
-      const embedding = await buffalo.extractEmbedding(img);
-      
-      if (embedding && embedding.length === 512) {
-        console.log(`✅ Buffalo-S Lite embedding çıkarıldı: ${embedding.length}D`);
-        return embedding;
-      } else {
-        throw new Error('Invalid embedding size or null result');
-      }
-      
-    } catch (error) {
-      console.error('❌ Buffalo-S Lite embedding hatası:', error);
-      console.log('⚠️ Fallback: Face-API descriptor kullanılacak');
-      return null;
-    }
-  };
+  // SERVER-SIDE BUFFALO-L: Client tarafında embedding çıkarımı YOK
+  // Tüm embedding işlemleri server tarafında Python ile yapılır
 
   // Initialize face-api for detection and UI
   useEffect(() => {
@@ -406,9 +375,8 @@ export default function MainMenuPage() {
             const croppedFace = await cropFaceFromImage(img, detection.detection.box);
             const quality = assessFaceQuality(detection);
             
-            // Extract InsightFace Buffalo_L embedding from cropped face
-            console.log(`🦬 Extracting Buffalo_L embedding for face ${faceIndex + 1}...`);
-            const buffaloEmbedding = await extractBuffaloLEmbedding(croppedFace);
+            // Buffalo-L embedding extraction will be done server-side when processing
+            console.log(`🔍 Yüz ${faceIndex + 1} detect edildi - embedding server-side yapılacak`);
             
             const face: DetectedFace = {
               id: `${fileIndex}-${faceIndex}-${Date.now()}`,
@@ -422,7 +390,7 @@ export default function MainMenuPage() {
                 height: detection.detection.box.height,
               },
               landmarks: detection.landmarks,
-              descriptor: buffaloEmbedding || (detection.descriptor ? Array.from(detection.descriptor) : undefined),
+              descriptor: detection.descriptor ? Array.from(detection.descriptor) : undefined,
               originalFile: file,
               isSelected: false,
             };
@@ -1644,7 +1612,7 @@ export default function MainMenuPage() {
                                         const formData = new FormData();
                                         formData.append('face', blob, 'face.jpg');
                                         
-                                        console.log('📡 Server-side Buffalo-L embedding istegi...');
+                                        console.log('📡 Server-side Buffalo-L embedding isteği...');
                                         const response = await fetch('/api/extract-embedding', {
                                           method: 'POST',
                                           body: formData,

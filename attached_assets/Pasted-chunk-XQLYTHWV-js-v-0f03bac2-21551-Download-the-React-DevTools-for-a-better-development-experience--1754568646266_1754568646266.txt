@@ -1,0 +1,93 @@
+chunk-XQLYTHWV.js?v=0f03bac2:21551 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+(index):1 Unchecked runtime.lastError: The message port closed before a response was received.
+main-menu.tsx:242 Vladimir Mandic Face-API initialization started...
+main-menu.tsx:248 Attempting to set CPU backend as fallback...
+main-menu.tsx:253 ✅ TensorFlow.js CPU backend ready
+main-menu.tsx:262 Loading TinyFaceDetector model...
+main-menu.tsx:264 TinyFaceDetector loaded
+main-menu.tsx:266 Loading FaceLandmark68Net model...
+main-menu.tsx:268 FaceLandmark68Net loaded
+main-menu.tsx:270 Loading FaceRecognitionNet model...
+main-menu.tsx:272 FaceRecognitionNet loaded
+main-menu.tsx:200 🦬 Server-based gerçek InsightFace sistemi aktif
+main-menu.tsx:201 ✅ Client tarafında model yükleme gerekmez - server embedding çıkarımı
+main-menu.tsx:279 Vladimir Mandic Face-API initialized successfully
+main-menu.tsx:410 🦬 Extracting Buffalo_L embedding for face 1...
+main-menu.tsx:208 🦬 Client-side Buffalo-S Lite embedding çıkarılıyor...
+insightface-onnx.ts:41 🦬 Buffalo-S Lite client-side yükleniyor... (1/5)
+insightface-onnx.ts:42 📦 Model URL: https://huggingface.co/public-data/insightface/resolve/main/models/buffalo_l/w600k_r50.onnx
+insightface-onnx.ts:52 ✅ Buffalo-S Lite client model başarıyla yüklendi
+insightface-onnx.ts:53 🔍 Input:  input.1
+insightface-onnx.ts:54 🔍 Output: 683
+insightface-onnx.ts:117 ✅ Buffalo-S Lite embedding: 512D, norm=13.876085
+main-menu.tsx:226 ✅ Buffalo-S Lite embedding çıkarıldı: 512D
+main-menu.tsx:410 🦬 Extracting Buffalo_L embedding for face 2...
+main-menu.tsx:208 🦬 Client-side Buffalo-S Lite embedding çıkarılıyor...
+insightface-onnx.ts:41 🦬 Buffalo-S Lite client-side yükleniyor... (1/5)
+insightface-onnx.ts:42 📦 Model URL: https://huggingface.co/public-data/insightface/resolve/main/models/buffalo_l/w600k_r50.onnx
+insightface-onnx.ts:52 ✅ Buffalo-S Lite client model başarıyla yüklendi
+insightface-onnx.ts:53 🔍 Input:  input.1
+insightface-onnx.ts:54 🔍 Output: 683
+insightface-onnx.ts:117 ✅ Buffalo-S Lite embedding: 512D, norm=12.071074
+main-menu.tsx:226 ✅ Buffalo-S Lite embedding çıkarıldı: 512D
+main-menu.tsx:1632 🔄 Seçilen yüzler için embedding çıkarılıyor... 1 yüz
+main-menu.tsx:1636 🔍 1/1 yüz işleniyor...
+main-menu.tsx:1647 📡 Server-side Buffalo-L embedding istegi...
+main-menu.tsx:1648  POST https://d9a1461f-e186-4356-8fff-39e55f7f0939-00-16f3kwvkss5sp.pike.replit.dev/api/extract-embedding 500 (Internal Server Error)
+onClick @ main-menu.tsx:1648
+await in onClick
+callCallback2 @ chunk-XQLYTHWV.js?v=0f03bac2:3674
+invokeGuardedCallbackDev @ chunk-XQLYTHWV.js?v=0f03bac2:3699
+invokeGuardedCallback @ chunk-XQLYTHWV.js?v=0f03bac2:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-XQLYTHWV.js?v=0f03bac2:3736
+executeDispatch @ chunk-XQLYTHWV.js?v=0f03bac2:7014
+processDispatchQueueItemsInOrder @ chunk-XQLYTHWV.js?v=0f03bac2:7034
+processDispatchQueue @ chunk-XQLYTHWV.js?v=0f03bac2:7043
+dispatchEventsForPlugins @ chunk-XQLYTHWV.js?v=0f03bac2:7051
+(anonymous) @ chunk-XQLYTHWV.js?v=0f03bac2:7174
+batchedUpdates$1 @ chunk-XQLYTHWV.js?v=0f03bac2:18913
+batchedUpdates @ chunk-XQLYTHWV.js?v=0f03bac2:3579
+dispatchEventForPluginEventSystem @ chunk-XQLYTHWV.js?v=0f03bac2:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-XQLYTHWV.js?v=0f03bac2:5478
+dispatchEvent @ chunk-XQLYTHWV.js?v=0f03bac2:5472
+dispatchDiscreteEvent @ chunk-XQLYTHWV.js?v=0f03bac2:5449
+main-menu.tsx:1666 ❌ Server Buffalo-L embedding hatası: Error: Server error: 500 - {"message":"Sadece JSON dosyaları kabul edilir"}
+    at onClick (main-menu.tsx:1663:49)
+onClick @ main-menu.tsx:1666
+await in onClick
+callCallback2 @ chunk-XQLYTHWV.js?v=0f03bac2:3674
+invokeGuardedCallbackDev @ chunk-XQLYTHWV.js?v=0f03bac2:3699
+invokeGuardedCallback @ chunk-XQLYTHWV.js?v=0f03bac2:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-XQLYTHWV.js?v=0f03bac2:3736
+executeDispatch @ chunk-XQLYTHWV.js?v=0f03bac2:7014
+processDispatchQueueItemsInOrder @ chunk-XQLYTHWV.js?v=0f03bac2:7034
+processDispatchQueue @ chunk-XQLYTHWV.js?v=0f03bac2:7043
+dispatchEventsForPlugins @ chunk-XQLYTHWV.js?v=0f03bac2:7051
+(anonymous) @ chunk-XQLYTHWV.js?v=0f03bac2:7174
+batchedUpdates$1 @ chunk-XQLYTHWV.js?v=0f03bac2:18913
+batchedUpdates @ chunk-XQLYTHWV.js?v=0f03bac2:3579
+dispatchEventForPluginEventSystem @ chunk-XQLYTHWV.js?v=0f03bac2:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-XQLYTHWV.js?v=0f03bac2:5478
+dispatchEvent @ chunk-XQLYTHWV.js?v=0f03bac2:5472
+dispatchDiscreteEvent @ chunk-XQLYTHWV.js?v=0f03bac2:5449
+main-menu.tsx:1687 Embedding hatası: Error: Server error: 500 - {"message":"Sadece JSON dosyaları kabul edilir"}
+    at onClick (main-menu.tsx:1663:49)
+onClick @ main-menu.tsx:1687
+await in onClick
+callCallback2 @ chunk-XQLYTHWV.js?v=0f03bac2:3674
+invokeGuardedCallbackDev @ chunk-XQLYTHWV.js?v=0f03bac2:3699
+invokeGuardedCallback @ chunk-XQLYTHWV.js?v=0f03bac2:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-XQLYTHWV.js?v=0f03bac2:3736
+executeDispatch @ chunk-XQLYTHWV.js?v=0f03bac2:7014
+processDispatchQueueItemsInOrder @ chunk-XQLYTHWV.js?v=0f03bac2:7034
+processDispatchQueue @ chunk-XQLYTHWV.js?v=0f03bac2:7043
+dispatchEventsForPlugins @ chunk-XQLYTHWV.js?v=0f03bac2:7051
+(anonymous) @ chunk-XQLYTHWV.js?v=0f03bac2:7174
+batchedUpdates$1 @ chunk-XQLYTHWV.js?v=0f03bac2:18913
+batchedUpdates @ chunk-XQLYTHWV.js?v=0f03bac2:3579
+dispatchEventForPluginEventSystem @ chunk-XQLYTHWV.js?v=0f03bac2:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-XQLYTHWV.js?v=0f03bac2:5478
+dispatchEvent @ chunk-XQLYTHWV.js?v=0f03bac2:5472
+dispatchDiscreteEvent @ chunk-XQLYTHWV.js?v=0f03bac2:5449
+main-menu.tsx:1691 🏁 Embedding extraction tamamlandı. FaceData: 0 adet
+main-menu.tsx:1701 📡 Photo request gönderiliyor: {tcNumber: '98293084418', faceData: Array(0), selectedCampDays: Array(1), uploadedFilesCount: 1}

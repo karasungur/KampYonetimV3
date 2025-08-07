@@ -137,8 +137,8 @@ const loginSchema = z.object({
   password: z.string().min(6, "Şifre en az 6 karakter olmalıdır"),
 });
 
-// Configure multer for file uploads
-const upload = multer({ 
+// Configure multer for JSON file uploads (user import)
+const uploadJSON = multer({ 
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: (req, file, cb) => {
@@ -146,6 +146,20 @@ const upload = multer({
       cb(null, true);
     } else {
       cb(new Error('Sadece JSON dosyaları kabul edilir'));
+    }
+  }
+});
+
+// Configure multer for face image uploads (Buffalo-L embedding)
+const uploadFace = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Sadece resim dosyaları kabul edilir'));
     }
   }
 });
@@ -371,7 +385,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/users/import', requireAuth, requireRole(['genelsekreterlik']), upload.single('file'), async (req: AuthenticatedRequest, res) => {
+  app.post('/api/users/import', requireAuth, requireRole(['genelsekreterlik']), uploadJSON.single('file'), async (req: AuthenticatedRequest, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: 'Dosya gereklidir' });
@@ -1479,7 +1493,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Server-side Buffalo-L embedding extraction
-  app.post('/api/extract-embedding', upload.single('face'), async (req, res) => {
+  app.post('/api/extract-embedding', uploadFace.single('face'), async (req, res) => {
     try {
       console.log('📥 Server-side Buffalo-L embedding çıkarımı başlıyor...');
       

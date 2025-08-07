@@ -1,10 +1,10 @@
-Buffalo-S Lite AI Yüz Tanıma Modeli: 12_Temmuz
+Buffalo-S Lite AI Yüz Tanıma Modeli: 13_Temmuz
 ============================================================
 
-Model Adı: 12_Temmuz
-Oluşturma Tarihi: 2025-08-07 13:56:39
+Model Adı: 13_Temmuz
+Oluşturma Tarihi: 2025-08-07 15:04:48
 Kaynak Klasör: D:/Users/Mustafa/YuzTanima/YuzTanima/python_face_matcher/denemelik
-Toplam Yüz: 118
+Toplam Yüz: 127
 Algoritma: Buffalo-S Lite
 Embedding Boyutu: 512D
 Threshold: 0.5
