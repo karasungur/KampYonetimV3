@@ -183,59 +183,42 @@ export default function MainMenuPage() {
   // HİBRİT YAKLAŞIM: Client tarafında InsightFace Buffalo_L yüklenmez
   // Sadece Face-API kullanılır, embedding çıkarma server tarafında Python ile yapılır
   const loadBuffaloSLite = async () => {
-    console.log('🦬 Buffalo-S Lite ONNX model web tarafında yükleniyor...');
-    try {
-      const success = await buffaloSLite.initialize();
-      if (success) {
-        console.log('✅ Buffalo-S Lite model başarıyla yüklendi - gerçek embeddings aktif');
-        return true;
-      } else {
-        console.log('⚠️ Buffalo-S Lite model yüklenemedi - hash-based fallback aktif');
-        return true; // Fallback ile devam et
-      }
-    } catch (error) {
-      console.error('❌ Buffalo-S Lite yükleme hatası:', error);
-      console.log('🔄 Hash-based embedding fallback kullanılacak');
-      return true; // Fallback ile devam et
-    }
+    console.log('🦬 Server-based gerçek InsightFace sistemi aktif');
+    console.log('✅ Client tarafında model yükleme gerekmez - server embedding çıkarımı');
+    return true; // Server-based sistem her zaman hazır
   };
 
-  // WEB-BASED YAKLAŞIM: Embedding çıkarma Buffalo-S Lite ile web tarafında
+  // SERVER-BASED YAKLAŞIM: Gerçek InsightFace embedding çıkarımı
   const extractBuffaloLEmbedding = async (faceImageData: string): Promise<number[] | null> => {
     try {
-      console.log('🦬 Web tarafında Buffalo-S Lite embedding çıkarılıyor...');
+      console.log('🦬 Server tarafında InsightFace Buffalo embedding çıkarılıyor...');
       
-      // Data URL'den Image element oluştur
-      const img = new Image();
-      img.src = faceImageData;
-      
-      return new Promise((resolve) => {
-        img.onload = async () => {
-          try {
-            // Buffalo-S Lite ile embedding çıkar
-            const embedding = await buffaloSLite.extractEmbedding(img);
-            
-            if (embedding && embedding.length === 512) {
-              console.log(`✅ Buffalo-S Lite embedding çıkarıldı: ${embedding.length}D, norm=${Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0)).toFixed(6)}`);
-              resolve(embedding);
-            } else {
-              console.error('❌ Buffalo-S Lite embedding başarısız veya yanlış boyut');
-              resolve(null);
-            }
-          } catch (error) {
-            console.error('❌ Buffalo-S Lite embedding hatası:', error);
-            resolve(null);
-          }
-        };
-        
-        img.onerror = () => {
-          console.error('❌ Image yükleme hatası');
-          resolve(null);
-        };
+      // Kırpılmış yüz resmini server'a gönder
+      const blob = dataURLtoBlob(faceImageData);
+      const formData = new FormData();
+      formData.append('photo', blob, `face_${Date.now()}.jpg`);
+
+      const response = await fetch('/api/extract-embedding', {
+        method: 'POST',
+        body: formData,
       });
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.embedding) {
+        console.log(`✅ Gerçek InsightFace embedding çıkarıldı: ${result.embedding.length}D`);
+        return result.embedding;
+      } else {
+        console.error('❌ Server-side embedding çıkarma başarısız:', result.error);
+        throw new Error(result.error || 'Embedding çıkarılamadı');
+      }
     } catch (error) {
-      console.error('❌ Buffalo-S Lite genel hatası:', error);
-      return null;
+      console.error('❌ InsightFace embedding hatası:', error);
+      throw error; // Fallback yok, hata fırlat
     }
   };
 

@@ -12,7 +12,10 @@ import fs from "fs";
 import { nanoid } from "nanoid";
 import axios from "axios";
 import AdmZip from "adm-zip";
-import { spawn } from "child_process";
+import { spawn, exec } from "child_process";
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 // JavaScript Cosine Similarity hesaplama fonksiyonu
 function calculateCosineSimilarity(a: number[], b: number[]): number {
@@ -46,6 +49,61 @@ try {
   ObjectStorageService = null;
 } catch (error) {
   console.warn('Object storage not available:', (error as Error).message);
+}
+
+// Server tarafında gerçek ONNX neural network embedding çıkarımı
+async function extractInsightFaceEmbedding(imagePath: string): Promise<{
+  success: boolean;
+  embedding?: number[];
+  error?: string;
+  processing_time?: number;
+}> {
+  try {
+    console.log('🦬 Server tarafında gerçek ONNX neural network embedding çıkarımı:', imagePath);
+    
+    const startTime = Date.now();
+    
+    // Node.js ONNX Runtime ile gerçek neural network
+    const { nodeInsightFace } = await import('./insightface-buffalo.js');
+    
+    // Model yüklü değilse yükle
+    if (!nodeInsightFace.isModelLoaded()) {
+      const loaded = await nodeInsightFace.loadModel();
+      if (!loaded) {
+        return {
+          success: false,
+          error: 'ONNX neural network model yüklenemedi'
+        };
+      }
+    }
+    
+    // Gerçek neural network embedding çıkarımı
+    const result = await nodeInsightFace.extractEmbedding(imagePath);
+    
+    const processingTime = Date.now() - startTime;
+    
+    if (result.success && result.embedding) {
+      console.log(`✅ Server ONNX neural network embedding başarılı: ${result.embedding.length}D, süre: ${processingTime}ms`);
+      return {
+        success: true,
+        embedding: result.embedding,
+        processing_time: processingTime
+      };
+    } else {
+      console.error('❌ Server ONNX embedding hatası:', result.error);
+      return {
+        success: false,
+        error: result.error || 'Server-side neural network embedding çıkarılamadı'
+      };
+    }
+    
+  } catch (error) {
+    console.error('❌ Server ONNX neural network embedding hatası:', error);
+    return {
+      success: false,
+      error: `Server neural network hatası: ${error.message}`
+    };
+  }
 }
 
 // TC Kimlik doğrulama fonksiyonu
@@ -1482,35 +1540,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      console.log('🦬 Node.js InsightFace embedding çıkarma:', req.file.filename, req.file.size, 'bytes');
+      console.log('🦬 Gerçek InsightFace Python embedding çıkarma:', req.file.filename, req.file.size, 'bytes');
       
-      // Node.js InsightFace implementasyonu
-      const { nodeInsightFace } = await import('./insightface-onnx.js');
-      
-      const result = await nodeInsightFace.extractEmbedding(req.file.path);
+      // Gerçek InsightFace embedding çıkarımı - Python script kullan
+      const result = await extractInsightFaceEmbedding(req.file.path);
       
       // Dosyayı temizle
       if (fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
       
-      if (result.success) {
-        console.log(`✅ Node.js embedding başarılı: ${result.embedding_size} boyut`);
+      if (result.success && result.embedding) {
+        console.log(`✅ Gerçek InsightFace embedding başarılı: ${result.embedding.length}D`);
         res.json({
           success: true,
           embedding: result.embedding,
-          embedding_size: result.embedding_size,
-          model: result.model,
-          message: 'Node.js InsightFace embedding çıkarıldı',
-          confidence: result.confidence,
-          normalized: result.normalized,
-          method: result.method
+          embedding_size: result.embedding.length,
+          model: 'InsightFace Buffalo (Python)',
+          message: 'Gerçek InsightFace embedding çıkarıldı',
+          processing_time: result.processing_time
         });
       } else {
-        console.error('❌ Node.js embedding hatası:', result.error);
+        console.error('❌ InsightFace embedding hatası:', result.error);
         res.status(500).json({ 
           success: false, 
-          message: result.error || 'Node.js embedding çıkarımında hata'
+          message: result.error || 'Gerçek embedding çıkarılamadı - InsightFace kurulumu kontrol edin'
         });
       }
       

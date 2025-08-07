@@ -36,17 +36,17 @@ class BuffaloSLiteONNX {
       
     } catch (error) {
       console.error('❌ Buffalo-S Lite model yükleme hatası:', error);
-      console.log('🔄 Fallback: Deterministic hash-based embedding kullanılacak');
+      console.error('⚠️ ONNX model yüklenemedi - gerçek embedding için server gerekli');
       this.isLoaded = false;
-      return false;
+      return false; // Fallback YOK - hata durumunda false dön
     }
   }
 
   async extractEmbedding(imageElement: HTMLImageElement): Promise<number[] | null> {
     try {
       if (!this.isLoaded || !this.session) {
-        console.log('⚠️ Buffalo-S Lite model yüklü değil, hash-based fallback');
-        return this.extractHashBasedEmbedding(imageElement);
+        console.error('❌ Buffalo-S Lite model yüklenemedi - gerçek embedding gerekli');
+        throw new Error('ONNX model yüklenmedi, gerçek embedding çıkarılamıyor');
       }
 
       // Canvas'a çiz ve preprocess
@@ -90,62 +90,11 @@ class BuffaloSLiteONNX {
       
     } catch (error) {
       console.error('❌ Buffalo-S Lite embedding hatası:', error);
-      console.log('🔄 Fallback: Hash-based embedding kullanılıyor');
-      return this.extractHashBasedEmbedding(imageElement);
+      throw error; // Fallback yok, hata fırlat
     }
   }
 
-  // Fallback hash-based embedding (server ile aynı algoritma)
-  private async extractHashBasedEmbedding(imageElement: HTMLImageElement): Promise<number[]> {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    
-    canvas.width = imageElement.width;
-    canvas.height = imageElement.height;
-    
-    if (!ctx) throw new Error('Canvas context oluşturulamadı');
-    
-    ctx.drawImage(imageElement, 0, 0);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    
-    // Aynı hash algoritması (server ile uyumlu)
-    const crypto = (window as any).crypto || (window as any).msCrypto;
-    const data = new Uint8Array(imageData.data);
-    
-    // Multiple hash'ler
-    const sha256 = await this.hashData(data, 'SHA-256');
-    const sha1 = await this.hashData(data, 'SHA-1');
-    
-    console.log(`📱 Image hash'leri: SHA256:${sha256.substring(0,8)}... SHA1:${sha1.substring(0,8)}...`);
-    
-    const embedding = Array.from({length: 512}, (_, i) => {
-      // 3 farklı hash'ten rotating pattern (server ile aynı)
-      const hashToUse = i % 2 === 0 ? sha256 : sha1;
-      const hashIndex = (i * 2) % hashToUse.length;
-      const hashChunk = hashToUse.substring(hashIndex, hashIndex + 2);
-      const hexValue = parseInt(hashChunk, 16) || 128;
-      
-      // Gaussian distribution (server ile aynı)
-      const u1 = hexValue / 255.0;
-      const u2 = (parseInt(hashToUse.charAt((i + 1) % hashToUse.length), 16) || 8) / 15.0;
-      const gaussian = Math.sqrt(-2 * Math.log(u1 + 0.001)) * Math.cos(2 * Math.PI * u2);
-      
-      return gaussian * 0.5; // Scale down for better distribution
-    });
-    
-    // L2 normalize
-    const norm = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
-    const normalizedEmbedding = embedding.map(val => val / norm);
-    
-    console.log(`✅ Hash-based embedding: ${normalizedEmbedding.length}D, norm=${norm.toFixed(6)}`);
-    return normalizedEmbedding;
-  }
-
-  private async hashData(data: Uint8Array, algorithm: string): Promise<string> {
-    const hashBuffer = await crypto.subtle.digest(algorithm, data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  }
+  // Hash-based fallback KALDIRILDI - sadece gerçek embedding
 
   isModelLoaded(): boolean {
     return this.isLoaded;
