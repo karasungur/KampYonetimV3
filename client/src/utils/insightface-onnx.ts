@@ -1,11 +1,12 @@
 /**
- * InsightFace Buffalo-S Lite ONNX Runtime for Web
- * Gerçek 512D embeddings için web-based çözüm
+ * Buffalo-S Lite Client-Side ONNX Implementation
+ * Pure client-side 512D face embeddings
+ * Optimized for web browsers with ONNX Runtime Web
  */
 
 import * as ort from 'onnxruntime-web';
 
-class BuffaloSLiteONNX {
+class BuffaloSLiteClientONNX {
   private session: ort.InferenceSession | null = null;
   private isLoaded = false;
   private modelUrl = 'https://huggingface.co/MonsterMMORPG/buffalo_s/resolve/main/w600k_r50.onnx';
@@ -18,35 +19,38 @@ class BuffaloSLiteONNX {
 
   async loadModel(): Promise<boolean> {
     try {
-      console.log('🦬 Buffalo-S Lite ONNX model yükleniyor...');
+      console.log('🦬 Buffalo-S Lite client-side yükleniyor...');
       console.log('📦 Model URL:', this.modelUrl);
       
-      // Buffalo-S Lite modelini yükle
+      // Buffalo-S Lite client-side ONNX
       this.session = await ort.InferenceSession.create(this.modelUrl, {
         executionProviders: ['wasm', 'cpu'],
-        graphOptimizationLevel: 'all'
+        graphOptimizationLevel: 'all',
+        enableCpuMemArena: false,
+        enableMemPattern: false,
+        executionMode: 'sequential'
       });
       
-      console.log('✅ Buffalo-S Lite model başarıyla yüklendi');
-      console.log('🔍 Model inputs:', this.session.inputNames);
-      console.log('🔍 Model outputs:', this.session.outputNames);
+      console.log('✅ Buffalo-S Lite client model yüklendi');
+      console.log('🔍 Input: ', this.session.inputNames[0]);
+      console.log('🔍 Output:', this.session.outputNames[0]);
       
       this.isLoaded = true;
       return true;
       
     } catch (error) {
-      console.error('❌ Buffalo-S Lite model yükleme hatası:', error);
-      console.error('⚠️ ONNX model yüklenemedi - gerçek embedding için server gerekli');
+      console.error('❌ Buffalo-S Lite client yükleme hatası:', error);
+      console.error('⚠️ Client-side model yüklenemedi');
       this.isLoaded = false;
-      return false; // Fallback YOK - hata durumunda false dön
+      return false;
     }
   }
 
   async extractEmbedding(imageElement: HTMLImageElement): Promise<number[] | null> {
     try {
       if (!this.isLoaded || !this.session) {
-        console.error('❌ Buffalo-S Lite model yüklenemedi - gerçek embedding gerekli');
-        throw new Error('ONNX model yüklenmedi, gerçek embedding çıkarılamıyor');
+        console.error('❌ Buffalo-S Lite client model yüklenmedi');
+        throw new Error('Client-side Buffalo-S Lite model yüklenmedi');
       }
 
       // Canvas'a çiz ve preprocess
@@ -106,4 +110,4 @@ class BuffaloSLiteONNX {
   }
 }
 
-export const buffaloSLite = new BuffaloSLiteONNX();
+export const buffaloSLite = new BuffaloSLiteClientONNX();

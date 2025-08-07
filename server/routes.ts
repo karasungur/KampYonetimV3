@@ -51,60 +51,8 @@ try {
   console.warn('Object storage not available:', (error as Error).message);
 }
 
-// Server tarafında gerçek ONNX neural network embedding çıkarımı
-async function extractInsightFaceEmbedding(imagePath: string): Promise<{
-  success: boolean;
-  embedding?: number[];
-  error?: string;
-  processing_time?: number;
-}> {
-  try {
-    console.log('🦬 Server tarafında gerçek ONNX neural network embedding çıkarımı:', imagePath);
-    
-    const startTime = Date.now();
-    
-    // Node.js ONNX Runtime ile gerçek neural network
-    const { nodeInsightFace } = await import('./insightface-buffalo.js');
-    
-    // Model yüklü değilse yükle
-    if (!nodeInsightFace.isModelLoaded()) {
-      const loaded = await nodeInsightFace.loadModel();
-      if (!loaded) {
-        return {
-          success: false,
-          error: 'ONNX neural network model yüklenemedi'
-        };
-      }
-    }
-    
-    // Gerçek neural network embedding çıkarımı
-    const result = await nodeInsightFace.extractEmbedding(imagePath);
-    
-    const processingTime = Date.now() - startTime;
-    
-    if (result.success && result.embedding) {
-      console.log(`✅ Server ONNX neural network embedding başarılı: ${result.embedding.length}D, süre: ${processingTime}ms`);
-      return {
-        success: true,
-        embedding: result.embedding,
-        processing_time: processingTime
-      };
-    } else {
-      console.error('❌ Server ONNX embedding hatası:', result.error);
-      return {
-        success: false,
-        error: result.error || 'Server-side neural network embedding çıkarılamadı'
-      };
-    }
-    
-  } catch (error) {
-    console.error('❌ Server ONNX neural network embedding hatası:', error);
-    return {
-      success: false,
-      error: `Server neural network hatası: ${error.message}`
-    };
-  }
-}
+// CLIENT-ONLY BUFFALO-S LITE: Server embedding fonksiyonu kaldırıldı
+// Artık tüm embedding işlemleri client tarafında Buffalo-S Lite ile yapılacak
 
 // TC Kimlik doğrulama fonksiyonu
 function validateTCNumber(tc: string): boolean {
@@ -1531,57 +1479,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Node.js InsightFace Buffalo_L Embedding Endpoint
-  app.post('/api/extract-embedding', imageUpload.single('photo'), async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Yüz fotoğrafı gönderilmedi' 
-        });
-      }
-
-      console.log('🦬 Gerçek InsightFace Python embedding çıkarma:', req.file.filename, req.file.size, 'bytes');
-      
-      // Gerçek InsightFace embedding çıkarımı - Python script kullan
-      const result = await extractInsightFaceEmbedding(req.file.path);
-      
-      // Dosyayı temizle
-      if (fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
-      
-      if (result.success && result.embedding) {
-        console.log(`✅ Gerçek InsightFace embedding başarılı: ${result.embedding.length}D`);
-        res.json({
-          success: true,
-          embedding: result.embedding,
-          embedding_size: result.embedding.length,
-          model: 'InsightFace Buffalo (Python)',
-          message: 'Gerçek InsightFace embedding çıkarıldı',
-          processing_time: result.processing_time
-        });
-      } else {
-        console.error('❌ InsightFace embedding hatası:', result.error);
-        res.status(500).json({ 
-          success: false, 
-          message: result.error || 'Gerçek embedding çıkarılamadı - InsightFace kurulumu kontrol edin'
-        });
-      }
-      
-    } catch (error) {
-      console.error('❌ Embedding extraction error:', error);
-      
-      // Dosyayı temizle
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
-      
-      res.status(500).json({ 
-        success: false, 
-        message: 'Embedding çıkarımında hata oluştu' 
-      });
-    }
-  });
+  // CLIENT-ONLY BUFFALO-S LITE: Extract-embedding endpoint artık client tarafında yapılacak
+  // Bu endpoint kaldırıldı - tüm embedding işlemleri client Buffalo-S Lite ile
 
   // Yeni fotoğraf talebi oluşturma
   app.post('/api/photo-requests', async (req, res) => {

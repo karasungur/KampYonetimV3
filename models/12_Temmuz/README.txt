@@ -1,10 +1,10 @@
-AI Yüz Tanıma Modeli: 11_Temmuz
+AI Yüz Tanıma Modeli: 12_Temmuz
 ==================================================
 
-Model Adı: 11_Temmuz
-Oluşturma Tarihi: 2025-08-07 00:49:45
+Model Adı: 12_Temmuz
+Oluşturma Tarihi: 2025-08-07 03:05:23
 Kaynak Klasör: C:/Users/Mustafa/Desktop/denemelik
-Toplam Yüz: 127
+Toplam Yüz: 118
 Algoritma: InsightFace Buffalo_L
 Threshold: 0.5
 
