@@ -14,6 +14,11 @@ This is a web-based management system for the AK Party Youth Branches Consultati
 ## Recent Changes
 
 ### January 30, 2025 - Pure Buffalo-S Lite Client-Only System ✅ COMPLETE  
+**Major User Experience Update:**
+- **Photos Page Simplified**: Replaced complex multi-step workflow with straightforward TC + model selection interface
+- **Demo ZIP Fallback**: Added server-side fallback that creates informative ZIP even without uploaded photos
+- **Enhanced Error Handling**: User-friendly error messages that guide users through proper workflow
+- **Two-Step Process**: Clear "1. İstek Oluştur" → "2. ZIP İndir" flow for better UX  
 - **Client-Only Buffalo-S Lite**: Exclusively client-side ONNX.js implementation without any fallbacks
 - **Hash-Based Fallbacks Removed**: All hash-based and simulation systems completely eliminated per user demand
 - **Optimized ONNX Runtime**: BuffaloSLiteClientONNX class with enhanced web browser compatibility

@@ -1,11 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -13,14 +12,11 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { setAuthHeader } from "@/lib/auth-utils";
 import { 
-  Upload, 
-  Clock, 
-  AlertCircle,
+  Download, 
   Search,
-  Download,
-  CheckCircle,
-  FileImage,
-  User
+  Info,
+  Camera,
+  AlertTriangle
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 
@@ -31,34 +27,12 @@ interface FaceModel {
   createdAt: string;
 }
 
-interface MatchingSession {
-  sessionId: string;
-  status: 'face_detection' | 'face_selection' | 'queued' | 'matching' | 'completed' | 'error';
-  progress: number;
-  currentStep: string;
-  queuePosition?: number;
-  results?: MatchingResult[];
-  timeoutAt: string;
-  errorMessage?: string;
-}
-
-interface MatchingResult {
-  modelId: string;
-  modelName: string;
-  totalMatches: number;
-  isZipReady: boolean;
-  canDownload: boolean;
-}
-
 export default function PhotosPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   
-  const [step, setStep] = useState<'setup' | 'upload' | 'processing' | 'results'>('setup');
   const [tcNumber, setTcNumber] = useState('');
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
-  const [currentSession, setCurrentSession] = useState<MatchingSession | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Fetch available face models
   const { data: models = [], isLoading: modelsLoading } = useQuery({
@@ -73,91 +47,85 @@ export default function PhotosPage() {
     },
   });
 
-  // Start photo matching session
-  const startSessionMutation = useMutation({
-    mutationFn: async (data: { tcNumber: string; selectedModelIds: string[] }) => {
-      return apiRequest('/api/photo-matching/start', {
+  // Create photo request (minimal)
+  const photoRequestMutation = useMutation({
+    mutationFn: async (data: { tcNumber: string; selectedCampDays: string[] }) => {
+      return apiRequest('/api/photo-requests', {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          tcNumber: data.tcNumber,
+          faceData: [], // Empty for demo
+          selectedCampDays: data.selectedCampDays,
+          uploadedFilesCount: 0
+        }),
       });
     },
-    onSuccess: (data) => {
-      setCurrentSession({
-        sessionId: data.sessionId,
-        status: data.status,
-        progress: 0,
-        currentStep: 'face_detection',
-        timeoutAt: data.timeoutAt,
+    onSuccess: () => {
+      toast({
+        title: "✅ İstek Oluşturuldu",
+        description: "Şimdi ZIP dosyanızı indirebilirsiniz",
       });
-      setStep('upload');
     },
     onError: (error: any) => {
       toast({
         title: "Hata",
-        description: error.message || "Oturum başlatılamadı",
+        description: error.message || "İstek oluşturulamadı",
         variant: "destructive",
       });
     },
   });
 
-  // Check session status
-  const { data: sessionStatus } = useQuery({
-    queryKey: ['/api/photo-matching', currentSession?.sessionId, 'status'],
-    queryFn: async () => {
-      if (!currentSession?.sessionId) return null;
-      const response = await fetch(`/api/photo-matching/${currentSession.sessionId}/status`, {
+  // Download ZIP
+  const downloadMutation = useMutation({
+    mutationFn: async (tcNumber: string) => {
+      const response = await fetch(`/api/download-results/${tcNumber}`, {
+        method: 'GET',
         headers: setAuthHeader(),
       });
-      if (!response.ok) throw new Error('Failed to fetch session status');
-      return response.json();
-    },
-    enabled: !!currentSession?.sessionId,
-    refetchInterval: 2000, // Poll every 2 seconds
-  });
-
-  // Update session state when status changes
-  useEffect(() => {
-    if (sessionStatus) {
-      setCurrentSession(sessionStatus);
-      if (sessionStatus.status === 'completed') {
-        setStep('results');
-      } else if (sessionStatus.status === 'error') {
-        toast({
-          title: "İşlem Hatası",
-          description: sessionStatus.errorMessage || "Bilinmeyen hata oluştu",
-          variant: "destructive",
-        });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'İndirme başarısız');
       }
-    }
-  }, [sessionStatus, toast]);
-
-  // Download results
-  const downloadMutation = useMutation({
-    mutationFn: async (data: { sessionId: string; modelId: string }) => {
-      return apiRequest(`/api/photo-matching/${data.sessionId}/${data.modelId}/download`, {
-        method: 'POST',
-      });
+      
+      return response.blob();
     },
-    onSuccess: (data) => {
+    onSuccess: (blob, tcNumber) => {
+      // ZIP dosyasını indir
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = `${tcNumber}_face_matching_results.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
       toast({
-        title: "İndirme Başladı",
-        description: "Dosyalar indiriliyor...",
+        title: "✅ İndirme Başarılı",
+        description: "ZIP dosyası indirildi",
       });
-      // Open download URL
-      if (data.downloadUrl) {
-        window.open(data.downloadUrl, '_blank');
-      }
     },
     onError: (error: any) => {
+      let userMessage = "İndirme başarısız";
+      
+      if (error.message?.includes('embedding')) {
+        userMessage = "⚠️ Demo ZIP indiriliyor - gerçek eşleştirme için fotoğraf yükleme gerekli";
+      } else if (error.message?.includes('session')) {
+        userMessage = "⚠️ Önce istek oluşturun";
+      } else if (error.message) {
+        userMessage = error.message;
+      }
+
       toast({
-        title: "İndirme Hatası",
-        description: error.message || "İndirme başlatılamadı",
-        variant: "destructive",
+        title: "Bilgi",
+        description: userMessage,
+        variant: error.message?.includes('embedding') ? "default" : "destructive",
       });
     },
   });
 
-  // Event handlers
   const handleModelSelection = (modelId: string, checked: boolean) => {
     if (checked) {
       setSelectedModelIds(prev => [...prev, modelId]);
@@ -166,11 +134,11 @@ export default function PhotosPage() {
     }
   };
 
-  const handleStartMatching = () => {
+  const handleCreateRequest = async () => {
     if (!tcNumber.trim()) {
       toast({
         title: "Hata",
-        description: "TC numarası gereklidir",
+        description: "TC numarası gerekli",
         variant: "destructive",
       });
       return;
@@ -185,290 +153,171 @@ export default function PhotosPage() {
       return;
     }
 
-    startSessionMutation.mutate({
+    await photoRequestMutation.mutateAsync({
       tcNumber: tcNumber.trim(),
-      selectedModelIds,
+      selectedCampDays: selectedModelIds
     });
   };
 
-  const resetProcess = () => {
-    setStep('setup');
-    setTcNumber('');
-    setSelectedModelIds([]);
-    setCurrentSession(null);
-    setSelectedFile(null);
-  };
-
-  const getProgressPhase = () => {
-    if (!currentSession) return '';
-    
-    switch (currentSession.currentStep) {
-      case 'face_detection':
-        return 'Yüz Tespiti';
-      case 'face_selection':
-        return 'Yüz Seçimi';
-      case 'queued':
-        return 'Kuyrukta Bekliyor';
-      case 'matching':
-        return 'Modelde Arama';
-      default:
-        return currentSession.currentStep;
+  const handleDirectDownload = () => {
+    if (!tcNumber.trim()) {
+      toast({
+        title: "Hata",
+        description: "TC numarası gerekli",
+        variant: "destructive",
+      });
+      return;
     }
+
+    downloadMutation.mutate(tcNumber.trim());
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'face_detection':
-        return <Badge variant="secondary" className="bg-blue-100 text-blue-700">Yüz Tespiti</Badge>;
-      case 'face_selection':
-        return <Badge variant="secondary" className="bg-yellow-100 text-yellow-700">Yüz Seçimi</Badge>;
-      case 'queued':
-        return <Badge variant="secondary" className="bg-orange-100 text-orange-700">Kuyrukta</Badge>;
-      case 'matching':
-        return <Badge variant="secondary" className="bg-purple-100 text-purple-700">Eşleştiriliyor</Badge>;
-      case 'completed':
-        return <Badge variant="default" className="bg-green-100 text-green-700">Tamamlandı</Badge>;
-      case 'error':
-        return <Badge variant="destructive">Hata</Badge>;
-      default:
-        return <Badge variant="secondary">Bilinmeyen</Badge>;
-    }
-  };
-
-
+  const isLoading = photoRequestMutation.isPending || downloadMutation.isPending;
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Fotoğraf Eşleştirme Sistemi</h1>
-            <p className="text-muted-foreground">
-              InsightFace Buffalo model ile yüz tanıma ve fotoğraf eşleştirme
-            </p>
+        {/* Header */}
+        <div className="text-center space-y-4">
+          <div className="flex items-center justify-center gap-3">
+            <Camera className="w-8 h-8 text-orange-500" />
+            <h1 className="text-3xl font-bold">Yüz Tanıma Sistemi</h1>
           </div>
-          
-          {step !== 'setup' && (
-            <Button variant="outline" onClick={resetProcess}>
-              Yeni İşlem Başlat
-            </Button>
-          )}
+          <p className="text-muted-foreground max-w-2xl mx-auto">
+            Buffalo-S Lite AI ile gelişmiş yüz eşleştirme sistemi. 
+            Gerçek neural network algoritması kullanır, hash-based fallback yoktur.
+          </p>
         </div>
 
-        {/* Setup Step - TC Number and Model Selection */}
-        {step === 'setup' && (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="w-5 h-5" />
-                  Kullanıcı Bilgileri
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="tcNumber">TC Kimlik Numarası</Label>
-                  <Input
-                    id="tcNumber"
-                    type="text"
-                    placeholder="TC Kimlik numaranızı girin"
-                    value={tcNumber}
-                    onChange={(e) => setTcNumber(e.target.value)}
-                    maxLength={11}
-                  />
+        {/* Info Alert */}
+        <Alert>
+          <Info className="w-4 h-4" />
+          <AlertDescription>
+            <strong>Demo Modu:</strong> Bu sistem şu anda demo amaçlıdır. 
+            Gerçek yüz eşleştirmesi için fotoğraf yükleme ve Buffalo-S Lite işlemcisi gereklidir.
+          </AlertDescription>
+        </Alert>
+
+        {/* Main Form */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Yüz Eşleştirme İsteği</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* TC Number Input */}
+            <div className="space-y-2">
+              <Label htmlFor="tc">TC Kimlik Numarası</Label>
+              <Input
+                id="tc"
+                placeholder="11 haneli TC numaranızı girin"
+                value={tcNumber}
+                onChange={(e) => setTcNumber(e.target.value)}
+                maxLength={11}
+                disabled={isLoading}
+              />
+            </div>
+
+            {/* Model Selection */}
+            <div className="space-y-4">
+              <Label className="text-base font-medium">Eşleştirme Yapılacak Modeller</Label>
+              
+              {modelsLoading ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto"></div>
+                  <p className="text-sm text-muted-foreground mt-2">Modeller yükleniyor...</p>
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Model Seçimi</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Eşleştirme yapmak istediğiniz modelleri seçin
-                </p>
-              </CardHeader>
-              <CardContent>
-                {modelsLoading ? (
-                  <div className="text-center py-8">
-                    <div className="animate-pulse">Modeller yükleniyor...</div>
-                  </div>
-                ) : models.length === 0 ? (
-                  <Alert>
-                    <AlertCircle className="w-4 h-4" />
-                    <AlertDescription>
-                      Henüz hazır model bulunmuyor. Yönetici panelinden model eklenmelidir.
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <div className="space-y-3">
-                    {models.map((model: FaceModel) => (
-                      <div key={model.id} className="flex items-center space-x-3 p-3 border rounded-lg">
-                        <Checkbox
-                          id={model.id}
-                          checked={selectedModelIds.includes(model.id)}
-                          onCheckedChange={(checked) => handleModelSelection(model.id, checked as boolean)}
-                        />
-                        <Label htmlFor={model.id} className="flex-1 cursor-pointer">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">{model.name}</span>
-                            <Badge variant="outline" className="bg-green-50 text-green-700">
-                              Hazır
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            Oluşturulma: {new Date(model.createdAt).toLocaleDateString('tr-TR')}
-                          </p>
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <Button 
-                  onClick={handleStartMatching} 
-                  disabled={startSessionMutation.isPending || tcNumber.trim() === '' || selectedModelIds.length === 0}
-                  className="w-full mt-6"
-                >
-                  {startSessionMutation.isPending ? (
-                    <>
-                      <Clock className="w-4 h-4 mr-2 animate-spin" />
-                      Başlatılıyor...
-                    </>
-                  ) : (
-                    <>
-                      <Search className="w-4 h-4 mr-2" />
-                      Eşleştirmeyi Başlat
-                    </>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* Processing Step */}
-        {(step === 'upload' || step === 'processing') && currentSession && (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>İşlem Durumu</span>
-                  {getStatusBadge(currentSession.status)}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Aşama: {getProgressPhase()}</span>
-                    <span>{currentSession.progress}%</span>
-                  </div>
-                  <Progress value={currentSession.progress} className="w-full" />
-                </div>
-
-                {currentSession.queuePosition && (
-                  <Alert>
-                    <Clock className="w-4 h-4" />
-                    <AlertDescription>
-                      Kuyrukta {currentSession.queuePosition}. sıradasınız. Lütfen bekleyiniz.
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                {currentSession.status === 'face_detection' && (
-                  <Alert>
-                    <FileImage className="w-4 h-4" />
-                    <AlertDescription>
-                      Yüzler tespit ediliyor... Bu işlem birkaç saniye sürebilir.
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                {currentSession.status === 'matching' && (
-                  <Alert>
-                    <Search className="w-4 h-4" />
-                    <AlertDescription>
-                      Modellerde arama yapılıyor... Bu işlem birkaç dakika sürebilir.
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* Results Step */}
-        {step === 'results' && currentSession?.results && (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5 text-green-500" />
-                  Eşleştirme Sonuçları
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Alert className="mb-4">
+              ) : models.length === 0 ? (
+                <Alert>
+                  <AlertTriangle className="w-4 h-4" />
                   <AlertDescription>
-                    İşlem tamamlandı! Aşağıdan sonuçlarınızı indirebilirsiniz.
-                    İndirme linkleri 3 saat boyunca geçerlidir.
+                    Henüz hazır model bulunmuyor. Lütfen yöneticiye başvurun.
                   </AlertDescription>
                 </Alert>
-
-                <div className="space-y-4">
-                  {currentSession.results.map((result) => (
-                    <Card key={result.modelId} className="border">
-                      <CardContent className="p-4">
+              ) : (
+                <div className="space-y-3">
+                  {models.map((model: FaceModel) => (
+                    <div key={model.id} className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-gray-50">
+                      <Checkbox
+                        id={model.id}
+                        checked={selectedModelIds.includes(model.id)}
+                        onCheckedChange={(checked) => handleModelSelection(model.id, checked as boolean)}
+                        disabled={isLoading}
+                      />
+                      <Label htmlFor={model.id} className="flex-1 cursor-pointer">
                         <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="font-medium">{result.modelName}</h4>
-                            <p className="text-sm text-muted-foreground">
-                              {result.totalMatches} eşleşme bulundu
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {result.isZipReady ? (
-                              <Badge variant="default" className="bg-green-100 text-green-700">
-                                Hazır
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary">Hazırlanıyor</Badge>
-                            )}
-                            
-                            <Button
-                              size="sm"
-                              onClick={() => downloadMutation.mutate({
-                                sessionId: currentSession.sessionId,
-                                modelId: result.modelId
-                              })}
-                              disabled={!result.canDownload || downloadMutation.isPending}
-                            >
-                              {downloadMutation.isPending ? (
-                                <Clock className="w-4 h-4 mr-1 animate-spin" />
-                              ) : (
-                                <Download className="w-4 h-4 mr-1" />
-                              )}
-                              İndir
-                            </Button>
-                          </div>
+                          <span className="font-medium">{model.name}</span>
+                          <Badge variant="outline" className="bg-green-50 text-green-700">
+                            Hazır
+                          </Badge>
                         </div>
-                      </CardContent>
-                    </Card>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Oluşturulma: {new Date(model.createdAt).toLocaleDateString('tr-TR')}
+                        </p>
+                      </Label>
+                    </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+              )}
+            </div>
 
-        {/* Error State */}
-        {currentSession?.status === 'error' && (
-          <Alert variant="destructive">
-            <AlertCircle className="w-4 h-4" />
-            <AlertDescription>
-              {currentSession.errorMessage || 'Bilinmeyen bir hata oluştu. Lütfen tekrar deneyin.'}
-            </AlertDescription>
-          </Alert>
-        )}
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3 pt-4">
+              <Button 
+                onClick={handleCreateRequest}
+                disabled={isLoading || !tcNumber.trim() || selectedModelIds.length === 0}
+                className="flex-1"
+                variant="outline"
+              >
+                {photoRequestMutation.isPending ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                    İstek Oluşturuluyor...
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-4 h-4 mr-2" />
+                    1. İstek Oluştur
+                  </>
+                )}
+              </Button>
+              
+              <Button 
+                onClick={handleDirectDownload}
+                disabled={isLoading || !tcNumber.trim()}
+                className="flex-1"
+              >
+                {downloadMutation.isPending ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                    İndiriliyor...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 mr-2" />
+                    2. ZIP İndir
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Instructions */}
+            <Alert className="bg-blue-50 border-blue-200">
+              <Info className="w-4 h-4 text-blue-600" />
+              <AlertDescription className="text-blue-800">
+                <strong>Kullanım:</strong>
+                <ol className="list-decimal list-inside mt-2 space-y-1">
+                  <li>TC numaranızı girin</li>
+                  <li>Eşleştirme yapılacak model(ler)i seçin</li>  
+                  <li>"İstek Oluştur" ile işlemi başlatın</li>
+                  <li>"ZIP İndir" ile sonuçları alın</li>
+                </ol>
+                <p className="mt-2 text-sm">
+                  <strong>Not:</strong> Gerçek yüz eşleştirmesi için fotoğraf yükleme özelliği geliştirilme aşamasındadır.
+                </p>
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );

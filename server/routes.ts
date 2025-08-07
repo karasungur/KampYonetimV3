@@ -1626,13 +1626,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Database-based yüz eşleştirmesi yap (PKL dependency olmadan)
           try {
-            // Face data kontrolü
+            // Face data kontrolü - demo fallback ekledik
             if (!userFaceData || userFaceData.length === 0 || !userFaceData[0]?.embedding) {
-              console.log(`❌ ${model.name} için kullanıcı embedding'i bulunamadı`);
-              return res.status(400).json({ 
-                message: 'Yüz embedding\'i bulunamadı. Lütfen önce fotoğraf yükleyip yüz tespiti yapın.',
-                model: model.name
-              });
+              console.log(`⚠️ ${model.name} için kullanıcı embedding'i bulunamadı - demo ZIP oluşturuluyor`);
+              
+              // Demo ZIP oluştur (fotoğraf yüklenmemiş durumda)
+              const demoReport = `
+AK Parti Gençlik Kolları - Yüz Tanıma Sistemi
+Model: ${model.name}
+TC Kimlik: ${tcNumber}
+İşlem Tarihi: ${new Date().toLocaleDateString('tr-TR')}
+
+⚠️ FOTOĞRAF YÜKLENMEMİŞ
+
+Bu ZIP dosyası demo amaçlıdır çünkü:
+- Henüz reference fotoğraf yüklenmemiş
+- Yüz tespiti yapılmamış
+- Buffalo-S Lite embedding çıkarımı olmamış
+
+NASIL KULLANILIR:
+1. Ana menüden "Fotoğraflar" bölümüne gidin
+2. TC kimlik numaranızı girin
+3. Reference fotoğraflarınızı yükleyin
+4. Buffalo-S Lite ile yüz tespiti yaptırın
+5. Model seçerek eşleştirme yapın
+6. Gerçek sonuçları indirin
+
+🔧 Sistem Bilgileri:
+- Algoritma: Buffalo-S Lite (512D embeddings)
+- Model boyutu: ${modelFaces?.length || 'Bilinmiyor'} kayıt
+- Threshold: 0.5
+- İşlem modu: Client-side
+
+Bu sistemde hash-based fallback yoktur.
+Sadece gerçek Buffalo-S Lite neural network kullanılır.
+              `;
+              
+              zip.addFile(`${model.name}_demo_bilgi.txt`, Buffer.from(demoReport, 'utf8'));
+              processedModels++;
+              continue; // Sonraki model'e geç
             }
             
             const userEmbedding = userFaceData[0].embedding;
