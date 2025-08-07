@@ -1552,15 +1552,16 @@ except Exception as e:
 
       // Geçici dosya oluştur
       const tempPath = `/tmp/face_${Date.now()}.jpg`;
-      require('fs').writeFileSync(tempPath, req.file.buffer);
+      const fs = await import('fs');
+      fs.writeFileSync(tempPath, req.file.buffer);
       
       // Python script çalıştır
-      const { exec } = require('child_process');
+      const { exec } = await import('child_process');
       const pythonCommand = `python3 -c "${pythonScript.replace(/"/g, '\\"')}" "${tempPath}"`;
       
       exec(pythonCommand, { timeout: 30000 }, (error: any, stdout: any, stderr: any) => {
         // Geçici dosyayı sil
-        try { require('fs').unlinkSync(tempPath); } catch {}
+        try { fs.unlinkSync(tempPath); } catch {}
         
         if (error) {
           console.error('❌ Python Buffalo-L hatası:', error);
