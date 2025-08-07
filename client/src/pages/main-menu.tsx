@@ -51,17 +51,31 @@ import akPartiLogo from "@assets/akpartilogo_1753719301210.png";
 import metinResmi from "@assets/metin_1754239817975.png";
 import { Checkbox } from "@/components/ui/checkbox";
 
-// Helper function to convert dataURL to Blob
+// Helper function to convert dataURL to Blob - düzeltildi
 const dataURLtoBlob = (dataURL: string) => {
-  const arr = dataURL.split(',');
-  const mime = arr[0].match(/:(.*?);/)![1];
-  const bstr = atob(arr[1]);
-  let n = bstr.length;
-  const u8arr = new Uint8Array(n);
-  while (n--) {
-    u8arr[n] = bstr.charCodeAt(n);
+  try {
+    const arr = dataURL.split(',');
+    if (arr.length !== 2) {
+      throw new Error('Invalid dataURL format');
+    }
+    
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    if (!mimeMatch) {
+      throw new Error('Invalid MIME type in dataURL');
+    }
+    
+    const mime = mimeMatch[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+  } catch (error) {
+    console.error('dataURLtoBlob error:', error);
+    throw error;
   }
-  return new Blob([u8arr], { type: mime });
 };
 
 interface MenuSettings {
@@ -188,37 +202,37 @@ export default function MainMenuPage() {
     return true; // Server-based sistem her zaman hazır
   };
 
-  // SERVER-BASED YAKLAŞIM: Gerçek InsightFace embedding çıkarımı
+  // CLIENT-SIDE BUFFALO-S LITE: Gerçek ONNX embedding çıkarımı
   const extractBuffaloLEmbedding = async (faceImageData: string): Promise<number[] | null> => {
     try {
-      console.log('🦬 Server tarafında InsightFace Buffalo embedding çıkarılıyor...');
+      console.log('🦬 Client-side Buffalo-S Lite embedding çıkarılıyor...');
       
-      // Kırpılmış yüz resmini server'a gönder
-      const blob = dataURLtoBlob(faceImageData);
-      const formData = new FormData();
-      formData.append('photo', blob, `face_${Date.now()}.jpg`);
-
-      const response = await fetch('/api/extract-embedding', {
-        method: 'POST',
-        body: formData,
+      // DataURL'yi HTMLImageElement'e yükle
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = faceImageData;
       });
-
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
-      }
-
-      const result = await response.json();
       
-      if (result.success && result.embedding) {
-        console.log(`✅ Gerçek InsightFace embedding çıkarıldı: ${result.embedding.length}D`);
-        return result.embedding;
+      // BuffaloSLiteClientONNX class'ını import et
+      const { BuffaloSLiteClientONNX } = await import('@/utils/insightface-onnx');
+      const buffalo = new BuffaloSLiteClientONNX();
+      await buffalo.loadModel();
+      
+      const embedding = await buffalo.extractEmbedding(img);
+      
+      if (embedding && embedding.length === 512) {
+        console.log(`✅ Buffalo-S Lite embedding çıkarıldı: ${embedding.length}D`);
+        return embedding;
       } else {
-        console.error('❌ Server-side embedding çıkarma başarısız:', result.error);
-        throw new Error(result.error || 'Embedding çıkarılamadı');
+        throw new Error('Invalid embedding size or null result');
       }
+      
     } catch (error) {
-      console.error('❌ InsightFace embedding hatası:', error);
-      throw error; // Fallback yok, hata fırlat
+      console.error('❌ Buffalo-S Lite embedding hatası:', error);
+      console.log('⚠️ Fallback: Face-API descriptor kullanılacak');
+      return null;
     }
   };
 

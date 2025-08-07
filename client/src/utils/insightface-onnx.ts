@@ -110,4 +110,7 @@ class BuffaloSLiteClientONNX {
   }
 }
 
+// Export both class and instance
+export { BuffaloSLiteClientONNX };
 export const buffaloSLite = new BuffaloSLiteClientONNX();
+export default BuffaloSLiteClientONNX;
