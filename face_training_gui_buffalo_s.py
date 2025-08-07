@@ -1,441 +1,812 @@
 #!/usr/bin/env python3
 """
-Buffalo-S Lite Compatible Face Training GUI
-Buffalo-S modeli ile 512D embeddings kullanarak yüz tanıma eğitimi
+🤖 Buffalo-S Lite AI Yüz Tanıma Eğitim Aracı v2.0
+Buffalo-S modeli ile 512D embeddings kullanarak profesyonel yüz tanıma eğitimi
+Client-side Buffalo-S Lite sistemi ile tam uyumlu
 """
 import sys
 import os
-import json
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-import cv2
-import numpy as np
-from PIL import Image, ImageTk
-import threading
-import queue
+import time
 import traceback
-from pathlib import Path
+import warnings
+import numpy as np
+import cv2
+import torch
+import shutil
+import json
+from datetime import datetime
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QFileDialog, QMessageBox,
+    QPushButton, QLabel, QVBoxLayout, QHBoxLayout,
+    QWidget, QListWidget, QListWidgetItem, QAbstractItemView,
+    QProgressBar, QGroupBox, QTextEdit, QSizePolicy, QFrame,
+    QLineEdit
+)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
+from PyQt5.QtGui import QPixmap, QImage, QIcon, QFont
 
-# InsightFace imports
 try:
-    from insightface import FaceAnalysis
-    INSIGHTFACE_AVAILABLE = True
+    from insightface.app import FaceAnalysis
 except ImportError:
-    print("⚠️ InsightFace not available - simulation mode")
-    INSIGHTFACE_AVAILABLE = False
+    FaceAnalysis = None
 
-class BuffaloSFaceTrainingGUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Buffalo-S Lite Yüz Tanıma Eğitim GUI")
-        self.root.geometry("900x700")
-        
-        # Buffalo-S model
-        self.face_analysis = None
-        self.model_loaded = False
-        
-        # Training data
-        self.training_data = {}  # {person_name: [embeddings]}
-        self.face_database = {}
-        
-        # GUI components
-        self.create_widgets()
-        
-        # Load Buffalo-S model in background
-        self.load_model_async()
-    
-    def create_widgets(self):
-        """GUI bileşenlerini oluştur"""
-        
-        # Main notebook
-        notebook = ttk.Notebook(self.root)
-        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Model Status Frame
-        status_frame = ttk.Frame(notebook)
-        notebook.add(status_frame, text="Model Durumu")
-        
-        self.status_label = ttk.Label(status_frame, 
-                                     text="Buffalo-S Lite model yükleniyor...", 
-                                     font=("Arial", 12))
-        self.status_label.pack(pady=20)
-        
-        self.progress_bar = ttk.Progressbar(status_frame, mode='indeterminate')
-        self.progress_bar.pack(pady=10, padx=50, fill=tk.X)
-        self.progress_bar.start()
-        
-        # Training Frame
-        training_frame = ttk.Frame(notebook)
-        notebook.add(training_frame, text="Eğitim")
-        
-        # Person name entry
-        ttk.Label(training_frame, text="Kişi Adı:").pack(pady=5)
-        self.person_name_var = tk.StringVar()
-        ttk.Entry(training_frame, textvariable=self.person_name_var, width=30).pack(pady=5)
-        
-        # Buttons
-        button_frame = ttk.Frame(training_frame)
-        button_frame.pack(pady=10)
-        
-        ttk.Button(button_frame, text="Fotoğraf Klasörü Seç", 
-                  command=self.select_photos_folder).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Kişi Ekle", 
-                  command=self.add_person).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Model Kaydet", 
-                  command=self.save_model).pack(side=tk.LEFT, padx=5)
-        
-        # Training progress
-        self.training_progress = ttk.Progressbar(training_frame, mode='determinate')
-        self.training_progress.pack(pady=10, padx=20, fill=tk.X)
-        
-        self.training_status = ttk.Label(training_frame, text="")
-        self.training_status.pack(pady=5)
-        
-        # Results Frame
-        results_frame = ttk.Frame(notebook)
-        notebook.add(results_frame, text="Sonuçlar")
-        
-        # Trained people list
-        ttk.Label(results_frame, text="Eğitimli Kişiler:").pack(pady=5)
-        
-        self.people_listbox = tk.Listbox(results_frame, height=10)
-        self.people_listbox.pack(pady=10, padx=20, fill=tk.BOTH, expand=True)
-        
-        # Test frame
-        test_frame = ttk.Frame(results_frame)
-        test_frame.pack(pady=10)
-        
-        ttk.Button(test_frame, text="Test Fotoğrafı Seç", 
-                  command=self.test_recognition).pack(side=tk.LEFT, padx=5)
-        ttk.Button(test_frame, text="Veritabanını Temizle", 
-                  command=self.clear_database).pack(side=tk.LEFT, padx=5)
-        
-        # Test result
-        self.test_result_label = ttk.Label(results_frame, text="", font=("Arial", 12))
-        self.test_result_label.pack(pady=10)
-    
-    def load_model_async(self):
-        """Buffalo-S modelini arka planda yükle"""
-        def load_model():
+# Uyarıları bastır
+warnings.filterwarnings("ignore", category=FutureWarning, message=".*rcond parameter.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+
+class TrainingWorker(QThread):
+    """Buffalo-S Lite yüz veritabanı eğitimi için worker thread"""
+    progress = pyqtSignal(str, int)  # mesaj, yüzde
+    log_message = pyqtSignal(str)
+    finished = pyqtSignal(dict, str, str)  # face_database, folder_path, model_name
+    error = pyqtSignal(str)
+
+    def __init__(self, folder_path, model_name, recursive=True):
+        super().__init__()
+        self.folder_path = folder_path
+        self.model_name = model_name
+        self.recursive = recursive
+        self.face_app = None
+
+    def run(self):
+        try:
+            self.log_message.emit("🚀 Buffalo-S Lite eğitim süreci başlatılıyor...")
+            self.progress.emit("Buffalo-S Lite modeli yükleniyor...", 5)
+
+            # GPU/CPU kontrolü ve FaceAnalysis başlatma
             try:
-                if INSIGHTFACE_AVAILABLE:
-                    self.root.after(0, lambda: self.status_label.config(
-                        text="Buffalo-S modeli yükleniyor..."
-                    ))
-                    
-                    # Buffalo-S modeli yükle
-                    self.face_analysis = FaceAnalysis(name='buffalo_s', providers=['CPUExecutionProvider'])
-                    self.face_analysis.prepare(ctx_id=-1, det_size=(640, 640))
-                    
-                    self.model_loaded = True
-                    self.root.after(0, self.model_loaded_callback)
-                else:
-                    # Simulation mode
-                    self.model_loaded = True
-                    self.root.after(0, lambda: self.status_label.config(
-                        text="⚠️ Simülasyon modu - InsightFace kurulumu gerekli",
-                        foreground="orange"
-                    ))
-                    self.root.after(0, lambda: self.progress_bar.stop())
-                    
+                ctx_id = 0 if torch.cuda.is_available() else -1
+            except:
+                ctx_id = -1
+            device_type = "GPU (CUDA)" if ctx_id >= 0 else "CPU"
+
+            self.log_message.emit(f"💻 Cihaz türü: {device_type}")
+            providers = ['CUDAExecutionProvider', 'CPUExecutionProvider'] if ctx_id >= 0 else ['CPUExecutionProvider']
+
+            try:
+                # Buffalo-S Lite ONNX model - client-side sistemle uyumlu
+                self.face_app = FaceAnalysis(name='buffalo_s', providers=providers)
+                self.face_app.prepare(ctx_id=ctx_id, det_size=(640, 640))
+                self.log_message.emit("✅ Buffalo-S Lite model başarıyla yüklendi (512D embeddings)")
             except Exception as e:
-                error_msg = f"Model yükleme hatası: {str(e)}"
-                self.root.after(0, lambda: self.status_label.config(
-                    text=error_msg, foreground="red"
-                ))
-                self.root.after(0, lambda: self.progress_bar.stop())
-                print(f"Model loading error: {e}")
-        
-        thread = threading.Thread(target=load_model)
-        thread.daemon = True
-        thread.start()
-    
-    def model_loaded_callback(self):
-        """Model yüklendiğinde çağrılır"""
-        self.status_label.config(
-            text="✅ Buffalo-S Lite model hazır!", 
-            foreground="green"
-        )
-        self.progress_bar.stop()
-    
-    def select_photos_folder(self):
-        """Fotoğraf klasörü seç"""
-        if not self.model_loaded:
-            messagebox.showwarning("Uyarı", "Model henüz yüklenmedi!")
-            return
-            
-        person_name = self.person_name_var.get().strip()
-        if not person_name:
-            messagebox.showwarning("Uyarı", "Kişi adını girin!")
-            return
-        
-        folder_path = filedialog.askdirectory(title="Fotoğraf klasörü seçin")
-        if folder_path:
-            self.process_photos_async(person_name, folder_path)
-    
-    def process_photos_async(self, person_name, folder_path):
-        """Fotoğrafları işle"""
-        def process():
-            try:
-                image_files = []
-                for ext in ['*.jpg', '*.jpeg', '*.png', '*.bmp']:
-                    image_files.extend(Path(folder_path).glob(ext))
-                    image_files.extend(Path(folder_path).glob(ext.upper()))
-                
-                if not image_files:
-                    self.root.after(0, lambda: messagebox.showinfo(
-                        "Bilgi", "Klasörde görüntü dosyası bulunamadı!"
-                    ))
-                    return
-                
-                embeddings = []
-                total_files = len(image_files)
-                
-                for i, img_path in enumerate(image_files):
-                    progress = int((i / total_files) * 100)
-                    self.root.after(0, lambda p=progress: self.training_progress.config(value=p))
-                    self.root.after(0, lambda: self.training_status.config(
-                        text=f"İşleniyor: {i+1}/{total_files}"
-                    ))
-                    
-                    try:
-                        # Görüntüyü yükle
-                        img = cv2.imread(str(img_path))
-                        if img is None:
-                            continue
-                            
-                        rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                        
-                        if INSIGHTFACE_AVAILABLE and self.face_analysis:
-                            # Gerçek Buffalo-S embedding
-                            faces = self.face_analysis.get(rgb_img)
-                            if faces:
-                                # En yüksek confidence'lı yüzü al
-                                best_face = max(faces, key=lambda x: x.det_score)
-                                embedding = best_face.normed_embedding.astype('float32')
-                                embeddings.append(embedding.tolist())
-                        else:
-                            # Simulation embedding (hash-based DEĞİL, neural network simülasyonu)
-                            embedding = self.generate_neural_simulation_embedding(rgb_img)
-                            embeddings.append(embedding)
-                            
-                    except Exception as e:
-                        print(f"Error processing {img_path}: {e}")
+                self.log_message.emit("⚠️ GPU başlatılamadı, CPU'ya geçiliyor...")
+                self.face_app = FaceAnalysis(name='buffalo_s', providers=['CPUExecutionProvider'])
+                self.face_app.prepare(ctx_id=-1, det_size=(640, 640))
+
+            self.progress.emit("Eğitim verisi taranıyor...", 10)
+
+            # Klasördeki tüm resimleri bul
+            files = []
+            if self.recursive:
+                for root, _, fs in os.walk(self.folder_path):
+                    for f in fs:
+                        if f.lower().endswith(('.jpg', '.png', '.jpeg', '.bmp', '.tiff')):
+                            files.append(os.path.join(root, f))
+            else:
+                for f in os.listdir(self.folder_path):
+                    if f.lower().endswith(('.jpg', '.png', '.jpeg', '.bmp', '.tiff')):
+                        files.append(os.path.join(self.folder_path, f))
+
+            total_files = len(files)
+            self.log_message.emit(f"📁 Toplam {total_files} resim dosyası bulundu")
+
+            if total_files == 0:
+                self.error.emit("Seçilen klasörde hiç resim dosyası bulunamadı!")
+                return
+
+            self.progress.emit("Buffalo-S Lite yüz tespiti ve embedding başlıyor...", 15)
+
+            face_database = {}
+            processed_files = 0
+            total_faces = 0
+            failed_files = 0
+
+            for idx, file_path in enumerate(files):
+                try:
+                    # İlerleme güncelleme
+                    progress_percent = 15 + int((idx / total_files) * 70)
+                    file_name = os.path.basename(file_path)
+                    self.progress.emit(f"İşleniyor: {file_name}", progress_percent)
+
+                    # Resmi yükle
+                    with open(file_path, 'rb') as f:
+                        img_data = np.frombuffer(f.read(), np.uint8)
+                    img = cv2.imdecode(img_data, cv2.IMREAD_COLOR)
+
+                    if img is None:
+                        self.log_message.emit(f"❌ Resim okunamadı: {file_name}")
+                        failed_files += 1
                         continue
-                
-                if embeddings:
-                    self.training_data[person_name] = embeddings
-                    self.root.after(0, lambda: self.update_people_list())
-                    self.root.after(0, lambda: self.training_status.config(
-                        text=f"✅ {person_name}: {len(embeddings)} embedding oluşturuldu"
-                    ))
-                    self.root.after(0, lambda: messagebox.showinfo(
-                        "Başarılı", 
-                        f"{person_name} için {len(embeddings)} embedding oluşturuldu!"
-                    ))
-                else:
-                    self.root.after(0, lambda: messagebox.showwarning(
-                        "Uyarı", "Hiçbir yüz tespit edilemedi!"
-                    ))
-                
-                self.root.after(0, lambda: self.training_progress.config(value=0))
-                
-            except Exception as e:
-                error_msg = f"Fotoğraf işleme hatası: {str(e)}"
-                self.root.after(0, lambda: messagebox.showerror("Hata", error_msg))
-        
-        thread = threading.Thread(target=process)
-        thread.daemon = True
-        thread.start()
-    
-    def generate_neural_simulation_embedding(self, rgb_img):
-        """Neural network simülasyon embedding (hash-based DEĞİL)"""
-        # Görüntüyü 112x112'ye resize et
-        resized = cv2.resize(rgb_img, (112, 112))
-        
-        # Convolutional feature extraction simulation
-        features = []
-        
-        # Multiple kernel convolutions
-        kernels = [
-            np.array([[-1,-1,-1], [0,0,0], [1,1,1]]) / 3,  # Horizontal edge
-            np.array([[-1,0,1], [-1,0,1], [-1,0,1]]) / 3,  # Vertical edge  
-            np.array([[1,1,1], [1,-8,1], [1,1,1]]) / 9,    # Laplacian
-            np.array([[0,-1,0], [-1,4,-1], [0,-1,0]]) / 4   # High pass
-        ]
-        
-        for kernel in kernels:
-            # Her kanal için convolution
-            for c in range(3):
-                filtered = cv2.filter2D(resized[:,:,c].astype('float32'), -1, kernel)
-                
-                # Regional pooling
-                for y in range(0, 112, 14):
-                    for x in range(0, 112, 14):
-                        region = filtered[y:y+14, x:x+14]
-                        features.extend([
-                            np.mean(region),
-                            np.std(region),
-                            np.max(region),
-                            np.min(region)
-                        ])
-        
-        # Ensure 512 dimensions
-        while len(features) < 512:
-            idx = len(features) % len(features) if features else 0
-            features.append(features[idx] * 0.1 if features else 0.1)
-        
-        features = features[:512]
-        
-        # L2 normalize
-        features = np.array(features, dtype='float32')
-        norm = np.linalg.norm(features)
-        if norm > 0:
-            features = features / norm
-            
-        return features.tolist()
-    
-    def add_person(self):
-        """Kişi ekle"""
-        person_name = self.person_name_var.get().strip()
-        if not person_name:
-            messagebox.showwarning("Uyarı", "Kişi adını girin!")
-            return
-            
-        if person_name not in self.training_data:
-            messagebox.showwarning("Uyarı", "Önce fotoğrafları işleyin!")
-            return
-        
-        # Face database'e ekle
-        self.face_database[person_name] = {
-            "embeddings": self.training_data[person_name],
-            "count": len(self.training_data[person_name]),
-            "model": "Buffalo-S Lite" if INSIGHTFACE_AVAILABLE else "Neural Simulation"
-        }
-        
-        messagebox.showinfo("Başarılı", f"{person_name} veritabanına eklendi!")
-        self.update_people_list()
-        self.person_name_var.set("")
-    
-    def update_people_list(self):
-        """Kişi listesini güncelle"""
-        self.people_listbox.delete(0, tk.END)
-        for name, data in self.face_database.items():
-            self.people_listbox.insert(tk.END, 
-                f"{name} ({data['count']} embedding - {data['model']})")
-    
-    def save_model(self):
-        """Modeli kaydet"""
-        if not self.face_database:
-            messagebox.showwarning("Uyarı", "Kaydedilecek veri yok!")
-            return
-        
-        file_path = filedialog.asksaveasfilename(
-            defaultextension=".json",
-            filetypes=[("JSON files", "*.json")],
-            title="Model kaydet"
-        )
-        
-        if file_path:
-            try:
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    json.dump(self.face_database, f, indent=2, ensure_ascii=False)
-                messagebox.showinfo("Başarılı", "Model kaydedildi!")
-            except Exception as e:
-                messagebox.showerror("Hata", f"Model kaydedilemedi: {e}")
-    
-    def test_recognition(self):
-        """Tanıma testi"""
-        if not self.face_database:
-            messagebox.showwarning("Uyarı", "Test edilecek model yok!")
-            return
-        
-        file_path = filedialog.askopenfilename(
-            filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp")],
-            title="Test fotoğrafı seçin"
-        )
-        
-        if file_path:
-            self.test_photo_async(file_path)
-    
-    def test_photo_async(self, file_path):
-        """Test fotoğrafını işle"""
-        def test():
-            try:
-                img = cv2.imread(file_path)
-                if img is None:
-                    self.root.after(0, lambda: messagebox.showerror("Hata", "Görüntü yüklenemedi!"))
-                    return
-                
-                rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                
-                if INSIGHTFACE_AVAILABLE and self.face_analysis:
-                    faces = self.face_analysis.get(rgb_img)
+
+                    # BGR'den RGB'ye çevir
+                    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+                    # Buffalo-S Lite yüz tespiti ve embedding extraction
+                    faces = self.face_app.get(rgb)
+
                     if not faces:
-                        self.root.after(0, lambda: self.test_result_label.config(
-                            text="❌ Yüz tespit edilemedi", foreground="red"))
-                        return
-                    
-                    test_embedding = faces[0].normed_embedding.astype('float32').tolist()
-                else:
-                    test_embedding = self.generate_neural_simulation_embedding(rgb_img)
-                
-                # En yakın eşleşmeyi bul
-                best_match = None
-                best_similarity = -1
-                
-                for person_name, data in self.face_database.items():
-                    for stored_embedding in data['embeddings']:
-                        similarity = self.cosine_similarity(test_embedding, stored_embedding)
-                        if similarity > best_similarity:
-                            best_similarity = similarity
-                            best_match = person_name
-                
-                if best_match and best_similarity > 0.6:  # Eşik değeri
-                    result_text = f"✅ Tanındı: {best_match}\nBenzerlik: {best_similarity:.3f}"
-                    color = "green"
-                else:
-                    result_text = f"❌ Tanınamadı\nEn yakın: {best_match} ({best_similarity:.3f})"
-                    color = "red"
-                
-                self.root.after(0, lambda: self.test_result_label.config(
-                    text=result_text, foreground=color))
-                
-            except Exception as e:
-                error_msg = f"Test hatası: {str(e)}"
-                self.root.after(0, lambda: messagebox.showerror("Hata", error_msg))
-        
-        thread = threading.Thread(target=test)
-        thread.daemon = True
-        thread.start()
-    
-    def cosine_similarity(self, vec1, vec2):
-        """Cosine similarity hesapla"""
-        vec1 = np.array(vec1)
-        vec2 = np.array(vec2)
-        
-        dot_product = np.dot(vec1, vec2)
-        norm1 = np.linalg.norm(vec1)
-        norm2 = np.linalg.norm(vec2)
-        
-        if norm1 == 0 or norm2 == 0:
-            return 0
-        
-        return dot_product / (norm1 * norm2)
-    
-    def clear_database(self):
-        """Veritabanını temizle"""
-        if messagebox.askyesno("Onay", "Tüm eğitim verilerini silmek istediğinizden emin misiniz?"):
-            self.face_database.clear()
-            self.training_data.clear()
-            self.update_people_list()
-            self.test_result_label.config(text="")
-            messagebox.showinfo("Başarılı", "Veritabanı temizlendi!")
+                        self.log_message.emit(f"👤 Yüz bulunamadı: {file_name}")
+                        continue
+
+                    # Her yüz için 512D embedding kaydet
+                    file_faces = 0
+                    for face_idx, face in enumerate(faces):
+                        embedding = face.normed_embedding.astype('float32')
+
+                        # Models klasörüne uyumlu relative path oluştur
+                        relative_path = os.path.relpath(file_path, self.folder_path)
+                        # Windows backslash'leri forward slash'e çevir (cross-platform)
+                        relative_path = relative_path.replace('\\', '/')
+
+                        # Benzersiz anahtar oluştur (relative path ile)
+                        key = f"{relative_path}||face_{face_idx}"
+                        face_database[key] = {
+                            'embedding': embedding,
+                            'path': relative_path,  # Relative path kaydet
+                            'bbox': face.bbox.tolist(),
+                            'kps': face.kps.tolist() if hasattr(face, 'kps') else None,
+                            'confidence': getattr(face, 'det_score', 0.9)
+                        }
+                        file_faces += 1
+                        total_faces += 1
+
+                    if file_faces > 0:
+                        file_name = os.path.basename(file_path)
+                        self.log_message.emit(f"✅ {file_name}: {file_faces} yüz kaydedildi (512D)")
+                        processed_files += 1
+
+                except Exception as e:
+                    file_name = os.path.basename(file_path)
+                    self.log_message.emit(f"❌ Hata ({file_name}): {str(e)}")
+                    failed_files += 1
+                    continue
+
+            # Eğitim tamamlandı
+            self.progress.emit("Buffalo-S Lite sonuçları kaydediliyor...", 90)
+
+            # İstatistikler
+            self.log_message.emit("=" * 50)
+            self.log_message.emit("📊 BUFFALO-S LITE EĞİTİM SONUÇLARI:")
+            self.log_message.emit(f"✅ Başarıyla işlenen dosya: {processed_files}")
+            self.log_message.emit(f"❌ Başarısız dosya: {failed_files}")
+            self.log_message.emit(f"👥 Toplam tespit edilen yüz: {total_faces}")
+            self.log_message.emit(f"💾 Veritabanı boyutu: {len(face_database)} kayıt (512D)")
+            self.log_message.emit("=" * 50)
+
+            if len(face_database) == 0:
+                self.error.emit("Hiç yüz tespit edilemedi! Lütfen farklı resimler deneyin.")
+                return
+
+            self.progress.emit("Buffalo-S Lite eğitim tamamlandı!", 100)
+            self.finished.emit(face_database, self.folder_path, self.model_name)
+
+        except Exception as e:
+            self.error.emit(f"Buffalo-S Lite eğitim sırasında kritik hata: {str(e)}\n{traceback.format_exc()}")
+
+
+class FaceTrainingGUI(QMainWindow):
+    """Buffalo-S Lite Yüz Tanıma Eğitim Aracı Ana Penceresi"""
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle('🤖 Buffalo-S Lite AI Yüz Tanıma Eğitim Aracı v2.0')
+        self.setMinimumSize(800, 600)
+        self.resize(1000, 700)
+
+        # Değişkenler
+        self.face_database = {}
+        self.training_folder = None
+        self.model_name = None
+        self.training_worker = None
+
+        self.init_ui()
+        self.setStyleSheet(self.get_stylesheet())
+
+    def init_ui(self):
+        """Kullanıcı arayüzünü oluştur"""
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
+
+        main_layout = QVBoxLayout(main_widget)
+        main_layout.setSpacing(15)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+
+        # Başlık
+        title_label = QLabel("🤖 Buffalo-S Lite AI Yüz Tanıma Eğitim Aracı")
+        title_label.setObjectName("title")
+        main_layout.addWidget(title_label)
+
+        subtitle_label = QLabel("512D embeddings ile profesyonel yüz tanıma veritabanı oluşturun")
+        subtitle_label.setObjectName("subtitle")
+        main_layout.addWidget(subtitle_label)
+
+        # Ayırıcı
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setFrameShadow(QFrame.Sunken)
+        main_layout.addWidget(line)
+
+        # Model adı girişi
+        model_group = QGroupBox("🏷️ Model Bilgileri")
+        model_layout = QVBoxLayout()
+
+        model_name_layout = QHBoxLayout()
+        model_name_layout.addWidget(QLabel("Model Adı:"))
+        self.model_name_input = QLineEdit()
+        self.model_name_input.setPlaceholderText("örn: akparti_genclik_2025")
+        self.model_name_input.textChanged.connect(self.validate_inputs)
+        model_name_layout.addWidget(self.model_name_input)
+        model_layout.addLayout(model_name_layout)
+
+        model_group.setLayout(model_layout)
+        main_layout.addWidget(model_group)
+
+        # Eğitim klasörü seçimi
+        folder_group = QGroupBox("📁 Eğitim Veri Klasörü")
+        folder_layout = QVBoxLayout()
+
+        folder_button_layout = QHBoxLayout()
+        self.btn_select_folder = QPushButton("📂 Eğitim Klasörü Seç")
+        self.btn_select_folder.setObjectName("primary")
+        self.btn_select_folder.clicked.connect(self.select_training_folder)
+        folder_button_layout.addWidget(self.btn_select_folder)
+
+        self.label_folder_path = QLabel("Henüz klasör seçilmedi")
+        self.label_folder_path.setObjectName("folder_path")
+        folder_button_layout.addWidget(self.label_folder_path)
+        folder_button_layout.addStretch()
+
+        folder_layout.addLayout(folder_button_layout)
+        folder_group.setLayout(folder_layout)
+        main_layout.addWidget(folder_group)
+
+        # Eğitim başlatma
+        training_group = QGroupBox("🚀 Buffalo-S Lite Model Eğitimi")
+        training_layout = QVBoxLayout()
+
+        training_button_layout = QHBoxLayout()
+        self.btn_start_training = QPushButton("🎯 Buffalo-S Lite Eğitimi Başlat")
+        self.btn_start_training.setObjectName("start_training")
+        self.btn_start_training.setEnabled(False)
+        self.btn_start_training.clicked.connect(self.start_training)
+        training_button_layout.addWidget(self.btn_start_training)
+
+        self.btn_stop_training = QPushButton("⏹️ Eğitimi Durdur")
+        self.btn_stop_training.setObjectName("stop_training")
+        self.btn_stop_training.setEnabled(False)
+        self.btn_stop_training.clicked.connect(self.stop_training)
+        training_button_layout.addWidget(self.btn_stop_training)
+
+        training_button_layout.addStretch()
+        training_layout.addLayout(training_button_layout)
+
+        # İlerleme çubuğu
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setObjectName("progress")
+        training_layout.addWidget(self.progress_bar)
+
+        # Durum etiketi
+        self.status_label = QLabel("Eğitim başlatmak için klasör seçin ve 'Eğitimi Başlat' butonuna tıklayın")
+        self.status_label.setObjectName("status")
+        training_layout.addWidget(self.status_label)
+
+        training_group.setLayout(training_layout)
+        main_layout.addWidget(training_group)
+
+        # Log alanı
+        log_group = QGroupBox("📝 Eğitim Günlüğü")
+        log_layout = QVBoxLayout()
+
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setObjectName("log")
+        self.log_text.setMaximumHeight(200)
+        log_layout.addWidget(self.log_text)
+
+        log_group.setLayout(log_layout)
+        main_layout.addWidget(log_group)
+
+        # Durum çubuğu
+        status_bar = self.statusBar()
+        if status_bar:
+            status_bar.showMessage("Hazır - Buffalo-S Lite eğitim için klasör seçin")
+
+    def get_stylesheet(self):
+        """Modern ve temiz stil"""
+        return """
+        QMainWindow {
+            background-color: #f8f9fa;
+        }
+
+        QLabel#title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+            padding: 10px 0px;
+        }
+
+        QLabel#subtitle {
+            font-size: 14px;
+            color: #7f8c8d;
+            padding-bottom: 10px;
+        }
+
+        QLabel#folder_path {
+            font-style: italic;
+            color: #34495e;
+            padding: 8px;
+            background-color: #ecf0f1;
+            border-radius: 4px;
+        }
+
+        QLabel#status {
+            font-weight: bold;
+            color: #2980b9;
+            padding: 5px;
+        }
+
+        QPushButton#primary {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 6px;
+        }
+
+        QPushButton#primary:hover {
+            background-color: #2980b9;
+        }
+
+        QPushButton#primary:pressed {
+            background-color: #21618c;
+        }
+
+        QPushButton#start_training {
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+        }
+
+        QPushButton#start_training:hover {
+            background-color: #229954;
+        }
+
+        QPushButton#start_training:disabled {
+            background-color: #bdc3c7;
+            color: #7f8c8d;
+        }
+
+        QPushButton#stop_training {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+        }
+
+        QPushButton#stop_training:hover {
+            background-color: #c0392b;
+        }
+
+        QPushButton#stop_training:disabled {
+            background-color: #bdc3c7;
+            color: #7f8c8d;
+        }
+
+        QProgressBar#progress {
+            border: 2px solid #bdc3c7;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        QProgressBar#progress::chunk {
+            background-color: #27ae60;
+            border-radius: 6px;
+        }
+
+        QTextEdit#log {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 11px;
+            border: 1px solid #34495e;
+            border-radius: 6px;
+        }
+
+        QGroupBox {
+            font-weight: bold;
+            font-size: 14px;
+            color: #2c3e50;
+            border: 2px solid #bdc3c7;
+            border-radius: 8px;
+            margin-top: 1ex;
+            padding-top: 10px;
+        }
+
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 10px;
+            padding: 0 5px 0 5px;
+        }
+        """
+
+    def select_training_folder(self):
+        """Eğitim klasörü seçme"""
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Buffalo-S Lite eğitim için fotoğraf klasörü seçin",
+            options=QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+        )
+
+        if folder:
+            self.training_folder = folder
+            self.label_folder_path.setText(f"📁 {folder}")
+            self.validate_inputs()
+            status_bar = self.statusBar()
+            if status_bar:
+                status_bar.showMessage(f"Klasör seçildi: {os.path.basename(folder)}")
+            self.log_message(f"🎯 Buffalo-S Lite eğitim klasörü seçildi: {folder}")
+
+            # Klasördeki dosya sayısını kontrol et
+            self.check_folder_contents(folder)
+
+    def validate_inputs(self):
+        """Girişleri kontrol et ve butonları etkinleştir"""
+        model_name = self.model_name_input.text().strip()
+        has_folder = bool(self.training_folder)
+
+        # Model adı kontrolleri
+        if model_name and has_folder:
+            # Geçerli karakterler kontrol et
+            if model_name.replace('_', '').replace('-', '').replace('.', '').isalnum():
+                self.btn_start_training.setEnabled(True)
+                self.model_name = model_name
+            else:
+                self.btn_start_training.setEnabled(False)
+                if len(model_name) > 0:
+                    self.log_message("⚠️ Model adı sadece harf, rakam, _, - ve . içerebilir")
+        else:
+            self.btn_start_training.setEnabled(False)
+
+    def check_folder_contents(self, folder):
+        """Klasör içeriğini kontrol et"""
+        try:
+            image_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff')
+            image_count = 0
+
+            for root, _, files in os.walk(folder):
+                for file in files:
+                    if file.lower().endswith(image_extensions):
+                        image_count += 1
+
+            self.log_message(f"📊 Klasörde {image_count} resim dosyası bulundu")
+
+            if image_count == 0:
+                QMessageBox.warning(
+                    self,
+                    "Uyarı",
+                    "Seçilen klasörde hiç resim dosyası bulunamadı!\n\n"
+                    "Desteklenen formatlar: JPG, JPEG, PNG, BMP, TIFF"
+                )
+                self.btn_start_training.setEnabled(False)
+            elif image_count < 10:
+                QMessageBox.information(
+                    self,
+                    "Bilgi",
+                    f"Klasörde {image_count} resim bulundu.\n\n"
+                    "Daha iyi sonuçlar için en az 10-20 resim önerilir."
+                )
+
+        except Exception as e:
+            self.log_message(f"❌ Klasör kontrolü hatası: {str(e)}")
+
+    def start_training(self):
+        """Buffalo-S Lite eğitimi başlat"""
+        if not self.training_folder or not self.model_name:
+            QMessageBox.warning(self, "Hata", "Model adı ve eğitim klasörü gerekli!")
+            return
+
+        # Models klasöründe aynı isimde model var mı kontrol et
+        models_dir = "models"
+        model_path = os.path.join(models_dir, self.model_name)
+        if os.path.exists(model_path):
+            reply = QMessageBox.question(
+                self,
+                "Model Mevcut",
+                f"'{self.model_name}' adında bir model zaten mevcut.\n\n"
+                f"Üzerine yazmak istiyor musunuz?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if reply != QMessageBox.Yes:
+                return
+
+        # Kullanıcıdan onay al
+        reply = QMessageBox.question(
+            self,
+            "Buffalo-S Lite Eğitimi Başlat",
+            f"Buffalo-S Lite eğitimi başlatılacak:\n\n"
+            f"🏷️ Model Adı: {self.model_name}\n"
+            f"📁 Klasör: {self.training_folder}\n"
+            f"📂 Hedef: models/{self.model_name}/\n"
+            f"🔄 Alt klasörler dahil edilecek\n"
+            f"⚡ GPU/CPU otomatik seçilecek\n"
+            f"🧠 Buffalo-S Lite (512D embeddings)\n\n"
+            f"Eğitimi başlatmak istiyor musunuz?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+
+        if reply != QMessageBox.Yes:
+            return
+
+        # UI durumunu güncelle
+        self.btn_start_training.setEnabled(False)
+        self.btn_stop_training.setEnabled(True)
+        self.btn_select_folder.setEnabled(False)
+        self.progress_bar.setValue(0)
+        self.log_text.clear()
+
+        # Worker thread başlat
+        self.training_worker = TrainingWorker(self.training_folder, self.model_name, recursive=True)
+        self.training_worker.progress.connect(self.update_progress)
+        self.training_worker.log_message.connect(self.log_message)
+        self.training_worker.finished.connect(self.training_finished)
+        self.training_worker.error.connect(self.training_error)
+        self.training_worker.start()
+
+        status_bar = self.statusBar()
+        if status_bar:
+            status_bar.showMessage("Buffalo-S Lite eğitim devam ediyor...")
+
+    def stop_training(self):
+        """Eğitimi durdur"""
+        if self.training_worker and self.training_worker.isRunning():
+            reply = QMessageBox.question(
+                self,
+                "Buffalo-S Lite Eğitimi Durdur",
+                "Eğitim durdurulacak. Devam etmek istiyor musunuz?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+
+            if reply == QMessageBox.Yes:
+                self.training_worker.terminate()
+                self.training_worker.wait()
+                self.reset_ui()
+                self.log_message("⏹️ Buffalo-S Lite eğitim kullanıcı tarafından durduruldu")
+                status_bar = self.statusBar()
+                if status_bar:
+                    status_bar.showMessage("Eğitim durduruldu")
+
+    def update_progress(self, message, progress):
+        """İlerleme güncelleme"""
+        self.progress_bar.setValue(progress)
+        self.status_label.setText(message)
+
+    def log_message(self, message):
+        """Log mesajı ekle"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        formatted_message = f"[{timestamp}] {message}"
+        self.log_text.append(formatted_message)
+
+        # Otomatik scroll
+        cursor = self.log_text.textCursor()
+        cursor.movePosition(cursor.End)
+        self.log_text.setTextCursor(cursor)
+
+        # Uygulama güncellemesi
+        QApplication.processEvents()
+
+    def training_finished(self, face_database, training_folder, model_name):
+        """Buffalo-S Lite eğitim tamamlandı - models klasörü yapısında kaydet"""
+        try:
+            self.face_database = face_database
+            self.log_message("💾 Models klasöründe Buffalo-S Lite model oluşturuluyor...")
+
+            # Models klasörünü oluştur
+            models_dir = "models"
+            if not os.path.exists(models_dir):
+                os.makedirs(models_dir)
+
+            model_dir = os.path.join(models_dir, model_name)
+
+            # Model klasörünü temizle/oluştur
+            if os.path.exists(model_dir):
+                shutil.rmtree(model_dir)
+            os.makedirs(model_dir)
+            self.log_message(f"📂 Model klasörü oluşturuldu: models/{model_name}/")
+
+            # Eğitim verilerini kopyala
+            folder_name = os.path.basename(training_folder.rstrip(os.sep))
+            dest_folder = os.path.join(model_dir, folder_name)
+            shutil.copytree(training_folder, dest_folder)
+            self.log_message(f"✅ Eğitim verileri kopyalandı: {folder_name}")
+
+            # JSON veritabanını kaydet
+            database_path = os.path.join(model_dir, "face_database.json")
+
+            # Face database'i JSON serializable formatına çevir
+            json_database = {}
+            for key, value in face_database.items():
+                # Key'i string'e çevir
+                str_key = key
+
+                # Value'dan embedding'i çıkar ve listeye çevir
+                json_value = {
+                    "embedding": value["embedding"].tolist() if hasattr(value["embedding"], 'tolist') else list(
+                        value["embedding"]),
+                    "path": value.get("path", ""),
+                    "bbox": value.get("bbox", []),
+                    "kps": value.get("kps", None),
+                    "confidence": float(value.get("confidence", 0.95))
+                }
+                json_database[str_key] = json_value
+
+            # JSON dosyasını kaydet
+            with open(database_path, 'w', encoding='utf-8') as f:
+                json.dump(json_database, f, indent=2, ensure_ascii=False)
+            self.log_message(f"💾 JSON veritabanı kaydedildi: models/{model_name}/face_database.json")
+
+            # JSON metadata oluştur
+            metadata = {
+                "name": model_name,
+                "created_at": datetime.now().isoformat(),
+                "total_faces": len(face_database),
+                "source_folder": os.path.basename(training_folder),
+                "status": "completed",
+                "description": f"Buffalo-S Lite modeli - {len(face_database)} yüz (512D)",
+                "type": "face_recognition",
+                "algorithm": "Buffalo-S Lite",
+                "embedding_size": 512,
+                "threshold": 0.5,
+                "files": {
+                    "database": "face_database.json",
+                    "photos": folder_name
+                }
+            }
+
+            metadata_path = os.path.join(model_dir, "model_info.json")
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2, ensure_ascii=False)
+            self.log_message(f"📄 Model metadata kaydedildi: model_info.json")
+
+            # Bilgi dosyası oluştur
+            self.create_model_info_file(model_dir, training_folder, model_name, len(face_database))
+
+            # UI'yi resetle
+            self.reset_ui()
+
+            # Başarı mesajı
+            QMessageBox.information(
+                self,
+                "🎉 Buffalo-S Lite Model Hazır!",
+                f"✅ Buffalo-S Lite model başarıyla oluşturuldu!\n\n"
+                f"🏷️ Model: {model_name}\n"
+                f"📂 Konum: models/{model_name}/\n"
+                f"👥 Toplam yüz: {len(face_database)}\n"
+                f"🧠 Algoritma: Buffalo-S Lite (512D)\n"
+                f"📄 Veritabanı: face_database.json\n"
+                f"📊 Metadata: model_info.json\n\n"
+                f"🌐 Model web arayüzünden kullanıma hazır!\n"
+                f"Client-side Buffalo-S Lite ile tam uyumlu."
+            )
+
+            status_bar = self.statusBar()
+            if status_bar:
+                status_bar.showMessage("Buffalo-S Lite model başarıyla oluşturuldu!")
+
+        except Exception as e:
+            self.training_error(f"Model oluşturma hatası: {str(e)}")
+
+    def create_model_info_file(self, model_dir, training_folder, model_name, face_count):
+        """Model bilgi dosyası oluştur"""
+        try:
+            info_file = os.path.join(model_dir, "README.txt")
+            with open(info_file, 'w', encoding='utf-8') as f:
+                f.write(f"Buffalo-S Lite AI Yüz Tanıma Modeli: {model_name}\n")
+                f.write("=" * 60 + "\n\n")
+                f.write(f"Model Adı: {model_name}\n")
+                f.write(f"Oluşturma Tarihi: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"Kaynak Klasör: {training_folder}\n")
+                f.write(f"Toplam Yüz: {face_count}\n")
+                f.write(f"Algoritma: Buffalo-S Lite\n")
+                f.write(f"Embedding Boyutu: 512D\n")
+                f.write(f"Threshold: 0.5\n\n")
+                f.write("📁 DOSYA YAPISI:\n")
+                f.write(f"- face_database.json  (JSON veritabanı - 512D embeddings)\n")
+                f.write(f"- model_info.json     (JSON metadata)\n")
+                f.write(f"- {os.path.basename(training_folder)}/         (Eğitim fotoğrafları)\n")
+                f.write(f"- README.txt          (Bu dosya)\n\n")
+                f.write("🌐 WEB ARAYÜZÜ KULLANIMI:\n")
+                f.write("- Model otomatik olarak web arayüzünde görünecek\n")
+                f.write("- Genel sekreterlik model_info.json'dan bilgileri okuyacak\n")
+                f.write("- Client-side Buffalo-S Lite ile tam uyumlu\n")
+                f.write("- 512D embeddings ile yüksek doğruluk\n")
+                f.write("- Direkt kullanıma hazır!\n")
+
+            self.log_message("📄 Model bilgi dosyası oluşturuldu: README.txt")
+
+        except Exception as e:
+            self.log_message(f"❌ Bilgi dosyası oluşturma hatası: {str(e)}")
+
+    def training_error(self, error_message):
+        """Eğitim hatası"""
+        self.log_message(f"❌ HATA: {error_message}")
+        self.reset_ui()
+
+        QMessageBox.critical(
+            self,
+            "Buffalo-S Lite Eğitim Hatası",
+            f"Eğitim sırasında hata oluştu:\n\n{error_message}"
+        )
+
+        status_bar = self.statusBar()
+        if status_bar:
+            status_bar.showMessage("Eğitim hatası!")
+
+    def reset_ui(self):
+        """UI'yi başlangıç durumuna getir"""
+        self.validate_inputs()  # Model adı ve klasör kontrolü yap
+        self.btn_stop_training.setEnabled(False)
+        self.btn_select_folder.setEnabled(True)
+        self.model_name_input.setEnabled(True)
+        self.progress_bar.setValue(0)
+        self.status_label.setText("Buffalo-S Lite model oluşturmaya hazır")
+
+    def closeEvent(self, a0):
+        """Pencere kapatılırken"""
+        if self.training_worker and self.training_worker.isRunning():
+            reply = QMessageBox.question(
+                self,
+                "Çıkış",
+                "Buffalo-S Lite eğitim devam ediyor. Yine de çıkmak istiyor musunuz?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+
+            if reply == QMessageBox.Yes:
+                self.training_worker.terminate()
+                self.training_worker.wait()
+                a0.accept()
+            else:
+                a0.ignore()
+        else:
+            a0.accept()
+
 
 def main():
-    root = tk.Tk()
-    app = BuffaloSFaceTrainingGUI(root)
-    root.mainloop()
+    """Ana fonksiyon"""
+    app = QApplication(sys.argv)
+    app.setApplicationName("Buffalo-S Lite AI Yüz Tanıma Eğitim Aracı")
+    app.setApplicationVersion("2.0")
+
+    # Uygulama ikonu (varsa)
+    try:
+        app.setWindowIcon(QIcon("icon.png"))
+    except:
+        pass
+
+    # Ana pencereyi oluştur ve göster
+    window = FaceTrainingGUI()
+    window.show()
+
+    # Uygulamayı çalıştır
+    sys.exit(app.exec_())
+
 
 if __name__ == "__main__":
     main()
