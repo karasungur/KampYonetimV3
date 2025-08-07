@@ -9,7 +9,17 @@ import * as ort from 'onnxruntime-web';
 class BuffaloSLiteClientONNX {
   private session: ort.InferenceSession | null = null;
   private isLoaded = false;
-  private modelUrl = 'https://huggingface.co/MonsterMMORPG/buffalo_s/resolve/main/w600k_r50.onnx';
+  // GERÇEK ÇALIŞAN InsightFace Buffalo model URL'leri
+  private modelUrls = [
+    // ONNX Recognition model (w600k_r50.onnx) - Buffalo-L
+    'https://huggingface.co/public-data/insightface/resolve/main/models/buffalo_l/w600k_r50.onnx',
+    'https://huggingface.co/lithiumice/insightface/resolve/main/models/buffalo_l/w600k_r50.onnx',
+    'https://huggingface.co/yolkailtd/face-swap-models/resolve/main/insightface/models/buffalo_l/w600k_r50.onnx',
+    
+    // Local model (eğer mevcutsa)
+    './models/buffalo_s/w600k_r50.onnx',
+    './models/buffalo_l/w600k_r50.onnx',
+  ];
 
   constructor() {
     // ONNX Runtime Web için basitleştirilmiş CDN ayarları
@@ -19,31 +29,46 @@ class BuffaloSLiteClientONNX {
   }
 
   async loadModel(): Promise<boolean> {
-    try {
-      console.log('🦬 Buffalo-S Lite client-side yükleniyor...');
-      console.log('📦 Model URL:', this.modelUrl);
-      
-      // Buffalo-S Lite client-side ONNX - basitleştirilmiş config
-      this.session = await ort.InferenceSession.create(this.modelUrl, {
-        executionProviders: ['wasm'],
-        executionMode: 'sequential',
-        enableCpuMemArena: false,
-        enableMemPattern: false
-      });
-      
-      console.log('✅ Buffalo-S Lite client model yüklendi');
-      console.log('🔍 Input: ', this.session.inputNames[0]);
-      console.log('🔍 Output:', this.session.outputNames[0]);
-      
-      this.isLoaded = true;
+    if (this.isLoaded) {
+      console.log('🦬 Buffalo-S Lite zaten yüklü');
       return true;
-      
-    } catch (error) {
-      console.error('❌ Buffalo-S Lite client yükleme hatası:', error);
-      console.error('⚠️ Client-side model yüklenemedi');
-      this.isLoaded = false;
-      return false;
     }
+    
+    // Birden fazla URL'yi sırayla dene
+    for (let i = 0; i < this.modelUrls.length; i++) {
+      const modelUrl = this.modelUrls[i];
+      try {
+        console.log(`🦬 Buffalo-S Lite client-side yükleniyor... (${i+1}/${this.modelUrls.length})`);
+        console.log('📦 Model URL:', modelUrl);
+        
+        // Buffalo-S Lite client-side ONNX - basitleştirilmiş config
+        this.session = await ort.InferenceSession.create(modelUrl, {
+          executionProviders: ['wasm'],
+          executionMode: 'sequential',
+          enableCpuMemArena: false,
+          enableMemPattern: false
+        });
+        
+        console.log('✅ Buffalo-S Lite client model başarıyla yüklendi');
+        console.log('🔍 Input: ', this.session.inputNames[0]);
+        console.log('🔍 Output:', this.session.outputNames[0]);
+        
+        this.isLoaded = true;
+        return true; // Başarılı olunca çık
+        
+      } catch (error) {
+        console.error(`❌ Buffalo-S Lite URL ${i+1} hatası:`, error);
+        
+        // Son URL'de de başarısız olursa false döndür
+        if (i === this.modelUrls.length - 1) {
+          console.error('❌ KRITIK: Tüm Buffalo-S Lite URL\'leri başarısız - Model yüklenemedi!');
+          this.isLoaded = false;
+          return false;
+        }
+      }
+    }
+    
+    return false;
   }
 
   async extractEmbedding(imageElement: HTMLImageElement): Promise<number[] | null> {

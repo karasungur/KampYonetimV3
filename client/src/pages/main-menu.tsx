@@ -1645,14 +1645,15 @@ export default function MainMenuPage() {
                                       } else {
                                         embedding = await extractBuffaloLEmbedding(face.imageData);
                                         
-                                        if (!embedding && face.descriptor) {
-                                          // Face-API fallback: 128D -> 512D padding
-                                          const desc = face.descriptor;
-                                          embedding = new Array(512).fill(0);
-                                          for (let j = 0; j < Math.min(desc.length, 512); j++) {
-                                            embedding[j] = desc[j];
-                                          }
-                                          console.log('⚠️ Face-API descriptor padded to 512D');
+                                        if (!embedding) {
+                                          // KRITIK: Buffalo-S modeli yüklenemedi!
+                                          alert('🚨 KRITIK HATA!\n\nBuffalo-S Lite modeli yüklenemedi!\n\n' + 
+                                                'Eğitim Buffalo-S ile yapıldığı için Face-API uyumlu değil.\n\n' + 
+                                                'Çözüm önerileri:\n' + 
+                                                '1. Buffalo-S modelini ./models/ klasörüne ekleyin\n' + 
+                                                '2. İnternet bağlantınızı kontrol edin\n' + 
+                                                '3. Buffalo-S modelinin erişilebilir olduğundan emin olun');
+                                          throw new Error('Buffalo-S Lite embedding çıkarılamadı - sistem durduruldu');
                                         }
                                       }
                                       
