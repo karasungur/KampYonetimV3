@@ -1638,33 +1638,49 @@ export default function MainMenuPage() {
                                     try {
                                       let embedding = null;
                                       
-                                      // Client-side Buffalo-S Lite embedding çıkarımı dene
-                                      if (face.descriptor && face.descriptor.length === 512) {
-                                        embedding = face.descriptor;
-                                        console.log('✅ Cached 512D embedding kullanılıyor');
-                                      } else {
-                                        embedding = await extractBuffaloLEmbedding(face.imageData);
+                                      // Server-side Buffalo-L embedding çıkarımı
+                                      try {
+                                        const blob = await dataURLtoBlob(face.imageData);
+                                        const formData = new FormData();
+                                        formData.append('face', blob, 'face.jpg');
                                         
-                                        if (!embedding) {
-                                          // KRITIK: Buffalo-S modeli yüklenemedi!
-                                          alert('🚨 KRITIK HATA!\n\nBuffalo-S Lite modeli yüklenemedi!\n\n' + 
-                                                'Eğitim Buffalo-S ile yapıldığı için Face-API uyumlu değil.\n\n' + 
-                                                'Çözüm önerileri:\n' + 
-                                                '1. Buffalo-S modelini ./models/ klasörüne ekleyin\n' + 
-                                                '2. İnternet bağlantınızı kontrol edin\n' + 
-                                                '3. Buffalo-S modelinin erişilebilir olduğundan emin olun');
-                                          throw new Error('Buffalo-S Lite embedding çıkarılamadı - sistem durduruldu');
+                                        console.log('📡 Server-side Buffalo-L embedding istegi...');
+                                        const response = await fetch('/api/extract-embedding', {
+                                          method: 'POST',
+                                          body: formData,
+                                        });
+                                        
+                                        if (response.ok) {
+                                          const result = await response.json();
+                                          if (result.success && result.embedding) {
+                                            embedding = result.embedding;
+                                            console.log(`✅ Server Buffalo-L embedding alındı: ${result.embedding_size}D`);
+                                          } else {
+                                            throw new Error(result.error || 'Server embedding başarısız');
+                                          }
+                                        } else {
+                                          const errorText = await response.text();
+                                          throw new Error(`Server error: ${response.status} - ${errorText}`);
                                         }
+                                      } catch (error) {
+                                        console.error('❌ Server Buffalo-L embedding hatası:', error);
+                                        alert('🚨 Server Buffalo-L Hatası!\n\n' + 
+                                              'Buffalo-L modeli server-side çalışamadı.\n\n' +
+                                              'Hata: ' + (error as Error).message + '\n\n' +
+                                              'Sistem durduruluyor.');
+                                        throw error;
                                       }
                                       
-                                      if (embedding && embedding.length === 512) {
+                                      if (embedding && Array.isArray(embedding) && embedding.length > 0) {
                                         faceData.push({
                                           id: face.id,
                                           embedding: embedding,
                                           confidence: face.confidence,
                                           quality: face.quality
                                         });
-                                        console.log('✅ 512D embedding hazırlandı');
+                                        console.log(`✅ ${embedding.length}D Buffalo-L embedding hazırlandı`);
+                                      } else {
+                                        console.error('❌ Geçersiz embedding alındı');
                                       }
                                       
                                     } catch (error) {

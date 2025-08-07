@@ -1478,37 +1478,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Hybrid approach: Client-side embedding + server-side matching
-  app.post('/api/extract-embedding', async (req, res) => {
+  // Server-side Buffalo-L embedding extraction
+  app.post('/api/extract-embedding', upload.single('face'), async (req, res) => {
     try {
-      console.log('📥 Client tarafından embedding verisi alındı');
+      console.log('📥 Server-side Buffalo-L embedding çıkarımı başlıyor...');
       
-      // Client'tan gelen embedding data'sını validate et
-      if (!req.body || !req.body.embedding || !req.body.tcNumber) {
+      if (!req.file) {
         return res.status(400).json({ 
           success: false, 
-          error: 'Embedding veya TC numarası eksik' 
+          error: 'Yüz resmi eksik' 
         });
       }
       
-      const { embedding, tcNumber, faceId } = req.body;
+      console.log('📸 Yüz resmi alındı:', req.file.originalname, `${req.file.size} bytes`);
       
-      // Embedding boyutu kontrolü (512D olmalı)
-      if (!Array.isArray(embedding) || embedding.length !== 512) {
-        return res.status(400).json({ 
-          success: false, 
-          error: `Geçersiz embedding boyutu: ${embedding?.length || 'undefined'}, 512 olmalı` 
-        });
-      }
+      // Python Buffalo-L embedding çıkarımı
+      const pythonScript = `
+import sys
+import os
+import numpy as np
+import cv2
+from insightface.app import FaceAnalysis
+import base64
+import json
+
+try:
+    # Buffalo-L model yükle
+    app = FaceAnalysis(name='buffalo_l', allowed_modules=['recognition'])
+    app.prepare(ctx_id=-1, det_size=(640, 640))
+    
+    # Resmi oku
+    image_path = sys.argv[1]
+    img = cv2.imread(image_path)
+    
+    if img is None:
+        raise Exception("Resim okunamadı")
+    
+    # Yüz detect ve embedding çıkar
+    faces = app.get(img)
+    
+    if len(faces) == 0:
+        print(json.dumps({"success": False, "error": "Yüz bulunamadı"}))
+    else:
+        # İlk yüzün embedding'ini al
+        face = faces[0]
+        embedding = face.embedding.tolist()  # 512D embedding
+        
+        result = {
+            "success": True,
+            "embedding": embedding,
+            "embedding_size": len(embedding),
+            "confidence": float(face.det_score) if hasattr(face, 'det_score') else 1.0
+        }
+        print(json.dumps(result))
+        
+except Exception as e:
+    print(json.dumps({"success": False, "error": str(e)}))
+`;
+
+      // Geçici dosya oluştur
+      const tempPath = `/tmp/face_${Date.now()}.jpg`;
+      require('fs').writeFileSync(tempPath, req.file.buffer);
       
-      console.log(`✅ Valid 512D embedding alındı - TC: ${tcNumber}, Face ID: ${faceId}`);
+      // Python script çalıştır
+      const { exec } = require('child_process');
+      const pythonCommand = `python3 -c "${pythonScript.replace(/"/g, '\\"')}" "${tempPath}"`;
       
-      // Bu endpoint artık sadece validation yapar
-      // Gerçek eşleştirme photo-requests endpoint'inde yapılır
-      res.json({
-        success: true,
-        message: 'Embedding başarıyla alındı',
-        embeddingLength: embedding.length
+      exec(pythonCommand, { timeout: 30000 }, (error: any, stdout: any, stderr: any) => {
+        // Geçici dosyayı sil
+        try { require('fs').unlinkSync(tempPath); } catch {}
+        
+        if (error) {
+          console.error('❌ Python Buffalo-L hatası:', error);
+          return res.status(500).json({ 
+            success: false, 
+            error: 'Buffalo-L model hatası: ' + error.message 
+          });
+        }
+        
+        if (stderr) {
+          console.log('⚠️ Python stderr:', stderr);
+        }
+        
+        try {
+          const result = JSON.parse(stdout.trim());
+          
+          if (result.success) {
+            console.log(`✅ Buffalo-L embedding başarıyla çıkarıldı: ${result.embedding_size}D`);
+            res.json(result);
+          } else {
+            console.error('❌ Buffalo-L embedding başarısız:', result.error);
+            res.status(400).json(result);
+          }
+          
+        } catch (parseError) {
+          console.error('❌ Python response parse hatası:', parseError);
+          console.error('Raw stdout:', stdout);
+          res.status(500).json({ 
+            success: false, 
+            error: 'Server response hatası' 
+          });
+        }
       });
       
     } catch (error) {

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-🤖 Buffalo-S Lite AI Yüz Tanıma Eğitim Aracı v2.0
-Buffalo-S modeli ile 512D embeddings kullanarak profesyonel yüz tanıma eğitimi
-Client-side Buffalo-S Lite sistemi ile tam uyumlu
+🤖 Buffalo-L AI Yüz Tanıma Eğitim Aracı v2.0
+Buffalo-L modeli ile 512D embeddings kullanarak profesyonel yüz tanıma eğitimi
+Server-side Buffalo-L sistemi ile tam uyumlu
 """
 import sys
 import os
@@ -66,12 +66,12 @@ class TrainingWorker(QThread):
 
             try:
                 # Buffalo-S Lite ONNX model - client-side sistemle uyumlu
-                self.face_app = FaceAnalysis(name='buffalo_s', providers=providers)
+                self.face_app = FaceAnalysis(name='buffalo_l', providers=providers)
                 self.face_app.prepare(ctx_id=ctx_id, det_size=(640, 640))
-                self.log_message.emit("✅ Buffalo-S Lite model başarıyla yüklendi (512D embeddings)")
+                self.log_message.emit("✅ Buffalo-L model başarıyla yüklendi (512D embeddings)")
             except Exception as e:
                 self.log_message.emit("⚠️ GPU başlatılamadı, CPU'ya geçiliyor...")
-                self.face_app = FaceAnalysis(name='buffalo_s', providers=['CPUExecutionProvider'])
+                self.face_app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])
                 self.face_app.prepare(ctx_id=-1, det_size=(640, 640))
 
             self.progress.emit("Eğitim verisi taranıyor...", 10)
@@ -190,7 +190,7 @@ class FaceTrainingGUI(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('🤖 Buffalo-S Lite AI Yüz Tanıma Eğitim Aracı v2.0')
+        self.setWindowTitle('🤖 Buffalo-L AI Yüz Tanıma Eğitim Aracı v2.0')
         self.setMinimumSize(800, 600)
         self.resize(1000, 700)
 
@@ -213,7 +213,7 @@ class FaceTrainingGUI(QMainWindow):
         main_layout.setContentsMargins(20, 20, 20, 20)
 
         # Başlık
-        title_label = QLabel("🤖 Buffalo-S Lite AI Yüz Tanıma Eğitim Aracı")
+        title_label = QLabel("🤖 Buffalo-L AI Yüz Tanıma Eğitim Aracı")
         title_label.setObjectName("title")
         main_layout.addWidget(title_label)
 
@@ -262,11 +262,11 @@ class FaceTrainingGUI(QMainWindow):
         main_layout.addWidget(folder_group)
 
         # Eğitim başlatma
-        training_group = QGroupBox("🚀 Buffalo-S Lite Model Eğitimi")
+        training_group = QGroupBox("🚀 Buffalo-L Model Eğitimi")
         training_layout = QVBoxLayout()
 
         training_button_layout = QHBoxLayout()
-        self.btn_start_training = QPushButton("🎯 Buffalo-S Lite Eğitimi Başlat")
+        self.btn_start_training = QPushButton("🎯 Buffalo-L Eğitimi Başlat")
         self.btn_start_training.setObjectName("start_training")
         self.btn_start_training.setEnabled(False)
         self.btn_start_training.clicked.connect(self.start_training)
@@ -514,7 +514,7 @@ class FaceTrainingGUI(QMainWindow):
             self.log_message(f"❌ Klasör kontrolü hatası: {str(e)}")
 
     def start_training(self):
-        """Buffalo-S Lite eğitimi başlat"""
+        """Buffalo-L eğitimi başlat"""
         if not self.training_folder or not self.model_name:
             QMessageBox.warning(self, "Hata", "Model adı ve eğitim klasörü gerekli!")
             return
@@ -537,8 +537,8 @@ class FaceTrainingGUI(QMainWindow):
         # Kullanıcıdan onay al
         reply = QMessageBox.question(
             self,
-            "Buffalo-S Lite Eğitimi Başlat",
-            f"Buffalo-S Lite eğitimi başlatılacak:\n\n"
+            "Buffalo-L Eğitimi Başlat",
+            f"Buffalo-L eğitimi başlatılacak:\n\n"
             f"🏷️ Model Adı: {self.model_name}\n"
             f"📁 Klasör: {self.training_folder}\n"
             f"📂 Hedef: models/{self.model_name}/\n"

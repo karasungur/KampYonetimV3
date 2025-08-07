@@ -13,26 +13,19 @@ This is a web-based management system for the AK Party Youth Branches Consultati
 
 ## Recent Changes
 
-### January 30, 2025 - Pure Buffalo-S Lite Client-Only System ✅ COMPLETE  
-**Major User Experience Update:**
-- **Photos Page Simplified**: Replaced complex multi-step workflow with straightforward TC + model selection interface
-- **Demo ZIP Fallback**: Added server-side fallback that creates informative ZIP even without uploaded photos
-- **Enhanced Error Handling**: User-friendly error messages that guide users through proper workflow
-- **Two-Step Process**: Clear "1. İstek Oluştur" → "2. ZIP İndir" flow for better UX  
-- **Client-Only Buffalo-S Lite**: Exclusively client-side ONNX.js implementation without any fallbacks
-- **Hash-Based Fallbacks Removed**: All hash-based and simulation systems completely eliminated per user demand
-- **Optimized ONNX Runtime**: BuffaloSLiteClientONNX class with enhanced web browser compatibility
-- **Server Code Cleanup**: Removed all server-side embedding functions and Python dependencies
-- **File System Cleanup**: Deleted unused Python files (buffalo_compatible_extractor.py, face_training_gui.py, test_image.py)
-- **API Endpoint Cleanup**: Removed server-side /api/extract-embedding endpoint
-- **Pure Neural Network**: 512D embeddings exclusively from Buffalo-S Lite ONNX model
-- **HuggingFace Integration**: Direct model loading from MonsterMMORPG/buffalo_s repository
-- **Web Browser Optimized**: Sequential execution mode with memory optimization for browser environments
-- **Zero Fallback Architecture**: System fails gracefully when ONNX model unavailable (no hash-based alternatives)
-- **Buffalo-S Training GUI**: Created comprehensive PyQt5 GUI (face_training_gui_buffalo_s.py) with full Buffalo-S Lite compatibility
-- **Professional Interface**: Modern PyQt5 design with progress tracking, logging, and error handling  
-- **Complete Workflow**: Model training, JSON database creation, metadata generation, and models/ directory structure
-- **512D Embeddings**: Ensures consistent 512D embedding generation matching client-side system
+### January 30, 2025 - Server-Side Buffalo-L Architecture ✅ COMPLETE  
+**Major Architecture Change: Client-Server Hybrid System:**
+- **Client-Side**: Vladimir Mandic Face-API for face detection and cropping only
+- **Server-Side**: InsightFace Buffalo-L model for 512D embedding extraction
+- **Workflow Split**: Clean separation - client handles UI/detection, server handles AI processing
+- **No Fallback Systems**: Pure Buffalo-L embeddings, no hash-based alternatives
+- **Enhanced Reliability**: Server-side processing eliminates browser compatibility issues
+- **Training GUI Updated**: Face training GUI migrated from Buffalo-S to Buffalo-L compatibility
+- **InsightFace Integration**: Server-side Python with InsightFace library installed
+- **Consistent 512D Embeddings**: Buffalo-L generates 512-dimensional face embeddings
+- **API Endpoint Restored**: /api/extract-embedding handles face image upload and embedding extraction
+- **Error Handling**: Clear error messages when Buffalo-L model unavailable
+- **Performance Optimized**: Server-side processing faster and more reliable than browser-based ONNX
 
 ### January 29, 2025 - Evening
 - **Face Model Management System Complete**: Successfully implemented full Google Drive integration
