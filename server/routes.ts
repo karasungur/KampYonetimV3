@@ -1510,13 +1510,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Geçersiz TC kimlik numarası' });
       }
       
-      // Önceki session kontrolü
+      // Önceki session kontrolü - eskiyi sil ve yenisini oluştur
       const existingSession = await storage.getPhotoMatchingSessionByTc(requestData.tcNumber);
       if (existingSession) {
-        return res.status(400).json({ 
-          message: 'Bu TC kimlik numarası için zaten bir yüz eşleştirme session\'ı mevcut',
-          existingSession 
-        });
+        console.log(`⚠️ ${requestData.tcNumber} için eski session bulundu, temizleniyor...`);
+        // Eski session'ı sil
+        try {
+          await storage.deletePhotoMatchingSession(existingSession.id);
+          console.log(`✅ Eski session temizlendi: ${existingSession.id}`);
+        } catch (deleteError) {
+          console.log(`⚠️ Eski session silinemedi:`, deleteError);
+          // Devam et, yeni session oluştur
+        }
       }
       
       // Debug: Gelen veriyi kontrol et
@@ -1654,7 +1659,7 @@ NASIL KULLANILIR:
 
 🔧 Sistem Bilgileri:
 - Algoritma: Buffalo-S Lite (512D embeddings)
-- Model boyutu: ${modelFaces?.length || 'Bilinmiyor'} kayıt
+- Model boyutu: Bilinmiyor (veri yüklenmemiş)
 - Threshold: 0.5
 - İşlem modu: Client-side
 

@@ -1501,6 +1501,10 @@ export class DatabaseStorage implements IStorage {
     return session || undefined;
   }
 
+  async deletePhotoMatchingSession(sessionId: string): Promise<void> {
+    await db.delete(photoMatchingSessions).where(eq(photoMatchingSessions.id, sessionId));
+  }
+
   async getPhotoMatchingSession(id: string): Promise<PhotoMatchingSession | undefined> {
     const [session] = await db.select().from(photoMatchingSessions).where(eq(photoMatchingSessions.id, id));
     return session || undefined;
